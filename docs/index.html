@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Isha E-City Nurturing</title>
+<link rel="stylesheet" href="styles.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<!-- Tesseract loaded lazily only when OCR is used (see app.js) -->
+<script src="config.js"></script>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login-view" class="login-wrap hidden">
+  <h1>🪷 Isha E-City</h1>
+  <p>Nurturing &amp; Volunteer Dashboard</p>
+  <div class="card">
+    <label>Email</label><input id="login-email" type="email" autocomplete="email" placeholder="you@example.com">
+    <label>Password</label><input id="login-pass" type="password" autocomplete="current-password">
+    <button class="btn block" onclick="doLogin()">Sign in</button>
+    <button class="btn ghost block" onclick="doSignup()">Create account</button>
+    <p class="muted" style="margin-top:10px;text-align:center">New accounts start as Volunteer.<br>The RCO assigns your role and people.</p>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app" class="hidden">
+  <header>
+    <h1>🪷 E-City Nurturing</h1>
+    <div class="who"><span id="who-name"></span><br><span id="who-role"></span>
+      &nbsp;·&nbsp;<a href="#" onclick="doLogout();return false" style="color:var(--muted)">sign out</a></div>
+  </header>
+  <div id="view"></div>
+</div>
+
+<nav id="nav" class="hidden">
+  <button data-v="today"     onclick="go('today')"><span class="ico">📞</span>Today</button>
+  <button data-v="people"    onclick="go('people')"><span class="ico">🧘</span>Meditators</button>
+  <button data-v="vols"      onclick="go('vols')"><span class="ico">🤝</span>Volunteers</button>
+  <button data-v="insights"  onclick="go('insights')"><span class="ico">📊</span>Insights</button>
+  <button data-v="admin"     onclick="go('admin')"><span class="ico">⚙️</span>Admin</button>
+</nav>
+
+<div id="modal-root"></div>
+<div id="toast"></div>
+
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Isha Attendance</title>
+<link rel="stylesheet" href="styles.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<style>body{padding:20px}.wrap{max-width:420px;margin:6vh auto}</style>
+</head>
+<body>
+<div class="wrap">
+  <h1 style="text-align:center;color:var(--accent)">🪷 Isha Attendance</h1>
+  <div class="card">
+    <h2 id="act-name">Loading activity…</h2>
+    <div id="form" class="hidden">
+      <label>Your name</label><input id="nm" autocomplete="name">
+      <label>Phone (10-digit)</label><input id="ph" inputmode="numeric" autocomplete="tel">
+      <button class="btn block green" onclick="mark('in')">✅ Time In</button>
+      <button class="btn block gray"  onclick="mark('out')">🚪 Time Out</button>
+    </div>
+    <div id="msg" class="empty hidden"></div>
+  </div>
+  <p class="muted" style="text-align:center">Your name & phone are remembered on this phone for next time.</p>
+</div>
+<script>
+const sb = supabase.createClient(APP_CONFIG.SUPABASE_URL, APP_CONFIG.SUPABASE_ANON_KEY);
+const token = new URLSearchParams(location.search).get('t');
+const $ = id => document.getElementById(id);
+(async () => {
+  if(!token){ $('act-name').textContent = 'Invalid link — scan the QR again.'; return; }
+  const {data} = await sb.rpc('activity_by_token', {p_token: token});
+  if(!data || data.error){ $('act-name').textContent='Activity not found.'; return; }
+  $('act-name').textContent = data.name + ' · ' + new Date(data.date).toLocaleDateString('en-IN');
+  $('form').classList.remove('hidden');
+  $('nm').value = localStorage.getItem('isha_name') || '';
+  $('ph').value = localStorage.getItem('isha_phone') || '';
+})();
+async function mark(dir){
+  const nm = $('nm').value.trim(), ph = $('ph').value.trim();
+  if(ph.replace(/\D/g,'').length < 10) return alert('Enter your 10-digit phone number');
+  localStorage.setItem('isha_name', nm); localStorage.setItem('isha_phone', ph);
+  const {data, error} = dir==='in'
+    ? await sb.rpc('checkin',  {p_token: token, p_name: nm, p_phone: ph})
+    : await sb.rpc('checkout', {p_token: token, p_phone: ph});
+  const m = $('msg'); m.classList.remove('hidden');
+  if(error || data.error){ m.textContent = '⚠️ ' + (error?.message || data.error); return; }
+  $('form').classList.add('hidden');
+  m.innerHTML = dir==='in'
+    ? '🙏 <b>Time-In recorded.</b><br>Have a wonderful seva!'
+    : '🙏 <b>Time-Out recorded.</b><br>Thank you for your seva today!';
+}
+</script>
+</body>
+</html>
