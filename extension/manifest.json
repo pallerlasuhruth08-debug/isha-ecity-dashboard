@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "Isha E-City Scraper",
+  "version": "1.0.0",
+  "description": "Reads meditator / advanced-program lists from the open Ishangam/Odoo tab and pushes them to the E-City nurturing dashboard (Supabase).",
+  "permissions": ["activeTab", "scripting", "storage"],
+  "host_permissions": ["https://*.supabase.co/*"],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Isha E-City Scraper"
+  },
+  "icons": {}
+}

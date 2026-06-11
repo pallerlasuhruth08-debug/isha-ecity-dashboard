@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  body{font-family:-apple-system,'Segoe UI',sans-serif;width:340px;padding:14px;background:#faf7f2;color:#33302b}
+  h2{font-size:1rem;color:#c4622d;margin:0 0 10px}
+  label{display:block;font-size:.75rem;color:#8a8378;margin:8px 0 3px}
+  input,select{width:100%;padding:8px;border:1px solid #eee7dc;border-radius:8px;box-sizing:border-box;font-size:.85rem}
+  button{width:100%;margin-top:10px;padding:10px;border:none;border-radius:10px;background:#c4622d;color:#fff;font-weight:600;cursor:pointer}
+  button.ghost{background:#f7e8dd;color:#c4622d}
+  #status{font-size:.8rem;margin-top:10px;white-space:pre-wrap}
+  .ok{color:#3d8a5f}.err{color:#c92f2f}
+  table{width:100%;font-size:.72rem;border-collapse:collapse;margin-top:8px}
+  td,th{padding:3px;border-bottom:1px solid #eee7dc;text-align:left}
+  .hidden{display:none}
+</style>
+</head>
+<body>
+<h2>🪷 Isha E-City Scraper</h2>
+
+<div id="setup">
+  <label>Supabase URL</label><input id="sb-url" placeholder="https://xxx.supabase.co">
+  <label>Anon key</label><input id="sb-key" type="password">
+  <label>Dashboard login email</label><input id="sb-email" type="email">
+  <label>Password</label><input id="sb-pass" type="password">
+  <button id="save-setup">Save & sign in</button>
+</div>
+
+<div id="main" class="hidden">
+  <label>Import rows from this tab as</label>
+  <select id="kind">
+    <option value="new_meditator">New meditators (Module 1)</option>
+    <option value="advanced">Advanced program completers (Module 5)</option>
+    <option value="meditator">Older meditators (Module 4)</option>
+    <option value="volunteer">Volunteer interest (Odoo website leads)</option>
+  </select>
+  <button id="scan">1️⃣ Scan table on this page</button>
+  <div id="mapping" class="hidden">
+    <table id="map-table"></table>
+    <button id="push">2️⃣ Push <span id="rowcount"></span> rows to dashboard</button>
+  </div>
+  <button class="ghost" id="reset">Change settings</button>
+</div>
+
+<div id="status"></div>
+<script src="popup.js"></script>
+</body>
+</html>
