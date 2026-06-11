@@ -1,0 +1,3 @@
+.DS_Store
+scripts/data/__pycache__/
+SETUP-SECRETS.txt
