@@ -17,7 +17,7 @@
 
 <!-- LOGIN -->
 <div id="login-view" class="login-wrap hidden">
-  <h1>🪷 Isha E-City</h1>
+  <h1>Isha E-City</h1>
   <p>Nurturing &amp; Volunteer Dashboard</p>
   <div class="card">
     <label>Email</label><input id="login-email" type="email" autocomplete="email" placeholder="you@example.com">
@@ -31,24 +31,24 @@
 <!-- APP -->
 <div id="app" class="hidden">
   <header>
-    <h1>🪷 E-City Nurturing</h1>
+    <h1>E-City Nurturing</h1>
     <div class="who"><span id="who-name"></span><br><span id="who-role"></span>
-      &nbsp;·&nbsp;<a href="#" onclick="doLogout();return false" style="color:var(--muted)">sign out</a></div>
+      &nbsp;&middot;&nbsp;<a href="#" onclick="doLogout();return false" style="color:var(--muted)">sign out</a></div>
   </header>
   <div id="view"></div>
 </div>
 
 <nav id="nav" class="hidden">
-  <button data-v="today"     onclick="go('today')"><span class="ico">📞</span>Today</button>
-  <button data-v="people"    onclick="go('people')"><span class="ico">🧘</span>Meditators</button>
-  <button data-v="vols"      onclick="go('vols')"><span class="ico">🤝</span>Volunteers</button>
-  <button data-v="insights"  onclick="go('insights')"><span class="ico">📊</span>Insights</button>
-  <button data-v="admin"     onclick="go('admin')"><span class="ico">⚙️</span>Admin</button>
+  <button data-v="today"     onclick="go('today')">Today</button>
+  <button data-v="people"    onclick="go('people')">Meditators</button>
+  <button data-v="vols"      onclick="go('vols')">Volunteers</button>
+  <button data-v="insights"  onclick="go('insights')">Insights</button>
+  <button data-v="admin"     onclick="go('admin')">Admin</button>
 </nav>
 
 <div id="modal-root"></div>
 <div id="toast"></div>
 
-<script src="app.js"></script>
+<script src="app.js" charset="utf-8"></script>
 </body>
 </html>
