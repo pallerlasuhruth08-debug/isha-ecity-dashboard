@@ -1,5 +1,5 @@
 /* ============================================================
-   Isha E-City Nurturing Dashboard â€” app logic (vanilla JS)
+   Isha E-City Nurturing Dashboard -- app logic (vanilla JS)
    ============================================================ */
 const sb = supabase.createClient(APP_CONFIG.SUPABASE_URL, APP_CONFIG.SUPABASE_ANON_KEY);
 let ME = null;
@@ -8,7 +8,7 @@ let CENTERS = [];
 const $ = id => document.getElementById(id);
 const view = () => $('view');
 const esc = s => (s ?? '').toString().replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const fmtD = d => d ? new Date(d).toLocaleDateString('en-IN', {day:'numeric',month:'short',year:'2-digit'}) : 'â€”';
+const fmtD = d => d ? new Date(d).toLocaleDateString('en-IN', {day:'numeric',month:'short',year:'2-digit'}) : '--';
 const today = () => new Date().toISOString().slice(0,10);
 
 function toast(m){ const t=$('toast'); t.textContent=m; t.classList.add('show');
@@ -25,7 +25,7 @@ async function doSignup(){
   if(!email||password.length<6) return toast('Enter email + password (6+ chars)');
   const {error} = await sb.auth.signUp({email,password});
   if(error) return toast(error.message);
-  toast('Account created â€” signing inâ€¦'); doLogin();
+  toast('Account created -- signing in...'); doLogin();
 }
 async function doLogout(){ await sb.auth.signOut(); location.reload(); }
 
@@ -41,7 +41,7 @@ async function boot(){
   $('login-view').classList.add('hidden');
   $('app').classList.remove('hidden'); $('nav').classList.remove('hidden');
   $('who-name').textContent = ME.full_name || ME.email;
-  $('who-role').textContent = roleLabel(ME.role) + (ME.role!=='rco' ? ' Â· '+centerName(ME.center_id) : ' Â· Sector');
+  $('who-role').textContent = roleLabel(ME.role) + (ME.role!=='rco' ? ' - '+centerName(ME.center_id) : ' - Sector');
   if(ME.role==='volunteer'){
     document.querySelectorAll('#nav [data-v="vols"],#nav [data-v="admin"]').forEach(b=>b.style.display='none');
   }
@@ -62,19 +62,19 @@ function go(v){
 function modal(html){
   $('modal-root').innerHTML =
     `<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal">
-       <button class="x" onclick="closeModal()">âœ•</button>${html}</div></div>`;
+       <button class="x" onclick="closeModal()">x</button>${html}</div></div>`;
 }
 function closeModal(){ $('modal-root').innerHTML=''; }
 
 /* ============================================================
-   TODAY â€” calls due / overdue
+   TODAY -- calls due / overdue
    ============================================================ */
 const JT = {new_meditator:'New Meditator', meditator:'Meditator', advanced:'Advanced Program', volunteer_nurture:'Volunteer'};
 const WA_MSG = {
-  new_meditator: n => `Namaskaram ${n} ðŸ™ This is from Isha Electronic City center. Hope your Shambhavi sadhana is going well! I wanted to check in and support you. When is a good time to talk?`,
-  meditator:     n => `Namaskaram ${n} ðŸ™ This is from Isha Electronic City center. We'd love to hear how your sadhana is going. When is a good time to talk?`,
-  advanced:      n => `Namaskaram ${n} ðŸ™ Congratulations on completing your program! We'd love to hear about your experience. When can we talk?`,
-  volunteer_nurture: n => `Namaskaram ${n} ðŸ™ We heard you volunteered recently â€” wonderful! We'd love to hear how it was. When is a good time?`
+  new_meditator: n => `Namaskaram ${n} -- This is from Isha Electronic City center. Hope your Shambhavi sadhana is going well! I wanted to check in and support you. When is a good time to talk?`,
+  meditator:     n => `Namaskaram ${n} -- This is from Isha Electronic City center. We'd love to hear how your sadhana is going. When is a good time to talk?`,
+  advanced:      n => `Namaskaram ${n} -- Congratulations on completing your program! We'd love to hear about your experience. When can we talk?`,
+  volunteer_nurture: n => `Namaskaram ${n} -- We heard you volunteered recently -- wonderful! We'd love to hear how it was. When is a good time?`
 };
 
 async function fetchDueCalls(){
@@ -88,7 +88,7 @@ async function fetchDueCalls(){
 }
 
 async function renderToday(){
-  view().innerHTML = '<div class="empty">Loadingâ€¦</div>';
+  view().innerHTML = '<div class="empty">Loading...</div>';
   const calls = await fetchDueCalls();
   const overdue = calls.filter(c=>c.due_date < today());
   let upQ = sb.from('calls')
@@ -99,14 +99,14 @@ async function renderToday(){
   const {data:upcoming} = await upQ;
 
   let h = '';
-  if(overdue.length) h += `<div class="alert">ðŸ”´ ${overdue.length} overdue call${overdue.length>1?'s':''} â€” please catch up today</div>`;
+  if(overdue.length) h += `<div class="alert">${overdue.length} overdue call${overdue.length>1?'s':''} -- please catch up today</div>`;
   h += `<div class="card"><h2>Calls due today ${calls.length?`<span class="badge">${calls.length}</span>`:''}</h2>`;
-  h += calls.length ? calls.map(callRow).join('') : '<div class="empty">ðŸŽ‰ All caught up â€” no calls due.</div>';
+  h += calls.length ? calls.map(callRow).join('') : '<div class="empty">All caught up -- no calls due.</div>';
   h += '</div>';
   if(upcoming?.length){
     h += `<div class="card"><h2>Coming up</h2>` + upcoming.map(c=>
       `<div class="row"><div class="grow"><div class="name">${esc(c.journeys.people.full_name)}</div>
-       <div class="sub">${JT[c.journeys.type]} Â· Call ${c.call_no} Â· due ${fmtD(c.due_date)}</div></div></div>`).join('') + '</div>';
+       <div class="sub">${JT[c.journeys.type]} - Call ${c.call_no} - due ${fmtD(c.due_date)}</div></div></div>`).join('') + '</div>';
   }
   view().innerHTML = h;
 }
@@ -123,11 +123,11 @@ function callRow(c){
   return `<div class="row">
     <div class="grow">
       <div class="name">${esc(p.full_name)} ${od?'<span class="badge red">overdue</span>':''}</div>
-      <div class="sub">${JT[j.type]}${j.program_name?' Â· '+esc(j.program_name):''}
-        Â· Call ${c.call_no}${j.type==='new_meditator'?'/3':''}${day?` Â· Day ${day}`:''}  Â· due ${fmtD(c.due_date)}</div>
+      <div class="sub">${JT[j.type]}${j.program_name?' - '+esc(j.program_name):''}
+        - Call ${c.call_no}${j.type==='new_meditator'?'/3':''}${day?` - Day ${day}`:''}  - due ${fmtD(c.due_date)}</div>
     </div>
-    ${p.phone?`<a class="iconbtn call" href="tel:+91${p.phone}">ðŸ“ž</a>`:''}
-    ${wa?`<a class="iconbtn wa" href="${wa}" target="_blank">ðŸ’¬</a>`:''}
+    ${p.phone?`<a class="iconbtn call" href="tel:+91${p.phone}">Call</a>`:''}
+    ${wa?`<a class="iconbtn wa" href="${wa}" target="_blank">WA</a>`:''}
     <button class="btn small ghost" onclick='openLog(${JSON.stringify({id:c.id,call_no:c.call_no,jtype:j.type,name:p.full_name}).replace(/'/g,"&#39;")})'>Log</button>
   </div>`;
 }
@@ -142,10 +142,10 @@ const SADHANA_OPTS = {
 let LOG = null;
 function openLog(c){
   LOG = {...c, reach:null, status:null};
-  modal(`<h3>Log call â€” ${esc(c.name)}</h3><p class="muted">Call ${c.call_no}</p>
+  modal(`<h3>Log call -- ${esc(c.name)}</h3><p class="muted">Call ${c.call_no}</p>
     <label>Reachability</label>
     <div class="choices" id="lg-reach">
-      ${[['answered','âœ… Answered'],['not_reachable','ðŸ“µ Not Reachable'],['will_call_back','ðŸ• Will Call Back']]
+      ${[['answered','Answered'],['not_reachable','Not Reachable'],['will_call_back','Will Call Back']]
         .map(([v,l])=>`<button onclick="pickReach('${v}',this)">${l}</button>`).join('')}
     </div>
     <div id="lg-status-wrap" class="hidden">
@@ -155,7 +155,7 @@ function openLog(c){
       </div>
       <div id="lg-suggest" class="muted" style="margin-top:8px"></div>
     </div>
-    <label>Remarks</label><textarea id="lg-remarks" placeholder="How did it go?â€¦"></textarea>
+    <label>Remarks</label><textarea id="lg-remarks" placeholder="How did it go?..."></textarea>
     <button class="btn block" onclick="saveLog()">Save log</button>`);
 }
 function pickReach(v, btn){
@@ -174,7 +174,7 @@ function pickStatus(s, btn){
     : s.toLowerCase().includes('advanced')||s.toLowerCase().includes('another program')?'wants_advanced'
     : s.toLowerCase().includes('correction')?'needs_correction':null;
   const acts = key && SETTINGS.next_action_map?.[key];
-  $('lg-suggest').innerHTML = acts ? 'ðŸ’¡ Suggested next: ' + acts.join(' Â· ') : '';
+  $('lg-suggest').innerHTML = acts ? 'Suggested next: ' + acts.join(' - ') : '';
 }
 async function saveLog(){
   if(!LOG.reach) return toast('Select reachability');
@@ -186,11 +186,11 @@ async function saveLog(){
     logged_by: ME.id
   }).eq('id', LOG.id);
   if(error) return toast(error.message);
-  closeModal(); toast('Saved ðŸ™'); renderToday();
+  closeModal(); toast('Saved!'); renderToday();
 }
 
 /* ============================================================
-   PEOPLE â€” 4 tabs
+   PEOPLE -- 4 tabs
    ============================================================ */
 let PEOPLE_TAB = 'new_meditator';
 
@@ -212,7 +212,7 @@ const COMMON_TAGS = [
 
 async function renderPeople(tab){
   if(tab) PEOPLE_TAB = tab;
-  view().innerHTML = '<div class="empty">Loadingâ€¦</div>';
+  view().innerHTML = '<div class="empty">Loading...</div>';
 
   const tabDefs = [
     ['new_meditator','New Meditators'],
@@ -237,8 +237,8 @@ async function renderNewMeditators(tabBar){
 
   let h = tabBar;
   if(isCoord()) h += `<div style="display:flex;gap:8px;margin:6px 0;flex-wrap:wrap">
-    <button class="btn small ghost" onclick="openImport()">â¬†ï¸ Import</button>
-    <button class="btn small ghost" onclick="openAddPerson()">ï¼‹ Add person</button>
+    <button class="btn small ghost" onclick="openImport()">Import</button>
+    <button class="btn small ghost" onclick="openAddPerson()">+ Add person</button>
   </div>`;
   h += `<div class="card" style="padding:10px">
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
@@ -250,7 +250,7 @@ async function renderNewMeditators(tabBar){
         onchange="PF.new_meditator.dateFrom=this.value;renderPeople()" style="width:130px">
       <input type="date" title="IE date to" value="${f.dateTo}"
         onchange="PF.new_meditator.dateTo=this.value;renderPeople()" style="width:130px">
-      <button class="btn small ghost" onclick="renderPeople()">ðŸ”</button>
+      <button class="btn small ghost" onclick="renderPeople()">Search</button>
     </div>
   </div>`;
 
@@ -289,7 +289,7 @@ function newMeditatorRow(j, vols){
   const tags = (p?.tags||[]).slice(0,3).map(t=>`<span class="badge gray" style="font-size:.7rem">${esc(t)}</span>`).join(' ');
   const assignee = vols.find(v=>v.id===j.assigned_to);
   const assignSel = isCoord() ? `<select style="width:auto;font-size:.78rem;padding:4px 6px" onchange="assignJourney('${j.id}', this.value)">
-    <option value="">â€” assign â€”</option>
+    <option value="">-- assign --</option>
     ${vols.map(v=>`<option value="${v.id}" ${v.id===j.assigned_to?'selected':''}>${esc(v.full_name||v.email)}</option>`).join('')}
   </select>` : '';
   const wa = p?.phone ? `https://wa.me/91${p.phone}?text=${encodeURIComponent(WA_MSG.new_meditator(p.full_name.split(' ')[0]))}` : null;
@@ -298,12 +298,12 @@ function newMeditatorRow(j, vols){
       <div class="name">${esc(p?.full_name||'?')}
         ${j.status==='completed'?'<span class="badge green">done</span>':''}
         ${tags}</div>
-      <div class="sub">IE: ${fmtD(p?.ie_date||j.program_date)} Â· ${centerName(p?.center_id)} Â· calls ${done}/${total}
-        ${j.sadhana_status?` Â· <b>${esc(j.sadhana_status)}</b>`:''}
-        ${assignee?` Â· ðŸ‘¤ ${esc(assignee.full_name||assignee.email)}`:''}</div>
+      <div class="sub">IE: ${fmtD(p?.ie_date||j.program_date)} - ${centerName(p?.center_id)} - calls ${done}/${total}
+        ${j.sadhana_status?` - <b>${esc(j.sadhana_status)}</b>`:''}
+        ${assignee?` - ${esc(assignee.full_name||assignee.email)}`:''}</div>
     </div>
-    ${p?.phone?`<a class="iconbtn call" href="tel:+91${p.phone}">ðŸ“ž</a>`:''}
-    ${wa?`<a class="iconbtn wa" href="${wa}" target="_blank">ðŸ’¬</a>`:''}
+    ${p?.phone?`<a class="iconbtn call" href="tel:+91${p.phone}">Call</a>`:''}
+    ${wa?`<a class="iconbtn wa" href="${wa}" target="_blank">WA</a>`:''}
     ${assignSel}
   </div>`;
 }
@@ -316,8 +316,8 @@ async function renderMeditatorsList(tabBar){
 
   let h = tabBar;
   if(isCoord()) h += `<div style="display:flex;gap:8px;margin:6px 0;flex-wrap:wrap">
-    <button class="btn small ghost" onclick="openImport()">â¬†ï¸ Import</button>
-    <button class="btn small ghost" onclick="openAddPerson()">ï¼‹ Add person</button>
+    <button class="btn small ghost" onclick="openImport()">Import</button>
+    <button class="btn small ghost" onclick="openAddPerson()">+ Add person</button>
   </div>`;
 
   h += `<div class="card" style="padding:10px">
@@ -332,7 +332,7 @@ async function renderMeditatorsList(tabBar){
         onchange="PF.meditator.dateTo=this.value;renderPeople()" style="width:130px">
       <input placeholder="Search name/phone" style="flex:1;min-width:140px" value="${esc(f.search)}"
         oninput="PF.meditator.search=this.value" onkeydown="if(event.key==='Enter')renderPeople()">
-      <button class="btn small ghost" onclick="renderPeople()">ðŸ”</button>
+      <button class="btn small ghost" onclick="renderPeople()">Search</button>
     </div>
   </div>`;
 
@@ -358,15 +358,15 @@ async function renderMeditatorsList(tabBar){
 
 function meditatorDetailRow(p){
   const tags = (p.tags||[]).slice(0,4).map(t=>`<span class="badge gray" style="font-size:.68rem">${esc(t)}</span>`).join(' ');
-  const adv = [p.bsp_date&&`BSP:${fmtD(p.bsp_date)}`, p.shoonya_date&&`Shoonya:${fmtD(p.shoonya_date)}`, p.samyama_date&&`Samyama:${fmtD(p.samyama_date)}`].filter(Boolean).join(' Â· ');
+  const adv = [p.bsp_date&&`BSP: ${fmtD(p.bsp_date)}`, p.shoonya_date&&`Shoonya:${fmtD(p.shoonya_date)}`, p.samyama_date&&`Samyama:${fmtD(p.samyama_date)}`].filter(Boolean).join(' - ');
   const wa = p.phone ? `https://wa.me/91${p.phone}?text=${encodeURIComponent(WA_MSG.meditator(p.full_name.split(' ')[0]))}` : null;
   return `<div class="row">
     <div class="grow" onclick="showMeditatorDetail(${JSON.stringify({id:p.id,n:p.full_name,ph:p.phone,ie:p.ie_date,bsp:p.bsp_date,sh:p.shoonya_date,sam:p.samyama_date,tags:p.tags||[],ctr:p.center_id}).replace(/'/g,"&#39;").replace(/"/g,'&quot;')})">
       <div class="name" style="cursor:pointer">${esc(p.full_name)} ${tags}</div>
-      <div class="sub">IE: ${fmtD(p.ie_date)} Â· ${centerName(p.center_id)}${adv?' Â· '+adv:''}</div>
+      <div class="sub">IE: ${fmtD(p.ie_date)} - ${centerName(p.center_id)}${adv?' - '+adv:''}</div>
     </div>
-    ${p.phone?`<a class="iconbtn call" href="tel:+91${p.phone}">ðŸ“ž</a>`:''}
-    ${wa?`<a class="iconbtn wa" href="${wa}" target="_blank">ðŸ’¬</a>`:''}
+    ${p.phone?`<a class="iconbtn call" href="tel:+91${p.phone}">Call</a>`:''}
+    ${wa?`<a class="iconbtn wa" href="${wa}" target="_blank">WA</a>`:''}
     ${isCoord()?`<button class="btn small ghost" onclick='startNurturing(${JSON.stringify({pid:p.id,name:p.full_name}).replace(/'/g,"&#39;")})'>Nurture</button>`:''}
   </div>`;
 }
@@ -374,11 +374,11 @@ function meditatorDetailRow(p){
 function showMeditatorDetail(d){
   const tags = (d.tags||[]).map(t=>`<span class="badge gray">${esc(t)}</span>`).join(' ');
   modal(`<h3>${esc(d.n)}</h3>
-    <p>${d.ph?`ðŸ“ž ${d.ph}`:''} Â· ${centerName(d.ctr)}</p>
-    <p>ðŸ§˜ IE date: ${fmtD(d.ie)}</p>
-    ${d.bsp?`<p>ðŸ”¥ BSP: ${fmtD(d.bsp)}</p>`:''}
-    ${d.sh?`<p>ðŸŒ‘ Shoonya: ${fmtD(d.sh)}</p>`:''}
-    ${d.sam?`<p>ðŸ•‰ï¸ Samyama: ${fmtD(d.sam)}</p>`:''}
+    <p>${d.ph?`${d.ph}`:''} - ${centerName(d.ctr)}</p>
+    <p>IE date: ${fmtD(d.ie)}</p>
+    ${d.bsp?`<p>BSP: ${fmtD(d.bsp)}</p>`:''}
+    ${d.sh?`<p>Shoonya: ${fmtD(d.sh)}</p>`:''}
+    ${d.sam?`<p>Samyama: ${fmtD(d.sam)}</p>`:''}
     ${tags?`<p style="margin-top:8px">Tags: ${tags}</p>`:''}
     ${isCoord()?`<button class="btn block" style="margin-top:12px" onclick='closeModal();startNurturing(${JSON.stringify({pid:d.id,name:d.n}).replace(/'/g,"&#39;")})'>Add to nurturing calls</button>`:''}
   `);
@@ -405,7 +405,7 @@ async function saveNurturing(pid){
     program_date:$('nt-date').value||null
   });
   if(error) return toast(error.message);
-  closeModal(); toast('Journey created â€” will appear in Today\'s calls ðŸ™');
+  closeModal(); toast('Journey created -- will appear in Today\'s calls');
 }
 
 /* ---- Advanced Programs ---- */
@@ -430,11 +430,11 @@ async function renderAdvancedList(tabBar){
         onchange="PF.advanced.dateTo=this.value;renderPeople()" style="width:130px">
       <input placeholder="Search name" style="flex:1;min-width:130px" value="${esc(f.search)}"
         oninput="PF.advanced.search=this.value" onkeydown="if(event.key==='Enter')renderPeople()">
-      <button class="btn small ghost" onclick="renderPeople()">ðŸ”</button>
+      <button class="btn small ghost" onclick="renderPeople()">Search</button>
     </div>
   </div>`;
 
-  // Build query â€” filter by which program has a date
+  // Build query -- filter by which program has a date
   let q = sb.from('people').select('id, full_name, phone, center_id, tags, ie_date, bsp_date, shoonya_date, samyama_date')
     .eq('is_meditator', true).order('created_at', {ascending:false}).limit(500);
   if(f.center) q = q.eq('center_id', f.center);
@@ -465,18 +465,18 @@ async function renderAdvancedList(tabBar){
 
 function advancedRow(p){
   const progs = [
-    p.bsp_date && `ðŸ”¥ BSP: ${fmtD(p.bsp_date)}`,
-    p.shoonya_date && `ðŸŒ‘ Shoonya: ${fmtD(p.shoonya_date)}`,
-    p.samyama_date && `ðŸ•‰ï¸ Samyama: ${fmtD(p.samyama_date)}`
-  ].filter(Boolean).join(' Â· ');
+    p.bsp_date && `BSP: ${fmtD(p.bsp_date)}`,
+    p.shoonya_date && `Shoonya: ${fmtD(p.shoonya_date)}`,
+    p.samyama_date && `Samyama: ${fmtD(p.samyama_date)}`
+  ].filter(Boolean).join(' - ');
   const wa = p.phone ? `https://wa.me/91${p.phone}?text=${encodeURIComponent(WA_MSG.advanced(p.full_name.split(' ')[0]))}` : null;
   return `<div class="row">
     <div class="grow">
       <div class="name">${esc(p.full_name)}</div>
-      <div class="sub">${progs} Â· ${centerName(p.center_id)}</div>
+      <div class="sub">${progs} - ${centerName(p.center_id)}</div>
     </div>
-    ${p.phone?`<a class="iconbtn call" href="tel:+91${p.phone}">ðŸ“ž</a>`:''}
-    ${wa?`<a class="iconbtn wa" href="${wa}" target="_blank">ðŸ’¬</a>`:''}
+    ${p.phone?`<a class="iconbtn call" href="tel:+91${p.phone}">Call</a>`:''}
+    ${wa?`<a class="iconbtn wa" href="${wa}" target="_blank">WA</a>`:''}
     ${isCoord()?`<button class="btn small ghost" onclick='startNurturing(${JSON.stringify({pid:p.id,name:p.full_name}).replace(/'/g,"&#39;")})'>Nurture</button>`:''}
   </div>`;
 }
@@ -493,7 +493,7 @@ async function renderVolunteerNurture(tabBar){
         ${centerOpts}</select>
       <input placeholder="Search name/phone" style="flex:1;min-width:140px" value="${esc(f.search)}"
         oninput="PF.volunteer_nurture.search=this.value" onkeydown="if(event.key==='Enter')renderPeople()">
-      <button class="btn small ghost" onclick="renderPeople()">ðŸ”</button>
+      <button class="btn small ghost" onclick="renderPeople()">Search</button>
     </div>
   </div>`;
 
@@ -527,7 +527,7 @@ function journeyRow(j, vols){
   const done = (j.calls||[]).filter(c=>c.completed_at).length, total=(j.calls||[]).length;
   const assignee = vols.find(v=>v.id===j.assigned_to);
   const assignSel = isCoord() ? `<select style="width:auto;font-size:.78rem;padding:4px 6px" onchange="assignJourney('${j.id}', this.value)">
-    <option value="">â€” assign â€”</option>
+    <option value="">-- assign --</option>
     ${vols.map(v=>`<option value="${v.id}" ${v.id===j.assigned_to?'selected':''}>${esc(v.full_name||v.email)}</option>`).join('')}
   </select>` : '';
   const wa = p?.phone ? `https://wa.me/91${p.phone}?text=${encodeURIComponent(WA_MSG.volunteer_nurture(p.full_name.split(' ')[0]))}` : null;
@@ -535,20 +535,20 @@ function journeyRow(j, vols){
     <div class="grow">
       <div class="name">${esc(p?.full_name||'?')}
         ${j.status==='completed'?'<span class="badge green">done</span>':''}</div>
-      <div class="sub">${esc(j.program_name||'')} ${j.program_date?'Â· '+fmtD(j.program_date):''}
-        Â· ${centerName(p?.center_id||j.center_id)} Â· calls ${done}/${total}
-        ${j.sadhana_status?` Â· <b>${esc(j.sadhana_status)}</b>`:''}
-        ${assignee?` Â· ðŸ‘¤ ${esc(assignee.full_name||assignee.email)}`:''}</div>
+      <div class="sub">${esc(j.program_name||'')} ${j.program_date?'- '+fmtD(j.program_date):''}
+        - ${centerName(p?.center_id||j.center_id)} - calls ${done}/${total}
+        ${j.sadhana_status?` - <b>${esc(j.sadhana_status)}</b>`:''}
+        ${assignee?` - ${esc(assignee.full_name||assignee.email)}`:''}</div>
     </div>
-    ${p?.phone?`<a class="iconbtn call" href="tel:+91${p.phone}">ðŸ“ž</a>`:''}
-    ${wa?`<a class="iconbtn wa" href="${wa}" target="_blank">ðŸ’¬</a>`:''}
+    ${p?.phone?`<a class="iconbtn call" href="tel:+91${p.phone}">Call</a>`:''}
+    ${wa?`<a class="iconbtn wa" href="${wa}" target="_blank">WA</a>`:''}
     ${assignSel}
   </div>`;
 }
 
 async function assignJourney(jid, uid){
   const {error} = await sb.from('journeys').update({assigned_to: uid||null}).eq('id', jid);
-  toast(error ? error.message : 'Assigned âœ”');
+  toast(error ? error.message : 'Assigned');
 }
 
 /* ---- manual add ---- */
@@ -586,7 +586,7 @@ async function saveAddPerson(){
     const {error} = await sb.rpc('import_people', {rows:[row]});
     if(error) return toast(error.message);
   }
-  closeModal(); toast('Added âœ”'); renderPeople();
+  closeModal(); toast('Saved!'); renderPeople();
 }
 
 /* ---- CSV / Excel import ---- */
@@ -633,26 +633,26 @@ async function runImport(){
   }
   const payload = rows.map(mapRow).filter(r=>r.full_name||r.phone).map(r=>({...r, kind, source:'csv'}));
   if(!payload.length) return toast('No usable rows found');
-  $('im-result').textContent = `Importing ${payload.length} rowsâ€¦`;
+  $('im-result').textContent = `Importing ${payload.length} rows...`;
   let tot = {inserted:0, merged:0, journeys:0};
   for(let i=0;i<payload.length;i+=200){
     const {data, error} = await sb.rpc('import_people', {rows:payload.slice(i,i+200)});
     if(error){ $('im-result').textContent = 'Error: '+error.message; return; }
     tot.inserted+=data.inserted; tot.merged+=data.merged; tot.journeys+=data.journeys;
   }
-  $('im-result').textContent = `âœ” ${tot.inserted} new, ${tot.merged} merged, ${tot.journeys} journeys created.`;
+  $('im-result').textContent = `Done: ${tot.inserted} new, ${tot.merged} merged, ${tot.journeys} journeys created.`;
   toast('Import complete');
 }
 
 /* ============================================================
-   VOLUNTEERS â€” Module 2 + Event/Attendance
+   VOLUNTEERS -- Module 2 + Event/Attendance
    ============================================================ */
 const INTERESTS = ['Online Calling','Online Operations','Offline Programs','Sadhguru Sannidhi','E-Media','Promotions','Devi Seva','Event Setup','Cooking/Annadanam','Transport'];
 let VFILTER = {center:'', interest:'', mode:'', timing:'', space:false};
 let SHORTLIST = [];
 
 async function renderVols(){
-  view().innerHTML = '<div class="empty">Loadingâ€¦</div>';
+  view().innerHTML = '<div class="empty">Loading...</div>';
   let q = sb.from('volunteer_profiles')
     .select('*, people!inner(id, full_name, phone, pincode, center_id)')
     .order('updated_at', {ascending:false}).limit(500);
@@ -675,11 +675,11 @@ async function renderVols(){
   const {data:acts} = await sb.from('activities').select('id, name, activity_type, activity_date, is_open, qr_token, center_id').order('activity_date',{ascending:false}).limit(10);
 
   let h = `<div style="display:flex;gap:8px;margin:6px 0;flex-wrap:wrap">
-    <button class="btn small ghost" onclick="openPaperOCR()">ðŸ“· Paper form (OCR)</button>
-    <button class="btn small ghost" onclick="openVolForm()">ï¼‹ Add interest</button>
-    <button class="btn small ghost" onclick="openGFormHelp()">ðŸ”— Google Form</button>
-    <button class="btn small green" onclick="openNewActivity()">ðŸ“‹ Create Event</button>
-    ${SHORTLIST.length?`<button class="btn small green" onclick="shareShortlist()">ðŸ“¤ Share shortlist (${SHORTLIST.length})</button>`:''}
+    <button class="btn small ghost" onclick="openPaperOCR()">Paper Form (OCR)</button>
+    <button class="btn small ghost" onclick="openVolForm()">+ Add interest</button>
+    <button class="btn small ghost" onclick="openGFormHelp()">Google Form</button>
+    <button class="btn small green" onclick="openNewActivity()">Create Event</button>
+    ${SHORTLIST.length?`<button class="btn small green" onclick="shareShortlist()">Share shortlist (${SHORTLIST.length})</button>`:''}
   </div>`;
 
   // Recent events (compact)
@@ -688,9 +688,9 @@ async function renderVols(){
     h += acts.map(a=>`<div class="row"><div class="grow">
       <div class="name">${esc(a.name)} ${a.is_open?'<span class="badge green">open</span>':'<span class="badge gray">closed</span>'}
         ${a.activity_type&&a.activity_type!=='general'?`<span class="badge">${esc(a.activity_type)}</span>`:''}</div>
-      <div class="sub">${centerName(a.center_id)} Â· ${fmtD(a.activity_date)}</div></div>
+      <div class="sub">${centerName(a.center_id)} - ${fmtD(a.activity_date)}</div></div>
       <button class="btn small ghost" onclick="showQR('${a.qr_token}','${esc(a.name)}')">QR</button>
-      <button class="btn small ghost" onclick="viewAttendees('${a.id}','${esc(a.name)}')">ðŸ‘¥</button>
+      <button class="btn small ghost" onclick="viewAttendees('${a.id}','${esc(a.name)}')">Attendees</button>
       <button class="btn small gray" onclick="toggleActivity('${a.id}',${!a.is_open})">${a.is_open?'Close':'Open'}</button>
     </div>`).join('');
     h += `</div>`;
@@ -707,7 +707,7 @@ async function renderVols(){
       <select style="width:auto" onchange="VFILTER.timing=this.value;renderVols()">
         <option value="">Any timing</option><option value="weekday_morning">Weekday AM</option>
         <option value="weekday_evening">Weekday PM</option><option value="weekend">Weekends</option></select>
-      <button class="${VFILTER.space?'sel':''}" onclick="VFILTER.space=!VFILTER.space;renderVols()">ðŸ  Can offer space</button>
+      <button class="${VFILTER.space?'sel':''}" onclick="VFILTER.space=!VFILTER.space;renderVols()">Can offer space</button>
     </div></div>
   <div class="card"><h2>Volunteers <span class="badge">${list.length}</span></h2>`;
   h += list.length ? list.map(v=>volRow(v, histBy[v.person_id]||[])).join('') : '<div class="empty">No matches.</div>';
@@ -720,40 +720,40 @@ async function viewAttendees(actId, actName){
     .select('id, time_in, time_out, pincode, photo_url, activity_detail, people(full_name, phone, center_id)')
     .eq('activity_id', actId).order('time_in');
   const rows = att||[];
-  modal(`<h3>ðŸ‘¥ ${esc(actName)} â€” Attendees (${rows.length})</h3>
+  modal(`<h3>${esc(actName)} -- Attendees (${rows.length})</h3>
     ${rows.length ? `<div style="overflow-y:auto;max-height:60vh">` +
     rows.map(a=>{
       const p = a.people;
       return `<div class="row" style="align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
         ${a.photo_url?`<img src="${esc(a.photo_url)}" style="width:48px;height:48px;border-radius:50%;object-fit:cover;flex-shrink:0" onerror="this.style.display='none'">`
-          :`<div style="width:48px;height:48px;border-radius:50%;background:var(--card-bg);display:flex;align-items:center;justify-content:center;font-size:1.4rem;flex-shrink:0">ðŸ™</div>`}
+          :`<div style="width:48px;height:48px;border-radius:50%;background:var(--card-bg);display:flex;align-items:center;justify-content:center;font-size:.85rem;flex-shrink:0;color:var(--muted)">--</div>`}
         <div style="flex:1;min-width:0">
           <div class="name">${esc(p?.full_name||'?')}</div>
-          <div class="sub">${p?.phone||''} ${a.activity_detail?'Â· '+esc(a.activity_detail):''}</div>
-          <div class="sub">In: ${fmtD(a.time_in)} ${a.time_out?'Â· Out: '+fmtD(a.time_out):''} ${a.pincode?'Â· '+a.pincode:''}</div>
+          <div class="sub">${p?.phone||''} ${a.activity_detail?'- '+esc(a.activity_detail):''}</div>
+          <div class="sub">In: ${fmtD(a.time_in)} ${a.time_out?'- Out: '+fmtD(a.time_out):''} ${a.pincode?'- '+a.pincode:''}</div>
         </div>
       </div>`;
     }).join('') + `</div>`
-    : '<div class="empty">No attendees yet â€” share the QR code.</div>'}`);
+    : '<div class="empty">No attendees yet -- share the QR code.</div>'}`);
 }
 
 function volRow(v, hist){
   const p = v.people;
-  const wa = p.phone ? `https://wa.me/91${p.phone}?text=${encodeURIComponent(`Namaskaram ${p.full_name.split(' ')[0]} ðŸ™ There's a volunteering opportunity at Isha ${centerName(p.center_id)} that matches your interest${v.interests?.length?' in '+v.interests[0]:''}. Would you like to join?`)}` : null;
+  const wa = p.phone ? `https://wa.me/91${p.phone}?text=${encodeURIComponent(`Namaskaram ${p.full_name.split(' ')[0]} -- There's a volunteering opportunity at Isha ${centerName(p.center_id)} that matches your interest${v.interests?.length?' in '+v.interests[0]:''}. Would you like to join?`)}` : null;
   const inSL = SHORTLIST.some(s=>s.id===p.id);
   return `<div class="row">
     <div class="grow" onclick='showVolHistory(${JSON.stringify({n:p.full_name,h:hist.slice(0,15)}).replace(/'/g,"&#39;")})'>
       <div class="name">${esc(p.full_name)} ${v.screened?'<span class="badge green">screened</span>':'<span class="badge gray">new</span>'}</div>
-      <div class="sub">${centerName(p.center_id)} Â· ${(v.interests||[]).join(', ')||'no interests yet'}
-        ${v.mode?' Â· '+v.mode:''}${v.can_offer_space?' Â· ðŸ ':''} Â· ${hist.length} activit${hist.length===1?'y':'ies'}</div>
+      <div class="sub">${centerName(p.center_id)} - ${(v.interests||[]).join(', ')||'no interests yet'}
+        ${v.mode?' - '+v.mode:''}${v.can_offer_space?' | space avail.':''} - ${hist.length} activit${hist.length===1?'y':'ies'}</div>
     </div>
-    ${p.phone?`<a class="iconbtn call" href="tel:+91${p.phone}">ðŸ“ž</a>`:''}
-    ${wa?`<a class="iconbtn wa" href="${wa}" target="_blank">ðŸ’¬</a>`:''}
-    <button class="btn small ${inSL?'green':'gray'}" onclick='toggleShortlist(${JSON.stringify({id:p.id,name:p.full_name,phone:p.phone}).replace(/'/g,"&#39;")})'>${inSL?'âœ“':'ï¼‹'}</button>
+    ${p.phone?`<a class="iconbtn call" href="tel:+91${p.phone}">Call</a>`:''}
+    ${wa?`<a class="iconbtn wa" href="${wa}" target="_blank">WA</a>`:''}
+    <button class="btn small ${inSL?'green':'gray'}" onclick='toggleShortlist(${JSON.stringify({id:p.id,name:p.full_name,phone:p.phone}).replace(/'/g,"&#39;")})'>${inSL?'Added':'+'}</button>
   </div>`;
 }
 function showVolHistory(d){
-  modal(`<h3>${esc(d.n)} â€” history</h3>` + (d.h.length
+  modal(`<h3>${esc(d.n)} -- history</h3>` + (d.h.length
     ? `<table class="mini"><tr><th>Activity</th><th>Date</th></tr>${d.h.map(r=>`<tr><td>${esc(r.activity)}</td><td>${fmtD(r.happened_on)}</td></tr>`).join('')}</table>`
     : '<p class="muted">No volunteering history yet.</p>'));
 }
@@ -763,31 +763,33 @@ function toggleShortlist(p){
   renderVols();
 }
 function shareShortlist(){
-  const txt = `Volunteer shortlist (${SHORTLIST.length}):\n` + SHORTLIST.map(s=>`â€¢ ${s.name} â€” ${s.phone||'no phone'}`).join('\n');
-  modal(`<h3>Share shortlist</h3><textarea style="min-height:140px">${esc(txt)}</textarea>
-    <a class="btn block" style="text-align:center;text-decoration:none;display:block" href="https://wa.me/?text=${encodeURIComponent(txt)}" target="_blank">ðŸ“¤ Share via WhatsApp</a>
-    <button class="btn ghost block" onclick="navigator.clipboard.writeText(${JSON.stringify(txt)});toast('Copied')">Copy</button>`);
+  const txt = 'Volunteer shortlist (' + SHORTLIST.length + '):\n' + SHORTLIST.map(s=>'- ' + s.name + ' -- ' + (s.phone||'no phone')).join('\n');
+  modal('<h3>Share shortlist</h3><textarea style="min-height:140px">' + esc(txt) + '</textarea>' +
+    '<a class="btn block" style="text-align:center;text-decoration:none;display:block" href="https://wa.me/?text=' + encodeURIComponent(txt) + '" target="_blank">Share via WhatsApp</a>' +
+    '<button class="btn ghost block" onclick="navigator.clipboard.writeText(' + JSON.stringify(txt) + ');toast(\'Copied\')">Copy text</button>');
 }
 
 /* ---- volunteer interest form ---- */
-function volFormHTML(pre={}){
-  return `<label>Name</label><input id="vf-name" value="${esc(pre.name||'')}">
-    <label>Phone</label><input id="vf-phone" inputmode="numeric" value="${esc(pre.phone||'')}">
-    <label>Pincode</label><input id="vf-pin" inputmode="numeric">
-    <label>Activities interested in</label>
-    <div class="choices" id="vf-int">${INTERESTS.map(i=>`<button onclick="this.classList.toggle('sel')">${i}</button>`).join('')}</div>
-    <label>Preferred timing</label>
-    <select id="vf-timing"><option value="flexible">Flexible</option><option value="weekday_morning">Weekday mornings</option>
-      <option value="weekday_evening">Weekday evenings</option><option value="weekend">Weekends</option></select>
-    <label>Mode</label>
-    <select id="vf-mode"><option value="both">Online + Offline</option><option value="online">Online only</option><option value="offline">Offline only</option></select>
-    <label>Programs done</label><input id="vf-progs" placeholder="e.g. IE Online 2025, BSP">
-    <label>Languages</label><input id="vf-lang" placeholder="e.g. Kannada, Tamil, English">
-    <div class="choices" style="margin-top:10px"><button id="vf-space" onclick="this.classList.toggle('sel')">ðŸ  Can offer space</button></div>
-    <label>Notes</label><textarea id="vf-notes"></textarea>
-    <button class="btn block" onclick="saveVolForm()">Save</button>`;
+const INTERESTS = ['Online Calling','Online Operations','Offline Programs','Sadhguru Sannidhi','E-Media','Promotions','Devi Seva','Event Setup','Cooking/Annadanam','Transport'];
+function volFormHTML(pre){
+  pre = pre || {};
+  return '<label>Name</label><input id="vf-name" value="' + esc(pre.name||'') + '">' +
+    '<label>Phone</label><input id="vf-phone" inputmode="numeric" value="' + esc(pre.phone||'') + '">' +
+    '<label>Pincode</label><input id="vf-pin" inputmode="numeric">' +
+    '<label>Activities interested in</label>' +
+    '<div class="choices" id="vf-int">' + INTERESTS.map(i=>'<button onclick="this.classList.toggle(\'sel\')">' + i + '</button>').join('') + '</div>' +
+    '<label>Preferred timing</label>' +
+    '<select id="vf-timing"><option value="flexible">Flexible</option><option value="weekday_morning">Weekday mornings</option>' +
+    '<option value="weekday_evening">Weekday evenings</option><option value="weekend">Weekends</option></select>' +
+    '<label>Mode</label>' +
+    '<select id="vf-mode"><option value="both">Online + Offline</option><option value="online">Online only</option><option value="offline">Offline only</option></select>' +
+    '<label>Programs done</label><input id="vf-progs" placeholder="e.g. IE Online 2025, BSP">' +
+    '<label>Languages</label><input id="vf-lang" placeholder="e.g. Kannada, Tamil, English">' +
+    '<div class="choices" style="margin-top:10px"><button id="vf-space" onclick="this.classList.toggle(\'sel\')">Can offer space</button></div>' +
+    '<label>Notes</label><textarea id="vf-notes"></textarea>' +
+    '<button class="btn block" onclick="saveVolForm()">Save</button>';
 }
-function openVolForm(pre){ modal(`<h3>Volunteer interest</h3>` + volFormHTML(pre||{})); }
+function openVolForm(pre){ modal('<h3>Volunteer interest</h3>' + volFormHTML(pre||{})); }
 async function saveVolForm(){
   const interests = [...document.querySelectorAll('#vf-int button.sel')].map(b=>b.textContent);
   const row = {full_name:$('vf-name').value, phone:$('vf-phone').value, pincode:$('vf-pin').value,
@@ -801,26 +803,26 @@ async function saveVolForm(){
   if(p) await sb.from('volunteer_profiles').update({
     programs_done:$('vf-progs').value||null, languages:$('vf-lang').value||null,
     screening_notes:$('vf-notes').value||null}).eq('person_id', p.id);
-  closeModal(); toast('Saved ðŸ™'); renderVols();
+  closeModal(); toast('Saved!'); renderVols();
 }
 
 async function openPaperOCR(){
-  modal(`<h3>ðŸ“· Paper form â†’ OCR</h3>
-    <p class="muted">Take a photo of the filled form. Name & phone are auto-extracted â€” check and correct, then save.</p>
-    <input id="ocr-file" type="file" accept="image/*" capture="environment">
-    <div id="ocr-status" class="muted" style="margin:8px 0"></div>
-    <div id="ocr-form"></div>`);
+  modal('<h3>Paper Form -- OCR</h3>' +
+    '<p class="muted">Take a photo of the filled form. Name and phone are auto-extracted -- check and correct, then save.</p>' +
+    '<input id="ocr-file" type="file" accept="image/*" capture="environment">' +
+    '<div id="ocr-status" class="muted" style="margin:8px 0"></div>' +
+    '<div id="ocr-form"></div>');
   $('ocr-file').onchange = runOCR;
 }
 async function runOCR(){
   const f = $('ocr-file').files[0]; if(!f) return;
-  $('ocr-status').textContent = 'Loading OCR engineâ€¦';
+  $('ocr-status').textContent = 'Loading OCR engine...';
   if(!window.Tesseract){
     await new Promise((res,rej)=>{ const s=document.createElement('script');
       s.src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'; s.onload=res; s.onerror=rej;
       document.head.appendChild(s); });
   }
-  $('ocr-status').textContent = 'Reading the photoâ€¦ (10â€“20s)';
+  $('ocr-status').textContent = 'Reading the photo... (10-20s)';
   try{
     const {data:{text}} = await Tesseract.recognize(f, 'eng');
     const phone = (text.match(/(?:\+?91[\s-]?)?([6-9]\d{4}[\s-]?\d{5})/)||[])[1]?.replace(/\D/g,'') || '';
@@ -828,21 +830,21 @@ async function runOCR(){
     const nm = text.match(/name\s*[:\-]?\s*([A-Za-z .]{3,40})/i);
     if(nm) name = nm[1].trim();
     else { const line = text.split('\n').map(l=>l.trim()).find(l=>/^[A-Za-z .]{3,40}$/.test(l)); if(line) name=line; }
-    $('ocr-status').textContent = 'âœ” Extracted â€” please verify';
+    $('ocr-status').textContent = 'Extracted -- please verify';
     $('ocr-form').innerHTML = volFormHTML({name, phone});
-  }catch(e){ $('ocr-status').textContent = 'OCR failed â€” fill manually:'; $('ocr-form').innerHTML = volFormHTML({}); }
+  }catch(e){ $('ocr-status').textContent = 'OCR failed -- fill manually:'; $('ocr-form').innerHTML = volFormHTML({}); }
 }
 function openGFormHelp(){
-  modal(`<h3>Google Form intake</h3>
-    <p><b>Manual (30s):</b> Open the form's response Sheet â†’ File â†’ Download â†’ CSV â†’ Import CSV above.</p>
-    <p><b>Automatic:</b> Add the Apps Script in <code>/scripts/gform-sync.gs</code> to your Sheet, paste your Supabase URL+key, set a trigger on form submit.</p>`);
+  modal('<h3>Google Form intake</h3>' +
+    '<p><b>Manual (30s):</b> Open the form\'s response Sheet -- File -- Download -- CSV -- Import CSV above.</p>' +
+    '<p><b>Automatic:</b> Add the Apps Script in <code>/scripts/gform-sync.gs</code> to your Sheet, paste your Supabase URL+key, set a trigger on form submit.</p>');
 }
 
 /* ============================================================
-   INSIGHTS â€” Module 10
+   INSIGHTS
    ============================================================ */
 async function renderInsights(){
-  view().innerHTML = '<div class="empty">Loadingâ€¦</div>';
+  view().innerHTML = '<div class="empty">Loading...</div>';
   const [{data:js},{data:calls},{data:vh}] = await Promise.all([
     sb.from('journeys').select('id, type, status, sadhana_status, center_id, assigned_to'),
     sb.from('calls').select('id, due_date, completed_at, reachability, journey_id'),
@@ -866,24 +868,25 @@ async function renderInsights(){
   for(const [cid, ks] of Object.entries(clusters))
     for(const r of rules)
       if((ks[r.when_status]||0) >= r.min_count)
-        suggestions.push(`<b>${centerName(cid)}</b>: ${ks[r.when_status]} people "${r.when_status.replace(/_/g,' ')}" â†’ ${esc(r.suggest)}`);
+        suggestions.push('<b>' + centerName(cid) + '</b>: ' + ks[r.when_status] + ' people "' + r.when_status.replace(/_/g,' ') + '" -- ' + esc(r.suggest));
   const m1 = J.filter(j=>j.type==='new_meditator');
   const m1done = m1.filter(j=>j.status==='completed').length;
 
-  let h = `<div class="stats">
-    <div class="stat"><div class="n">${m1.length}</div><div class="l">New meditators</div></div>
-    <div class="stat"><div class="n">${m1done}</div><div class="l">Mandala journeys done</div></div>
-    <div class="stat"><div class="n">${overdue.length}</div><div class="l">Overdue calls</div></div>
-    <div class="stat"><div class="n">${done.length?Math.round(answered.length/done.length*100):0}%</div><div class="l">Answer rate</div></div>
-    <div class="stat"><div class="n">${J.filter(j=>j.type==='advanced').length}</div><div class="l">Advanced completers</div></div>
-    <div class="stat"><div class="n">${V.length}</div><div class="l">Volunteering records</div></div>
-  </div>`;
+  let h = '<div class="stats">' +
+    '<div class="stat"><div class="n">' + m1.length + '</div><div class="l">New meditators</div></div>' +
+    '<div class="stat"><div class="n">' + m1done + '</div><div class="l">Mandala journeys done</div></div>' +
+    '<div class="stat"><div class="n">' + overdue.length + '</div><div class="l">Overdue calls</div></div>' +
+    '<div class="stat"><div class="n">' + (done.length?Math.round(answered.length/done.length*100):0) + '%</div><div class="l">Answer rate</div></div>' +
+    '<div class="stat"><div class="n">' + J.filter(j=>j.type==='advanced').length + '</div><div class="l">Advanced completers</div></div>' +
+    '<div class="stat"><div class="n">' + V.length + '</div><div class="l">Volunteering records</div></div>' +
+    '</div>';
   if(suggestions.length)
-    h += `<div class="card"><h2>ðŸ’¡ Planning suggestions</h2>${suggestions.map(s=>`<div class="row"><div class="grow">${s}</div></div>`).join('')}</div>`;
-  h += `<div class="card"><h2>Sadhana status distribution</h2><canvas id="ch-dist" height="220"></canvas></div>`;
-  if(isCoord()) h += `<div class="card"><h2>Call completion by center</h2><canvas id="ch-center" height="200"></canvas></div>`;
-  h += `<div class="card"><h2>Per-status counts</h2><table class="mini"><tr><th>Status</th><th>People</th></tr>
-    ${Object.entries(dist).sort((a,b)=>b[1]-a[1]).map(([s,n])=>`<tr><td>${esc(s)}</td><td>${n}</td></tr>`).join('')||'<tr><td colspan=2 class="muted">No logged statuses yet</td></tr>'}</table></div>`;
+    h += '<div class="card"><h2>Planning Suggestions</h2>' + suggestions.map(s=>'<div class="row"><div class="grow">' + s + '</div></div>').join('') + '</div>';
+  h += '<div class="card"><h2>Sadhana status distribution</h2><canvas id="ch-dist" height="220"></canvas></div>';
+  if(isCoord()) h += '<div class="card"><h2>Call completion by center</h2><canvas id="ch-center" height="200"></canvas></div>';
+  h += '<div class="card"><h2>Per-status counts</h2><table class="mini"><tr><th>Status</th><th>People</th></tr>' +
+    (Object.entries(dist).sort((a,b)=>b[1]-a[1]).map(([s,n])=>'<tr><td>' + esc(s) + '</td><td>' + n + '</td></tr>').join('')||'<tr><td colspan=2 class="muted">No logged statuses yet</td></tr>') +
+    '</table></div>';
   view().innerHTML = h;
   if(Object.keys(dist).length){
     new Chart($('ch-dist'), {type:'doughnut',
@@ -909,67 +912,68 @@ async function renderInsights(){
    ============================================================ */
 async function renderAdmin(){
   if(!isCoord()){ view().innerHTML='<div class="empty">Coordinators only.</div>'; return; }
-  view().innerHTML = '<div class="empty">Loadingâ€¦</div>';
+  view().innerHTML = '<div class="empty">Loading...</div>';
   const [{data:profs},{data:acts}] = await Promise.all([
     sb.from('profiles').select('*').order('created_at'),
     sb.from('activities').select('*').order('activity_date',{ascending:false}).limit(30)]);
 
   let h = '';
-  h += `<div class="card"><h2>ðŸ“‹ Events & attendance QR</h2>
-    <button class="btn small ghost" onclick="openNewActivity()">ï¼‹ New event</button>`;
-  h += (acts||[]).map(a=>`<div class="row"><div class="grow">
-      <div class="name">${esc(a.name)} ${a.is_open?'<span class="badge green">open</span>':'<span class="badge gray">closed</span>'}</div>
-      <div class="sub">${centerName(a.center_id)} Â· ${fmtD(a.activity_date)} ${a.activity_type&&a.activity_type!=='general'?'Â· '+esc(a.activity_type):''}</div></div>
-    <button class="btn small ghost" onclick="showQR('${a.qr_token}','${esc(a.name)}')">QR</button>
-    <button class="btn small ghost" onclick="viewAttendees('${a.id}','${esc(a.name)}')">ðŸ‘¥</button>
-    <button class="btn small gray" onclick="toggleActivity('${a.id}',${!a.is_open})">${a.is_open?'Close':'Reopen'}</button>
-    </div>`).join('') || '<div class="empty">No events yet.</div>';
-  h += `</div>`;
+  h += '<div class="card"><h2>Activities & Attendance QR</h2>' +
+    '<button class="btn small ghost" onclick="openNewActivity()">+ New activity</button>';
+  h += (acts||[]).map(a=>'<div class="row"><div class="grow">' +
+      '<div class="name">' + esc(a.name) + ' ' + (a.is_open?'<span class="badge green">open</span>':'<span class="badge gray">closed</span>') + '</div>' +
+      '<div class="sub">' + centerName(a.center_id) + ' - ' + fmtD(a.activity_date) + (a.activity_type&&a.activity_type!=='general'?' - '+esc(a.activity_type):'') + '</div></div>' +
+    '<button class="btn small ghost" onclick="showQR(\'' + a.qr_token + '\',\'' + esc(a.name) + '\')">QR</button>' +
+    '<button class="btn small ghost" onclick="viewAttendees(\'' + a.id + '\',\'' + esc(a.name) + '\')">Attendees</button>' +
+    '<button class="btn small gray" onclick="toggleActivity(\'' + a.id + '\',' + (!a.is_open) + ')">' + (a.is_open?'Close':'Reopen') + '</button>' +
+    '</div>').join('') || '<div class="empty">No activities yet.</div>';
+  h += '</div>';
 
-  h += `<div class="card"><h2>ðŸ‘¥ Users & roles</h2>`;
-  h += (profs||[]).map(p=>`<div class="row"><div class="grow">
-      <div class="name">${esc(p.full_name||p.email)}</div>
-      <div class="sub">${esc(p.email||'')} Â· ${roleLabel(p.role)} Â· ${centerName(p.center_id)}</div></div>
-    ${ME.role==='rco'?`
-      <select style="width:auto;font-size:.78rem;padding:6px" onchange="setRole('${p.id}','role',this.value)">
-        ${['volunteer','coordinator','rco'].map(r=>`<option value="${r}" ${p.role===r?'selected':''}>${roleLabel(r)}</option>`).join('')}</select>
-      <select style="width:auto;font-size:.78rem;padding:6px" onchange="setRole('${p.id}','center_id',this.value)">
-        ${CENTERS.concat([{id:'unassigned',name:'Unassigned'}]).map(c=>`<option value="${c.id}" ${p.center_id===c.id?'selected':''}>${c.name}</option>`).join('')}</select>`:''}
-    ${p.phone?`<a class="iconbtn wa" href="https://wa.me/91${p.phone}?text=${encodeURIComponent('Namaskaram ðŸ™ Gentle reminder â€” you have nurturing calls due on the dashboard. Please take a look when you can!')}" target="_blank">ðŸ’¬</a>`:''}
-    </div>`).join('');
-  h += `</div>`;
+  h += '<div class="card"><h2>Users & Roles</h2>';
+  h += (profs||[]).map(p=>'<div class="row"><div class="grow">' +
+      '<div class="name">' + esc(p.full_name||p.email) + '</div>' +
+      '<div class="sub">' + esc(p.email||'') + ' - ' + roleLabel(p.role) + ' - ' + centerName(p.center_id) + '</div></div>' +
+    (ME.role==='rco'?
+      '<select style="width:auto;font-size:.78rem;padding:6px" onchange="setRole(\'' + p.id + '\',\'role\',this.value)">' +
+        ['volunteer','coordinator','rco'].map(r=>'<option value="' + r + '" ' + (p.role===r?'selected':'') + '>' + roleLabel(r) + '</option>').join('') + '</select>' +
+      '<select style="width:auto;font-size:.78rem;padding:6px" onchange="setRole(\'' + p.id + '\',\'center_id\',this.value)">' +
+        CENTERS.concat([{id:'unassigned',name:'Unassigned'}]).map(c=>'<option value="' + c.id + '" ' + (p.center_id===c.id?'selected':'') + '>' + c.name + '</option>').join('') + '</select>'
+      :'') +
+    (p.phone?'<a class="iconbtn wa" href="https://wa.me/91' + p.phone + '?text=' + encodeURIComponent('Namaskaram - Gentle reminder: you have nurturing calls due on the dashboard. Please take a look when you can!') + '" target="_blank">WA</a>':'') +
+    '</div>').join('');
+  h += '</div>';
 
   if(ME.role==='rco'){
     const pm = SETTINGS.pincode_map||{};
-    h += `<div class="card"><h2>ðŸ“ Pincode â†’ center map</h2>
-      <table class="mini"><tr><th>Pincode</th><th>Center</th><th></th></tr>
-      ${Object.entries(pm).map(([pin,cid])=>`<tr><td>${pin}</td><td>${centerName(cid)}</td>
-        <td><button class="btn small gray" onclick="delPin('${pin}')">âœ•</button></td></tr>`).join('')}</table>
-      <div style="display:flex;gap:8px;margin-top:8px">
-        <input id="pin-new" placeholder="560xxx" inputmode="numeric" style="flex:1">
-        <select id="pin-center" style="flex:1">${CENTERS.map(c=>`<option value="${c.id}">${c.name}</option>`).join('')}</select>
-        <button class="btn small" onclick="addPin()">Add</button></div></div>`;
+    h += '<div class="card"><h2>Pincode -- Center Map</h2>' +
+      '<table class="mini"><tr><th>Pincode</th><th>Center</th><th></th></tr>' +
+      Object.entries(pm).map(([pin,cid])=>'<tr><td>' + pin + '</td><td>' + centerName(cid) + '</td>' +
+        '<td><button class="btn small gray" onclick="delPin(\'' + pin + '\')">Remove</button></td></tr>').join('') + '</table>' +
+      '<div style="display:flex;gap:8px;margin-top:8px">' +
+        '<input id="pin-new" placeholder="560xxx" inputmode="numeric" style="flex:1">' +
+        '<select id="pin-center" style="flex:1">' + CENTERS.map(c=>'<option value="' + c.id + '">' + c.name + '</option>').join('') + '</select>' +
+        '<button class="btn small" onclick="addPin()">Add</button></div></div>';
     const rc = SETTINGS.reminder_config||{};
-    h += `<div class="card"><h2>â° Reminder settings</h2>
-      <label>Daily reminder email hour (IST, 0â€“23)</label>
-      <input id="rc-hour" type="number" min="0" max="23" value="${rc.email_hour_ist??8}">
-      <label>Overdue after (days past due)</label>
-      <input id="rc-od" type="number" min="0" value="${rc.overdue_after_days??0}">
-      <button class="btn block" onclick="saveReminderCfg()">Save</button></div>`;
+    h += '<div class="card"><h2>Reminder Settings</h2>' +
+      '<label>Daily reminder email hour (IST, 0-23)</label>' +
+      '<input id="rc-hour" type="number" min="0" max="23" value="' + (rc.email_hour_ist??8) + '">' +
+      '<label>Overdue after (days past due)</label>' +
+      '<input id="rc-od" type="number" min="0" value="' + (rc.overdue_after_days??0) + '">' +
+      '<button class="btn block" onclick="saveReminderCfg()">Save</button></div>';
   }
   view().innerHTML = h;
 }
 
 async function setRole(id, field, val){
   const {error} = await sb.from('profiles').update({[field]:val}).eq('id', id);
-  toast(error?error.message:'Updated âœ”');
+  toast(error?error.message:'Updated');
 }
 async function addPin(){
   const pin = $('pin-new').value.trim(); if(!/^\d{6}$/.test(pin)) return toast('Enter a 6-digit pincode');
   const pm = {...(SETTINGS.pincode_map||{}), [pin]:$('pin-center').value};
   const {error} = await sb.from('settings').update({value:pm}).eq('key','pincode_map');
   if(error) return toast(error.message);
-  SETTINGS.pincode_map = pm; renderAdmin(); toast('Added âœ”');
+  SETTINGS.pincode_map = pm; renderAdmin(); toast('Added');
 }
 async function delPin(pin){
   const pm = {...(SETTINGS.pincode_map||{})}; delete pm[pin];
@@ -980,24 +984,24 @@ async function saveReminderCfg(){
   const v = {...(SETTINGS.reminder_config||{}), email_hour_ist:+$('rc-hour').value, overdue_after_days:+$('rc-od').value};
   const {error} = await sb.from('settings').update({value:v}).eq('key','reminder_config');
   if(error) return toast(error.message);
-  SETTINGS.reminder_config = v; toast('Saved âœ”');
+  SETTINGS.reminder_config = v; toast('Saved');
 }
 
 /* ---- Events / QR ---- */
 const ACTIVITY_TYPES = ['general','satsang','program_support','calling_seva','annadanam','event_setup','ashram_visit','other'];
 function openNewActivity(){
-  modal(`<h3>Create Event</h3>
-    <label>Event name</label><input id="na-name" placeholder="e.g. Monthly Satsang â€” June 2026">
-    <label>Activity type</label>
-    <select id="na-type">${ACTIVITY_TYPES.map(t=>`<option value="${t}">${t.replace(/_/g,' ')}</option>`).join('')}</select>
-    <label>Center</label>
-    <select id="na-center">${CENTERS.map(c=>`<option value="${c.id}">${c.name}</option>`).join('')}</select>
-    <label>Date</label><input id="na-date" type="date" value="${today()}">
-    <label>Description (optional)</label><textarea id="na-desc" placeholder="Brief description for volunteersâ€¦" style="height:60px"></textarea>
-    <button class="btn block" onclick="saveActivity()">Create & show QR</button>`);
+  modal('<h3>Create Activity</h3>' +
+    '<label>Activity name</label><input id="na-name" placeholder="e.g. Monthly Satsang -- June 2026">' +
+    '<label>Activity type</label>' +
+    '<select id="na-type">' + ACTIVITY_TYPES.map(t=>'<option value="' + t + '">' + t.replace(/_/g,' ') + '</option>').join('') + '</select>' +
+    '<label>Center</label>' +
+    '<select id="na-center">' + CENTERS.map(c=>'<option value="' + c.id + '">' + c.name + '</option>').join('') + '</select>' +
+    '<label>Date</label><input id="na-date" type="date" value="' + today() + '">' +
+    '<label>Description (optional)</label><textarea id="na-desc" placeholder="Brief description for volunteers..." style="height:60px"></textarea>' +
+    '<button class="btn block" onclick="saveActivity()">Create & show QR</button>');
 }
 async function saveActivity(){
-  const name = $('na-name').value||'Event';
+  const name = $('na-name').value||'Activity';
   const {data, error} = await sb.from('activities').insert({
     name, center_id:$('na-center').value,
     activity_type:$('na-type').value||'general',
@@ -1010,21 +1014,20 @@ async function saveActivity(){
 }
 async function toggleActivity(id, open){
   await sb.from('activities').update({is_open:open}).eq('id',id);
-  // refresh whichever view is current
   if(document.querySelector('#nav button.active')?.dataset.v === 'vols') renderVols();
   else renderAdmin();
 }
 function showQR(token, name){
   const base = location.href.replace(/[^/]*$/,'');
-  const url = `${base}checkin.html?t=${token}`;
-  modal(`<h3>${esc(name)}</h3>
-    <p class="muted">Share this QR or link with volunteers. They can mark attendance, choose their seva, and upload a selfie.</p>
-    <div id="qr-box" style="display:flex;justify-content:center;padding:12px"></div>
-    <p class="muted" style="word-break:break-all;text-align:center;font-size:.78rem">${esc(url)}</p>
-    <div style="display:flex;gap:8px;justify-content:center;margin-top:8px">
-      <button class="btn ghost" onclick="navigator.clipboard.writeText('${esc(url)}');toast('Link copied!')">ðŸ“‹ Copy link</button>
-      <a class="btn ghost" href="https://wa.me/?text=${encodeURIComponent('Join us! Mark your attendance here: '+url)}" target="_blank">ðŸ’¬ Share</a>
-    </div>`);
+  const url = base + 'checkin.html?t=' + token;
+  modal('<h3>' + esc(name) + '</h3>' +
+    '<p class="muted">Share this QR or link with volunteers. They can mark attendance, choose their seva, and upload a selfie.</p>' +
+    '<div id="qr-box" style="display:flex;justify-content:center;padding:12px"></div>' +
+    '<p class="muted" style="word-break:break-all;text-align:center;font-size:.78rem">' + esc(url) + '</p>' +
+    '<div style="display:flex;gap:8px;justify-content:center;margin-top:8px">' +
+      '<button class="btn ghost" onclick="navigator.clipboard.writeText(\'' + esc(url) + '\');toast(\'Link copied!\')">Copy link</button>' +
+      '<a class="btn ghost" href="https://wa.me/?text=' + encodeURIComponent('Join us! Mark your attendance here: ' + url) + '" target="_blank">Share via WhatsApp</a>' +
+    '</div>');
   new QRCode($('qr-box'), {text:url, width:200, height:200});
 }
 
