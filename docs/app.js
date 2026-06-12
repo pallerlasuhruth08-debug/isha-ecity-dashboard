@@ -1,14 +1,14 @@
 /* ============================================================
-   Isha E-City Nurturing Dashboard — app logic (vanilla JS)
+   Isha E-City Nurturing Dashboard â€” app logic (vanilla JS)
    ============================================================ */
 const sb = supabase.createClient(APP_CONFIG.SUPABASE_URL, APP_CONFIG.SUPABASE_ANON_KEY);
-let ME = null;            // my profile row
-let SETTINGS = {};        // settings table cache
+let ME = null;
+let SETTINGS = {};
 let CENTERS = [];
 const $ = id => document.getElementById(id);
 const view = () => $('view');
 const esc = s => (s ?? '').toString().replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const fmtD = d => d ? new Date(d).toLocaleDateString('en-IN', {day:'numeric',month:'short'}) : '—';
+const fmtD = d => d ? new Date(d).toLocaleDateString('en-IN', {day:'numeric',month:'short',year:'2-digit'}) : 'â€”';
 const today = () => new Date().toISOString().slice(0,10);
 
 function toast(m){ const t=$('toast'); t.textContent=m; t.classList.add('show');
@@ -25,7 +25,7 @@ async function doSignup(){
   if(!email||password.length<6) return toast('Enter email + password (6+ chars)');
   const {error} = await sb.auth.signUp({email,password});
   if(error) return toast(error.message);
-  toast('Account created — signing in…'); doLogin();
+  toast('Account created â€” signing inâ€¦'); doLogin();
 }
 async function doLogout(){ await sb.auth.signOut(); location.reload(); }
 
@@ -41,8 +41,7 @@ async function boot(){
   $('login-view').classList.add('hidden');
   $('app').classList.remove('hidden'); $('nav').classList.remove('hidden');
   $('who-name').textContent = ME.full_name || ME.email;
-  $('who-role').textContent = roleLabel(ME.role) + (ME.role!=='rco' ? ' · '+centerName(ME.center_id) : ' · Sector');
-  // volunteers see a simpler nav
+  $('who-role').textContent = roleLabel(ME.role) + (ME.role!=='rco' ? ' Â· '+centerName(ME.center_id) : ' Â· Sector');
   if(ME.role==='volunteer'){
     document.querySelectorAll('#nav [data-v="vols"],#nav [data-v="admin"]').forEach(b=>b.style.display='none');
   }
@@ -63,28 +62,25 @@ function go(v){
 function modal(html){
   $('modal-root').innerHTML =
     `<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal">
-       <button class="x" onclick="closeModal()">✕</button>${html}</div></div>`;
+       <button class="x" onclick="closeModal()">âœ•</button>${html}</div></div>`;
 }
 function closeModal(){ $('modal-root').innerHTML=''; }
 
 /* ============================================================
-   TODAY — calls due / overdue (the heart of the app)
+   TODAY â€” calls due / overdue
    ============================================================ */
 const JT = {new_meditator:'New Meditator', meditator:'Meditator', advanced:'Advanced Program', volunteer_nurture:'Volunteer'};
 const WA_MSG = {
-  new_meditator: n => `Namaskaram ${n} 🙏 This is from Isha Electronic City center. Hope your Shambhavi sadhana is going well! I wanted to check in and support you in any way. When is a good time to talk?`,
-  meditator:     n => `Namaskaram ${n} 🙏 This is from Isha Electronic City center. We'd love to hear how your sadhana is going and share what's happening at the center. When is a good time to talk?`,
-  advanced:      n => `Namaskaram ${n} 🙏 Congratulations on completing your program! We'd love to hear about your experience and share volunteering possibilities at your local center. When can we talk?`,
-  volunteer_nurture: n => `Namaskaram ${n} 🙏 We heard you volunteered recently — wonderful! We'd love to hear how it was and tell you about possibilities at our center. When is a good time?`
+  new_meditator: n => `Namaskaram ${n} ðŸ™ This is from Isha Electronic City center. Hope your Shambhavi sadhana is going well! I wanted to check in and support you. When is a good time to talk?`,
+  meditator:     n => `Namaskaram ${n} ðŸ™ This is from Isha Electronic City center. We'd love to hear how your sadhana is going. When is a good time to talk?`,
+  advanced:      n => `Namaskaram ${n} ðŸ™ Congratulations on completing your program! We'd love to hear about your experience. When can we talk?`,
+  volunteer_nurture: n => `Namaskaram ${n} ðŸ™ We heard you volunteered recently â€” wonderful! We'd love to hear how it was. When is a good time?`
 };
 
 async function fetchDueCalls(){
   let q = sb.from('calls')
     .select('id, call_no, due_date, journey_id, journeys!inner(id, type, program_name, program_date, center_id, assigned_to, status, people(id, full_name, phone, center_id))')
-    .is('completed_at', null)
-    .lte('due_date', today())
-    .eq('journeys.status','active')
-    .order('due_date');
+    .is('completed_at', null).lte('due_date', today()).eq('journeys.status','active').order('due_date');
   if(ME.role==='volunteer') q = q.eq('journeys.assigned_to', ME.id);
   const {data, error} = await q;
   if(error){ toast(error.message); return []; }
@@ -92,7 +88,7 @@ async function fetchDueCalls(){
 }
 
 async function renderToday(){
-  view().innerHTML = '<div class="empty">Loading…</div>';
+  view().innerHTML = '<div class="empty">Loadingâ€¦</div>';
   const calls = await fetchDueCalls();
   const overdue = calls.filter(c=>c.due_date < today());
   let upQ = sb.from('calls')
@@ -103,14 +99,14 @@ async function renderToday(){
   const {data:upcoming} = await upQ;
 
   let h = '';
-  if(overdue.length) h += `<div class="alert">🔴 ${overdue.length} overdue call${overdue.length>1?'s':''} — please catch up today</div>`;
+  if(overdue.length) h += `<div class="alert">ðŸ”´ ${overdue.length} overdue call${overdue.length>1?'s':''} â€” please catch up today</div>`;
   h += `<div class="card"><h2>Calls due today ${calls.length?`<span class="badge">${calls.length}</span>`:''}</h2>`;
-  h += calls.length ? calls.map(callRow).join('') : '<div class="empty">🎉 All caught up — no calls due.</div>';
+  h += calls.length ? calls.map(callRow).join('') : '<div class="empty">ðŸŽ‰ All caught up â€” no calls due.</div>';
   h += '</div>';
   if(upcoming?.length){
     h += `<div class="card"><h2>Coming up</h2>` + upcoming.map(c=>
       `<div class="row"><div class="grow"><div class="name">${esc(c.journeys.people.full_name)}</div>
-       <div class="sub">${JT[c.journeys.type]} · Call ${c.call_no} · due ${fmtD(c.due_date)}</div></div></div>`).join('') + '</div>';
+       <div class="sub">${JT[c.journeys.type]} Â· Call ${c.call_no} Â· due ${fmtD(c.due_date)}</div></div></div>`).join('') + '</div>';
   }
   view().innerHTML = h;
 }
@@ -127,16 +123,16 @@ function callRow(c){
   return `<div class="row">
     <div class="grow">
       <div class="name">${esc(p.full_name)} ${od?'<span class="badge red">overdue</span>':''}</div>
-      <div class="sub">${JT[j.type]}${j.program_name?' · '+esc(j.program_name):''}
-        · Call ${c.call_no}${j.type==='new_meditator'?'/3':''}${day?` · Day ${day} of journey`:''} · due ${fmtD(c.due_date)}</div>
+      <div class="sub">${JT[j.type]}${j.program_name?' Â· '+esc(j.program_name):''}
+        Â· Call ${c.call_no}${j.type==='new_meditator'?'/3':''}${day?` Â· Day ${day}`:''}  Â· due ${fmtD(c.due_date)}</div>
     </div>
-    ${p.phone?`<a class="iconbtn call" href="tel:+91${p.phone}">📞</a>`:''}
-    ${wa?`<a class="iconbtn wa" href="${wa}" target="_blank">💬</a>`:''}
+    ${p.phone?`<a class="iconbtn call" href="tel:+91${p.phone}">ðŸ“ž</a>`:''}
+    ${wa?`<a class="iconbtn wa" href="${wa}" target="_blank">ðŸ’¬</a>`:''}
     <button class="btn small ghost" onclick='openLog(${JSON.stringify({id:c.id,call_no:c.call_no,jtype:j.type,name:p.full_name}).replace(/'/g,"&#39;")})'>Log</button>
   </div>`;
 }
 
-/* ---- call logging (two-layer status) ---- */
+/* ---- call logging ---- */
 const SADHANA_OPTS = {
   new_meditator: ['Doing Well','Doing Regularly','Needs Support','Needs Support on Ishangam','Wants to Connect with Ishangam','Does Not Need Support','Stopped Sadhana','Not Sure'],
   meditator: ['Doing sadhana regularly','Irregular','Stopped','Wants to go to Ashram','Wants Sannidhi at home','Wants an advanced program','Needs practice correction','Other'],
@@ -146,10 +142,10 @@ const SADHANA_OPTS = {
 let LOG = null;
 function openLog(c){
   LOG = {...c, reach:null, status:null};
-  modal(`<h3>Log call — ${esc(c.name)}</h3><p class="muted">Call ${c.call_no}</p>
+  modal(`<h3>Log call â€” ${esc(c.name)}</h3><p class="muted">Call ${c.call_no}</p>
     <label>Reachability</label>
     <div class="choices" id="lg-reach">
-      ${[['answered','✅ Answered'],['not_reachable','📵 Not Reachable'],['will_call_back','🕐 Will Call Back']]
+      ${[['answered','âœ… Answered'],['not_reachable','ðŸ“µ Not Reachable'],['will_call_back','ðŸ• Will Call Back']]
         .map(([v,l])=>`<button onclick="pickReach('${v}',this)">${l}</button>`).join('')}
     </div>
     <div id="lg-status-wrap" class="hidden">
@@ -159,7 +155,7 @@ function openLog(c){
       </div>
       <div id="lg-suggest" class="muted" style="margin-top:8px"></div>
     </div>
-    <label>Remarks</label><textarea id="lg-remarks" placeholder="How did it go? Anything to remember…"></textarea>
+    <label>Remarks</label><textarea id="lg-remarks" placeholder="How did it go?â€¦"></textarea>
     <button class="btn block" onclick="saveLog()">Save log</button>`);
 }
 function pickReach(v, btn){
@@ -170,7 +166,6 @@ function pickReach(v, btn){
 function pickStatus(s, btn){
   LOG.status=s;
   document.querySelectorAll('#lg-status button').forEach(b=>b.classList.remove('sel')); btn.classList.add('sel');
-  // suggested next actions (Module 4 config)
   const key = s.toLowerCase().includes('stopped')?'stopped'
     : s.toLowerCase().includes('irregular')?'irregular'
     : s.toLowerCase().includes('regular')?'regular'
@@ -179,7 +174,7 @@ function pickStatus(s, btn){
     : s.toLowerCase().includes('advanced')||s.toLowerCase().includes('another program')?'wants_advanced'
     : s.toLowerCase().includes('correction')?'needs_correction':null;
   const acts = key && SETTINGS.next_action_map?.[key];
-  $('lg-suggest').innerHTML = acts ? '💡 Suggested next: ' + acts.join(' · ') : '';
+  $('lg-suggest').innerHTML = acts ? 'ðŸ’¡ Suggested next: ' + acts.join(' Â· ') : '';
 }
 async function saveLog(){
   if(!LOG.reach) return toast('Select reachability');
@@ -191,62 +186,369 @@ async function saveLog(){
     logged_by: ME.id
   }).eq('id', LOG.id);
   if(error) return toast(error.message);
-  closeModal(); toast('Saved 🙏'); renderToday();
+  closeModal(); toast('Saved ðŸ™'); renderToday();
 }
 
 /* ============================================================
-   PEOPLE — journeys by module (Mod 1, 4, 5 + volunteer nurture)
+   PEOPLE â€” 4 tabs
    ============================================================ */
 let PEOPLE_TAB = 'new_meditator';
+
+// Per-tab filter state
+const PF = {
+  new_meditator: { center:'', dateFrom:'', dateTo:'', search:'' },
+  meditator:     { center:'', tag:'', dateFrom:'', dateTo:'', search:'' },
+  advanced:      { center:'', program:'', dateFrom:'', dateTo:'', search:'' },
+  volunteer_nurture: { center:'', search:'' }
+};
+
+// Common Ishangam tags to filter by
+const COMMON_TAGS = [
+  'IE Ishanga','IE 7 Days English Ishanga','IE 7 Days Hindi Ishanga','IE 7 Days Tamil Ishanga',
+  'IE English Hybrid Ishanga','IE Tamil Hybrid Ishanga','BSP Ishanga','Satsang Ishanga',
+  'Uyir Nokkam','Uyirnokkam Ishanga','IEL','Has Sadhguru Sannidhi','SG App','MoM','IE-Wave',
+  'Nurturer','Caller','Volunteer','Ananda Alai Online','MSR-Complimentary'
+];
+
 async function renderPeople(tab){
   if(tab) PEOPLE_TAB = tab;
-  view().innerHTML = '<div class="empty">Loading…</div>';
+  view().innerHTML = '<div class="empty">Loadingâ€¦</div>';
+
+  const tabDefs = [
+    ['new_meditator','New Meditators'],
+    ['meditator','Meditators'],
+    ['advanced','Advanced Programs'],
+    ['volunteer_nurture','Ashram/SSB Volunteers']
+  ];
+
+  const tabBar = `<div class="tabs">${tabDefs.map(([v,l])=>
+    `<button class="${PEOPLE_TAB===v?'active':''}" onclick="renderPeople('${v}')">${l}</button>`).join('')}</div>`;
+
+  if(PEOPLE_TAB==='new_meditator') await renderNewMeditators(tabBar);
+  else if(PEOPLE_TAB==='meditator') await renderMeditatorsList(tabBar);
+  else if(PEOPLE_TAB==='advanced') await renderAdvancedList(tabBar);
+  else await renderVolunteerNurture(tabBar);
+}
+
+/* ---- New Meditators ---- */
+async function renderNewMeditators(tabBar){
+  const f = PF.new_meditator;
+  const centerOpts = `<option value="">All Centers</option>${CENTERS.map(c=>`<option value="${c.id}" ${f.center===c.id?'selected':''}>${c.name}</option>`).join('')}`;
+
+  let h = tabBar;
+  if(isCoord()) h += `<div style="display:flex;gap:8px;margin:6px 0;flex-wrap:wrap">
+    <button class="btn small ghost" onclick="openImport()">â¬†ï¸ Import</button>
+    <button class="btn small ghost" onclick="openAddPerson()">ï¼‹ Add person</button>
+  </div>`;
+  h += `<div class="card" style="padding:10px">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <select style="width:auto" onchange="PF.new_meditator.center=this.value;renderPeople()">
+        ${centerOpts}</select>
+      <input placeholder="Search name/phone" style="flex:1;min-width:140px" value="${esc(f.search)}"
+        oninput="PF.new_meditator.search=this.value" onkeydown="if(event.key==='Enter')renderPeople()">
+      <input type="date" title="IE date from" value="${f.dateFrom}"
+        onchange="PF.new_meditator.dateFrom=this.value;renderPeople()" style="width:130px">
+      <input type="date" title="IE date to" value="${f.dateTo}"
+        onchange="PF.new_meditator.dateTo=this.value;renderPeople()" style="width:130px">
+      <button class="btn small ghost" onclick="renderPeople()">ðŸ”</button>
+    </div>
+  </div>`;
+
   let q = sb.from('journeys')
-    .select('id, type, program_name, program_date, status, sadhana_status, assigned_to, center_id, people(id, full_name, phone, pincode, center_id), calls(id, call_no, due_date, completed_at)')
-    .eq('type', PEOPLE_TAB).order('created_at', {ascending:false}).limit(400);
+    .select('id, type, program_name, program_date, status, sadhana_status, assigned_to, center_id, people(id, full_name, phone, pincode, center_id, tags, ie_date), calls(id, call_no, due_date, completed_at)')
+    .eq('type', 'new_meditator').order('program_date', {ascending:false}).limit(300);
   if(ME.role==='volunteer') q = q.eq('assigned_to', ME.id);
+  if(f.center) q = q.eq('center_id', f.center);
+  if(f.dateFrom) q = q.gte('program_date', f.dateFrom);
+  if(f.dateTo) q = q.lte('program_date', f.dateTo);
+
   const {data:js, error} = await q;
-  if(error){ view().innerHTML = `<div class="empty">${esc(error.message)}</div>`; return; }
+  let rows = js||[];
+  if(f.search){
+    const s = f.search.toLowerCase();
+    rows = rows.filter(j=>j.people?.full_name?.toLowerCase().includes(s)||j.people?.phone?.includes(s));
+  }
+
   let vols = [];
   if(isCoord()){
     const {data:v} = await sb.from('profiles').select('id, full_name, email, role, center_id').eq('active', true);
     vols = v||[];
   }
-  const tabs = [['new_meditator','New Meditators'],['meditator','Meditator Nurturing'],['advanced','Advanced Programs'],['volunteer_nurture','Ashram/SSB Volunteers']];
-  let h = `<div class="tabs">${tabs.map(([v,l])=>`<button class="${PEOPLE_TAB===v?'active':''}" onclick="renderPeople('${v}')">${l}</button>`).join('')}</div>`;
-  if(isCoord()) h += `<div style="display:flex;gap:8px;margin:6px 0">
-    <button class="btn small ghost" onclick="openImport()">⬆️ Import CSV/Excel</button>
-    <button class="btn small ghost" onclick="openAddPerson()">＋ Add person</button></div>`;
-  h += `<div class="card">`;
-  h += (js||[]).length ? js.map(j=>journeyRow(j, vols)).join('') : '<div class="empty">No one here yet.</div>';
+
+  h += `<div class="card"><h2>New Meditators <span class="badge">${rows.length}</span></h2>
+    <p class="muted" style="font-size:.8rem;margin-bottom:8px">Select people from this list to assign for nurturing calls.</p>`;
+  h += rows.length ? rows.map(j=>newMeditatorRow(j, vols)).join('') : '<div class="empty">No records matching filters.</div>';
   h += '</div>';
   view().innerHTML = h;
 }
+
+function newMeditatorRow(j, vols){
+  const p = j.people;
+  const done = (j.calls||[]).filter(c=>c.completed_at).length;
+  const total = (j.calls||[]).length;
+  const tags = (p?.tags||[]).slice(0,3).map(t=>`<span class="badge gray" style="font-size:.7rem">${esc(t)}</span>`).join(' ');
+  const assignee = vols.find(v=>v.id===j.assigned_to);
+  const assignSel = isCoord() ? `<select style="width:auto;font-size:.78rem;padding:4px 6px" onchange="assignJourney('${j.id}', this.value)">
+    <option value="">â€” assign â€”</option>
+    ${vols.map(v=>`<option value="${v.id}" ${v.id===j.assigned_to?'selected':''}>${esc(v.full_name||v.email)}</option>`).join('')}
+  </select>` : '';
+  const wa = p?.phone ? `https://wa.me/91${p.phone}?text=${encodeURIComponent(WA_MSG.new_meditator(p.full_name.split(' ')[0]))}` : null;
+  return `<div class="row">
+    <div class="grow">
+      <div class="name">${esc(p?.full_name||'?')}
+        ${j.status==='completed'?'<span class="badge green">done</span>':''}
+        ${tags}</div>
+      <div class="sub">IE: ${fmtD(p?.ie_date||j.program_date)} Â· ${centerName(p?.center_id)} Â· calls ${done}/${total}
+        ${j.sadhana_status?` Â· <b>${esc(j.sadhana_status)}</b>`:''}
+        ${assignee?` Â· ðŸ‘¤ ${esc(assignee.full_name||assignee.email)}`:''}</div>
+    </div>
+    ${p?.phone?`<a class="iconbtn call" href="tel:+91${p.phone}">ðŸ“ž</a>`:''}
+    ${wa?`<a class="iconbtn wa" href="${wa}" target="_blank">ðŸ’¬</a>`:''}
+    ${assignSel}
+  </div>`;
+}
+
+/* ---- Meditators (ALL is_meditator=true people) ---- */
+async function renderMeditatorsList(tabBar){
+  const f = PF.meditator;
+  const centerOpts = `<option value="">All Centers</option>${CENTERS.map(c=>`<option value="${c.id}" ${f.center===c.id?'selected':''}>${c.name}</option>`).join('')}`;
+  const tagOpts = `<option value="">All Tags</option>${COMMON_TAGS.map(t=>`<option value="${t}" ${f.tag===t?'selected':''}>${esc(t)}</option>`).join('')}`;
+
+  let h = tabBar;
+  if(isCoord()) h += `<div style="display:flex;gap:8px;margin:6px 0;flex-wrap:wrap">
+    <button class="btn small ghost" onclick="openImport()">â¬†ï¸ Import</button>
+    <button class="btn small ghost" onclick="openAddPerson()">ï¼‹ Add person</button>
+  </div>`;
+
+  h += `<div class="card" style="padding:10px">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <select style="width:auto" onchange="PF.meditator.center=this.value;renderPeople()">
+        ${centerOpts}</select>
+      <select style="width:auto" onchange="PF.meditator.tag=this.value;renderPeople()">
+        ${tagOpts}</select>
+      <input type="date" title="IE date from" value="${f.dateFrom}"
+        onchange="PF.meditator.dateFrom=this.value;renderPeople()" style="width:130px">
+      <input type="date" title="IE date to" value="${f.dateTo}"
+        onchange="PF.meditator.dateTo=this.value;renderPeople()" style="width:130px">
+      <input placeholder="Search name/phone" style="flex:1;min-width:140px" value="${esc(f.search)}"
+        oninput="PF.meditator.search=this.value" onkeydown="if(event.key==='Enter')renderPeople()">
+      <button class="btn small ghost" onclick="renderPeople()">ðŸ”</button>
+    </div>
+  </div>`;
+
+  let q = sb.from('people').select('id, full_name, phone, pincode, center_id, tags, ie_date, bsp_date, shoonya_date, samyama_date, source, created_at')
+    .eq('is_meditator', true).order('ie_date', {ascending:false}).limit(400);
+  if(f.center) q = q.eq('center_id', f.center);
+  if(f.tag) q = q.contains('tags', [f.tag]);
+  if(f.dateFrom) q = q.gte('ie_date', f.dateFrom);
+  if(f.dateTo) q = q.lte('ie_date', f.dateTo);
+
+  const {data:people, error} = await q;
+  let rows = people||[];
+  if(f.search){
+    const s = f.search.toLowerCase();
+    rows = rows.filter(p=>p.full_name?.toLowerCase().includes(s)||p.phone?.includes(s));
+  }
+
+  h += `<div class="card"><h2>Meditators <span class="badge">${rows.length}</span></h2>`;
+  h += rows.length ? rows.map(p=>meditatorDetailRow(p)).join('') : '<div class="empty">No meditators matching filters.</div>';
+  h += '</div>';
+  view().innerHTML = h;
+}
+
+function meditatorDetailRow(p){
+  const tags = (p.tags||[]).slice(0,4).map(t=>`<span class="badge gray" style="font-size:.68rem">${esc(t)}</span>`).join(' ');
+  const adv = [p.bsp_date&&`BSP:${fmtD(p.bsp_date)}`, p.shoonya_date&&`Shoonya:${fmtD(p.shoonya_date)}`, p.samyama_date&&`Samyama:${fmtD(p.samyama_date)}`].filter(Boolean).join(' Â· ');
+  const wa = p.phone ? `https://wa.me/91${p.phone}?text=${encodeURIComponent(WA_MSG.meditator(p.full_name.split(' ')[0]))}` : null;
+  return `<div class="row">
+    <div class="grow" onclick="showMeditatorDetail(${JSON.stringify({id:p.id,n:p.full_name,ph:p.phone,ie:p.ie_date,bsp:p.bsp_date,sh:p.shoonya_date,sam:p.samyama_date,tags:p.tags||[],ctr:p.center_id}).replace(/'/g,"&#39;").replace(/"/g,'&quot;')})">
+      <div class="name" style="cursor:pointer">${esc(p.full_name)} ${tags}</div>
+      <div class="sub">IE: ${fmtD(p.ie_date)} Â· ${centerName(p.center_id)}${adv?' Â· '+adv:''}</div>
+    </div>
+    ${p.phone?`<a class="iconbtn call" href="tel:+91${p.phone}">ðŸ“ž</a>`:''}
+    ${wa?`<a class="iconbtn wa" href="${wa}" target="_blank">ðŸ’¬</a>`:''}
+    ${isCoord()?`<button class="btn small ghost" onclick='startNurturing(${JSON.stringify({pid:p.id,name:p.full_name}).replace(/'/g,"&#39;")})'>Nurture</button>`:''}
+  </div>`;
+}
+
+function showMeditatorDetail(d){
+  const tags = (d.tags||[]).map(t=>`<span class="badge gray">${esc(t)}</span>`).join(' ');
+  modal(`<h3>${esc(d.n)}</h3>
+    <p>${d.ph?`ðŸ“ž ${d.ph}`:''} Â· ${centerName(d.ctr)}</p>
+    <p>ðŸ§˜ IE date: ${fmtD(d.ie)}</p>
+    ${d.bsp?`<p>ðŸ”¥ BSP: ${fmtD(d.bsp)}</p>`:''}
+    ${d.sh?`<p>ðŸŒ‘ Shoonya: ${fmtD(d.sh)}</p>`:''}
+    ${d.sam?`<p>ðŸ•‰ï¸ Samyama: ${fmtD(d.sam)}</p>`:''}
+    ${tags?`<p style="margin-top:8px">Tags: ${tags}</p>`:''}
+    ${isCoord()?`<button class="btn block" style="margin-top:12px" onclick='closeModal();startNurturing(${JSON.stringify({pid:d.id,name:d.n}).replace(/'/g,"&#39;")})'>Add to nurturing calls</button>`:''}
+  `);
+}
+
+async function startNurturing(d){
+  modal(`<h3>Add to nurturing calls</h3>
+    <p>${esc(d.name)}</p>
+    <label>Type</label>
+    <select id="nt-type">
+      <option value="meditator">Meditator nurturing</option>
+      <option value="advanced">Advanced program follow-up</option>
+    </select>
+    <label>Program name (optional)</label>
+    <input id="nt-prog" placeholder="e.g. BSP, Shoonya, Inner Engineering">
+    <label>Program / initiation date</label>
+    <input id="nt-date" type="date" value="${today()}">
+    <button class="btn block" onclick="saveNurturing('${d.pid}')">Create journey</button>`);
+}
+async function saveNurturing(pid){
+  const {error} = await sb.from('journeys').insert({
+    person_id:pid, type:$('nt-type').value,
+    program_name:$('nt-prog').value||null,
+    program_date:$('nt-date').value||null
+  });
+  if(error) return toast(error.message);
+  closeModal(); toast('Journey created â€” will appear in Today\'s calls ðŸ™');
+}
+
+/* ---- Advanced Programs ---- */
+async function renderAdvancedList(tabBar){
+  const f = PF.advanced;
+  const centerOpts = `<option value="">All Centers</option>${CENTERS.map(c=>`<option value="${c.id}" ${f.center===c.id?'selected':''}>${c.name}</option>`).join('')}`;
+  const progOpts = `<option value="">All Programs</option>
+    <option value="bsp" ${f.program==='bsp'?'selected':''}>BSP (Bhava Spandana)</option>
+    <option value="shoonya" ${f.program==='shoonya'?'selected':''}>Shoonya</option>
+    <option value="samyama" ${f.program==='samyama'?'selected':''}>Samyama</option>`;
+
+  let h = tabBar;
+  h += `<div class="card" style="padding:10px">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <select style="width:auto" onchange="PF.advanced.center=this.value;renderPeople()">
+        ${centerOpts}</select>
+      <select style="width:auto" onchange="PF.advanced.program=this.value;renderPeople()">
+        ${progOpts}</select>
+      <input type="date" title="Program date from" value="${f.dateFrom}"
+        onchange="PF.advanced.dateFrom=this.value;renderPeople()" style="width:130px">
+      <input type="date" title="Program date to" value="${f.dateTo}"
+        onchange="PF.advanced.dateTo=this.value;renderPeople()" style="width:130px">
+      <input placeholder="Search name" style="flex:1;min-width:130px" value="${esc(f.search)}"
+        oninput="PF.advanced.search=this.value" onkeydown="if(event.key==='Enter')renderPeople()">
+      <button class="btn small ghost" onclick="renderPeople()">ðŸ”</button>
+    </div>
+  </div>`;
+
+  // Build query â€” filter by which program has a date
+  let q = sb.from('people').select('id, full_name, phone, center_id, tags, ie_date, bsp_date, shoonya_date, samyama_date')
+    .eq('is_meditator', true).order('created_at', {ascending:false}).limit(500);
+  if(f.center) q = q.eq('center_id', f.center);
+  if(f.program === 'bsp') q = q.not('bsp_date', 'is', null);
+  else if(f.program === 'shoonya') q = q.not('shoonya_date', 'is', null);
+  else if(f.program === 'samyama') q = q.not('samyama_date', 'is', null);
+  else q = q.or('bsp_date.not.is.null,shoonya_date.not.is.null,samyama_date.not.is.null');
+
+  if(f.dateFrom || f.dateTo){
+    // filter the selected program's date range
+    const col = f.program==='shoonya'?'shoonya_date':f.program==='samyama'?'samyama_date':'bsp_date';
+    if(f.dateFrom) q = q.gte(col, f.dateFrom);
+    if(f.dateTo) q = q.lte(col, f.dateTo);
+  }
+
+  const {data:people} = await q;
+  let rows = people||[];
+  if(f.search){
+    const s = f.search.toLowerCase();
+    rows = rows.filter(p=>p.full_name?.toLowerCase().includes(s)||p.phone?.includes(s));
+  }
+
+  h += `<div class="card"><h2>Advanced Program Completers <span class="badge">${rows.length}</span></h2>`;
+  h += rows.length ? rows.map(p=>advancedRow(p)).join('') : '<div class="empty">No records matching filters.</div>';
+  h += '</div>';
+  view().innerHTML = h;
+}
+
+function advancedRow(p){
+  const progs = [
+    p.bsp_date && `ðŸ”¥ BSP: ${fmtD(p.bsp_date)}`,
+    p.shoonya_date && `ðŸŒ‘ Shoonya: ${fmtD(p.shoonya_date)}`,
+    p.samyama_date && `ðŸ•‰ï¸ Samyama: ${fmtD(p.samyama_date)}`
+  ].filter(Boolean).join(' Â· ');
+  const wa = p.phone ? `https://wa.me/91${p.phone}?text=${encodeURIComponent(WA_MSG.advanced(p.full_name.split(' ')[0]))}` : null;
+  return `<div class="row">
+    <div class="grow">
+      <div class="name">${esc(p.full_name)}</div>
+      <div class="sub">${progs} Â· ${centerName(p.center_id)}</div>
+    </div>
+    ${p.phone?`<a class="iconbtn call" href="tel:+91${p.phone}">ðŸ“ž</a>`:''}
+    ${wa?`<a class="iconbtn wa" href="${wa}" target="_blank">ðŸ’¬</a>`:''}
+    ${isCoord()?`<button class="btn small ghost" onclick='startNurturing(${JSON.stringify({pid:p.id,name:p.full_name}).replace(/'/g,"&#39;")})'>Nurture</button>`:''}
+  </div>`;
+}
+
+/* ---- Ashram/SSB Volunteers ---- */
+async function renderVolunteerNurture(tabBar){
+  const f = PF.volunteer_nurture;
+  const centerOpts = `<option value="">All Centers</option>${CENTERS.map(c=>`<option value="${c.id}" ${f.center===c.id?'selected':''}>${c.name}</option>`).join('')}`;
+
+  let h = tabBar;
+  h += `<div class="card" style="padding:10px">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <select style="width:auto" onchange="PF.volunteer_nurture.center=this.value;renderPeople()">
+        ${centerOpts}</select>
+      <input placeholder="Search name/phone" style="flex:1;min-width:140px" value="${esc(f.search)}"
+        oninput="PF.volunteer_nurture.search=this.value" onkeydown="if(event.key==='Enter')renderPeople()">
+      <button class="btn small ghost" onclick="renderPeople()">ðŸ”</button>
+    </div>
+  </div>`;
+
+  let q = sb.from('journeys')
+    .select('id, type, program_name, program_date, status, sadhana_status, assigned_to, center_id, people(id, full_name, phone, center_id), calls(id, call_no, due_date, completed_at)')
+    .eq('type', 'volunteer_nurture').order('program_date', {ascending:false}).limit(300);
+  if(ME.role==='volunteer') q = q.eq('assigned_to', ME.id);
+  if(f.center) q = q.eq('center_id', f.center);
+
+  const {data:js} = await q;
+  let rows = js||[];
+  if(f.search){
+    const s = f.search.toLowerCase();
+    rows = rows.filter(j=>j.people?.full_name?.toLowerCase().includes(s)||j.people?.phone?.includes(s));
+  }
+
+  let vols = [];
+  if(isCoord()){
+    const {data:v} = await sb.from('profiles').select('id, full_name, email, role, center_id').eq('active', true);
+    vols = v||[];
+  }
+
+  h += `<div class="card"><h2>Ashram/SSB Volunteers <span class="badge">${rows.length}</span></h2>`;
+  h += rows.length ? rows.map(j=>journeyRow(j, vols)).join('') : '<div class="empty">No volunteer nurturing journeys yet.</div>';
+  h += '</div>';
+  view().innerHTML = h;
+}
+
 function journeyRow(j, vols){
   const p = j.people;
   const done = (j.calls||[]).filter(c=>c.completed_at).length, total=(j.calls||[]).length;
   const assignee = vols.find(v=>v.id===j.assigned_to);
-  const assignSel = isCoord() ? `<select style="width:auto;font-size:.78rem;padding:6px" onchange="assignJourney('${j.id}', this.value)">
-      <option value="">— assign —</option>
-      ${vols.map(v=>`<option value="${v.id}" ${v.id===j.assigned_to?'selected':''}>${esc(v.full_name||v.email)}</option>`).join('')}
-    </select>` : '';
+  const assignSel = isCoord() ? `<select style="width:auto;font-size:.78rem;padding:4px 6px" onchange="assignJourney('${j.id}', this.value)">
+    <option value="">â€” assign â€”</option>
+    ${vols.map(v=>`<option value="${v.id}" ${v.id===j.assigned_to?'selected':''}>${esc(v.full_name||v.email)}</option>`).join('')}
+  </select>` : '';
+  const wa = p?.phone ? `https://wa.me/91${p.phone}?text=${encodeURIComponent(WA_MSG.volunteer_nurture(p.full_name.split(' ')[0]))}` : null;
   return `<div class="row">
     <div class="grow">
-      <div class="name">${esc(p.full_name)}
-        ${j.status==='completed'?'<span class="badge green">done</span>':''}
-        ${p.center_id==='unassigned'?'<span class="badge gray">unassigned center</span>':''}</div>
-      <div class="sub">${esc(j.program_name||'')} ${j.program_date?'· '+fmtD(j.program_date):''}
-        · ${centerName(p.center_id)} · calls ${done}/${total}
-        ${j.sadhana_status?` · <b>${esc(j.sadhana_status)}</b>`:''}
-        ${assignee?` · 👤 ${esc(assignee.full_name||assignee.email)}`:''}</div>
+      <div class="name">${esc(p?.full_name||'?')}
+        ${j.status==='completed'?'<span class="badge green">done</span>':''}</div>
+      <div class="sub">${esc(j.program_name||'')} ${j.program_date?'Â· '+fmtD(j.program_date):''}
+        Â· ${centerName(p?.center_id||j.center_id)} Â· calls ${done}/${total}
+        ${j.sadhana_status?` Â· <b>${esc(j.sadhana_status)}</b>`:''}
+        ${assignee?` Â· ðŸ‘¤ ${esc(assignee.full_name||assignee.email)}`:''}</div>
     </div>
-    ${p.phone?`<a class="iconbtn call" href="tel:+91${p.phone}">📞</a>`:''}
+    ${p?.phone?`<a class="iconbtn call" href="tel:+91${p.phone}">ðŸ“ž</a>`:''}
+    ${wa?`<a class="iconbtn wa" href="${wa}" target="_blank">ðŸ’¬</a>`:''}
     ${assignSel}
   </div>`;
 }
+
 async function assignJourney(jid, uid){
   const {error} = await sb.from('journeys').update({assigned_to: uid||null}).eq('id', jid);
-  toast(error ? error.message : 'Assigned ✔');
+  toast(error ? error.message : 'Assigned âœ”');
 }
 
 /* ---- manual add ---- */
@@ -263,14 +565,13 @@ function openAddPerson(){
       <option value="volunteer">Volunteer (interest)</option>
       <option value="ashram_ssb">Ashram/SSB volunteering record</option>
     </select>
-    <label>Program / activity name</label><input id="ap-prog" placeholder="e.g. IE Online, BSP, Sannidhi seva">
+    <label>Program / activity name</label><input id="ap-prog" placeholder="e.g. IE Online, BSP">
     <label>Program / activity date</label><input id="ap-date" type="date" value="${today()}">
     <button class="btn block" onclick="saveAddPerson()">Save</button>`);
 }
 async function saveAddPerson(){
   const kind = $('ap-kind').value;
   if(kind==='ashram_ssb'){
-    // plugin 1: record + auto volunteer_nurture journey via trigger
     const row = {full_name:$('ap-name').value, phone:$('ap-phone').value, pincode:$('ap-pin').value, kind:'volunteer', source:'manual'};
     const {data, error} = await sb.rpc('import_people', {rows:[row]});
     if(error) return toast(error.message);
@@ -285,20 +586,19 @@ async function saveAddPerson(){
     const {error} = await sb.rpc('import_people', {rows:[row]});
     if(error) return toast(error.message);
   }
-  closeModal(); toast('Added ✔'); renderPeople();
+  closeModal(); toast('Added âœ”'); renderPeople();
 }
 
-/* ---- CSV / Excel import (manual fallback for the extension) ---- */
+/* ---- CSV / Excel import ---- */
 function openImport(){
   modal(`<h3>Import CSV / Excel</h3>
-    <p class="muted">Columns recognized (any order, header names flexible): <b>name, phone, email, pincode, area, program, date</b>.
-    Duplicates are merged by phone; centers auto-route by pincode; call journeys auto-created.</p>
+    <p class="muted">Columns: <b>name, phone, pincode, program, date</b>. Duplicates merged by phone.</p>
     <label>Import as</label>
     <select id="im-kind">
-      <option value="new_meditator">New meditators (Module 1)</option>
-      <option value="meditator">Older meditators (Module 4)</option>
-      <option value="advanced">Advanced program completers (Module 5)</option>
-      <option value="volunteer">Volunteers / interest list (Module 2)</option>
+      <option value="new_meditator">New meditators</option>
+      <option value="meditator">Older meditators</option>
+      <option value="advanced">Advanced program completers</option>
+      <option value="volunteer">Volunteers</option>
     </select>
     <label>File (.csv / .xlsx)</label><input id="im-file" type="file" accept=".csv,.xlsx,.xls">
     <button class="btn block" onclick="runImport()">Import</button>
@@ -317,10 +617,7 @@ function mapRow(raw){
     const k = keys.find(k => aliases.includes(k.toLowerCase().trim()));
     if(k && raw[k]!=null && raw[k]!=='') out[field] = String(raw[k]).trim();
   }
-  if(out.program_date){
-    const d = new Date(out.program_date);
-    out.program_date = isNaN(d) ? null : d.toISOString().slice(0,10);
-  }
+  if(out.program_date){ const d = new Date(out.program_date); out.program_date = isNaN(d) ? null : d.toISOString().slice(0,10); }
   return out;
 }
 async function runImport(){
@@ -336,27 +633,26 @@ async function runImport(){
   }
   const payload = rows.map(mapRow).filter(r=>r.full_name||r.phone).map(r=>({...r, kind, source:'csv'}));
   if(!payload.length) return toast('No usable rows found');
-  $('im-result').textContent = `Importing ${payload.length} rows…`;
-  // chunk to stay under payload limits
+  $('im-result').textContent = `Importing ${payload.length} rowsâ€¦`;
   let tot = {inserted:0, merged:0, journeys:0};
   for(let i=0;i<payload.length;i+=200){
     const {data, error} = await sb.rpc('import_people', {rows:payload.slice(i,i+200)});
     if(error){ $('im-result').textContent = 'Error: '+error.message; return; }
     tot.inserted+=data.inserted; tot.merged+=data.merged; tot.journeys+=data.journeys;
   }
-  $('im-result').textContent = `✔ ${tot.inserted} new, ${tot.merged} merged with existing, ${tot.journeys} journeys created.`;
+  $('im-result').textContent = `âœ” ${tot.inserted} new, ${tot.merged} merged, ${tot.journeys} journeys created.`;
   toast('Import complete');
 }
 
 /* ============================================================
-   VOLUNTEERS — Module 2 (intake, matching & dispatch)
+   VOLUNTEERS â€” Module 2 + Event/Attendance
    ============================================================ */
 const INTERESTS = ['Online Calling','Online Operations','Offline Programs','Sadhguru Sannidhi','E-Media','Promotions','Devi Seva','Event Setup','Cooking/Annadanam','Transport'];
 let VFILTER = {center:'', interest:'', mode:'', timing:'', space:false};
 let SHORTLIST = [];
 
 async function renderVols(){
-  view().innerHTML = '<div class="empty">Loading…</div>';
+  view().innerHTML = '<div class="empty">Loadingâ€¦</div>';
   let q = sb.from('volunteer_profiles')
     .select('*, people!inner(id, full_name, phone, pincode, center_id)')
     .order('updated_at', {ascending:false}).limit(500);
@@ -375,14 +671,33 @@ async function renderVols(){
     return true;
   });
 
+  // fetch recent activities for event management
+  const {data:acts} = await sb.from('activities').select('id, name, activity_type, activity_date, is_open, qr_token, center_id').order('activity_date',{ascending:false}).limit(10);
+
   let h = `<div style="display:flex;gap:8px;margin:6px 0;flex-wrap:wrap">
-    <button class="btn small ghost" onclick="openPaperOCR()">📷 Paper form (OCR)</button>
-    <button class="btn small ghost" onclick="openVolForm()">＋ Add interest</button>
-    <button class="btn small ghost" onclick="openGFormHelp()">🔗 Google Form</button>
-    ${SHORTLIST.length?`<button class="btn small green" onclick="shareShortlist()">📤 Share shortlist (${SHORTLIST.length})</button>`:''}
-  </div>
-  <div class="card"><h2>Filter & match</h2>
-    <div class="choices">
+    <button class="btn small ghost" onclick="openPaperOCR()">ðŸ“· Paper form (OCR)</button>
+    <button class="btn small ghost" onclick="openVolForm()">ï¼‹ Add interest</button>
+    <button class="btn small ghost" onclick="openGFormHelp()">ðŸ”— Google Form</button>
+    <button class="btn small green" onclick="openNewActivity()">ðŸ“‹ Create Event</button>
+    ${SHORTLIST.length?`<button class="btn small green" onclick="shareShortlist()">ðŸ“¤ Share shortlist (${SHORTLIST.length})</button>`:''}
+  </div>`;
+
+  // Recent events (compact)
+  if(acts?.length){
+    h += `<div class="card"><h2>Recent Events</h2>`;
+    h += acts.map(a=>`<div class="row"><div class="grow">
+      <div class="name">${esc(a.name)} ${a.is_open?'<span class="badge green">open</span>':'<span class="badge gray">closed</span>'}
+        ${a.activity_type&&a.activity_type!=='general'?`<span class="badge">${esc(a.activity_type)}</span>`:''}</div>
+      <div class="sub">${centerName(a.center_id)} Â· ${fmtD(a.activity_date)}</div></div>
+      <button class="btn small ghost" onclick="showQR('${a.qr_token}','${esc(a.name)}')">QR</button>
+      <button class="btn small ghost" onclick="viewAttendees('${a.id}','${esc(a.name)}')">ðŸ‘¥</button>
+      <button class="btn small gray" onclick="toggleActivity('${a.id}',${!a.is_open})">${a.is_open?'Close':'Open'}</button>
+    </div>`).join('');
+    h += `</div>`;
+  }
+
+  h += `<div class="card"><h2>Filter & match volunteers</h2>
+    <div class="choices" style="flex-wrap:wrap;gap:6px">
       <select style="width:auto" onchange="VFILTER.center=this.value;renderVols()">
         <option value="">All centers</option>${CENTERS.map(c=>`<option value="${c.id}" ${VFILTER.center===c.id?'selected':''}>${c.name}</option>`).join('')}</select>
       <select style="width:auto" onchange="VFILTER.interest=this.value;renderVols()">
@@ -390,33 +705,55 @@ async function renderVols(){
       <select style="width:auto" onchange="VFILTER.mode=this.value;renderVols()">
         <option value="">Online/Offline</option><option value="online" ${VFILTER.mode==='online'?'selected':''}>Online</option><option value="offline" ${VFILTER.mode==='offline'?'selected':''}>Offline</option></select>
       <select style="width:auto" onchange="VFILTER.timing=this.value;renderVols()">
-        <option value="">Any timing</option><option value="weekday_morning" ${VFILTER.timing==='weekday_morning'?'selected':''}>Weekday AM</option>
-        <option value="weekday_evening" ${VFILTER.timing==='weekday_evening'?'selected':''}>Weekday PM</option>
-        <option value="weekend" ${VFILTER.timing==='weekend'?'selected':''}>Weekends</option></select>
-      <button class="${VFILTER.space?'sel':''}" onclick="VFILTER.space=!VFILTER.space;renderVols()">🏠 Can offer space</button>
+        <option value="">Any timing</option><option value="weekday_morning">Weekday AM</option>
+        <option value="weekday_evening">Weekday PM</option><option value="weekend">Weekends</option></select>
+      <button class="${VFILTER.space?'sel':''}" onclick="VFILTER.space=!VFILTER.space;renderVols()">ðŸ  Can offer space</button>
     </div></div>
   <div class="card"><h2>Volunteers <span class="badge">${list.length}</span></h2>`;
-  h += list.length ? list.map(v=>volRow(v, histBy[v.person_id]||[])).join('') : '<div class="empty">No matches — adjust filters or add interest entries.</div>';
+  h += list.length ? list.map(v=>volRow(v, histBy[v.person_id]||[])).join('') : '<div class="empty">No matches.</div>';
   h += '</div>';
   view().innerHTML = h;
 }
+
+async function viewAttendees(actId, actName){
+  const {data:att} = await sb.from('attendance')
+    .select('id, time_in, time_out, pincode, photo_url, activity_detail, people(full_name, phone, center_id)')
+    .eq('activity_id', actId).order('time_in');
+  const rows = att||[];
+  modal(`<h3>ðŸ‘¥ ${esc(actName)} â€” Attendees (${rows.length})</h3>
+    ${rows.length ? `<div style="overflow-y:auto;max-height:60vh">` +
+    rows.map(a=>{
+      const p = a.people;
+      return `<div class="row" style="align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
+        ${a.photo_url?`<img src="${esc(a.photo_url)}" style="width:48px;height:48px;border-radius:50%;object-fit:cover;flex-shrink:0" onerror="this.style.display='none'">`
+          :`<div style="width:48px;height:48px;border-radius:50%;background:var(--card-bg);display:flex;align-items:center;justify-content:center;font-size:1.4rem;flex-shrink:0">ðŸ™</div>`}
+        <div style="flex:1;min-width:0">
+          <div class="name">${esc(p?.full_name||'?')}</div>
+          <div class="sub">${p?.phone||''} ${a.activity_detail?'Â· '+esc(a.activity_detail):''}</div>
+          <div class="sub">In: ${fmtD(a.time_in)} ${a.time_out?'Â· Out: '+fmtD(a.time_out):''} ${a.pincode?'Â· '+a.pincode:''}</div>
+        </div>
+      </div>`;
+    }).join('') + `</div>`
+    : '<div class="empty">No attendees yet â€” share the QR code.</div>'}`);
+}
+
 function volRow(v, hist){
   const p = v.people;
-  const wa = p.phone ? `https://wa.me/91${p.phone}?text=${encodeURIComponent(`Namaskaram ${p.full_name.split(' ')[0]} 🙏 There's a volunteering opportunity at Isha ${centerName(p.center_id)} that matches your interest${v.interests?.length?' in '+v.interests[0]:''}. Would you like to join? Reply and I'll share details!`)}` : null;
+  const wa = p.phone ? `https://wa.me/91${p.phone}?text=${encodeURIComponent(`Namaskaram ${p.full_name.split(' ')[0]} ðŸ™ There's a volunteering opportunity at Isha ${centerName(p.center_id)} that matches your interest${v.interests?.length?' in '+v.interests[0]:''}. Would you like to join?`)}` : null;
   const inSL = SHORTLIST.some(s=>s.id===p.id);
   return `<div class="row">
     <div class="grow" onclick='showVolHistory(${JSON.stringify({n:p.full_name,h:hist.slice(0,15)}).replace(/'/g,"&#39;")})'>
       <div class="name">${esc(p.full_name)} ${v.screened?'<span class="badge green">screened</span>':'<span class="badge gray">new</span>'}</div>
-      <div class="sub">${centerName(p.center_id)} · ${(v.interests||[]).join(', ')||'no interests yet'}
-        ${v.mode?' · '+v.mode:''}${v.can_offer_space?' · 🏠 space':''} · ${hist.length} past activit${hist.length===1?'y':'ies'}</div>
+      <div class="sub">${centerName(p.center_id)} Â· ${(v.interests||[]).join(', ')||'no interests yet'}
+        ${v.mode?' Â· '+v.mode:''}${v.can_offer_space?' Â· ðŸ ':''} Â· ${hist.length} activit${hist.length===1?'y':'ies'}</div>
     </div>
-    ${p.phone?`<a class="iconbtn call" href="tel:+91${p.phone}">📞</a>`:''}
-    ${wa?`<a class="iconbtn wa" href="${wa}" target="_blank">💬</a>`:''}
-    <button class="btn small ${inSL?'green':'gray'}" onclick='toggleShortlist(${JSON.stringify({id:p.id,name:p.full_name,phone:p.phone}).replace(/'/g,"&#39;")})'>${inSL?'✓':'＋'}</button>
+    ${p.phone?`<a class="iconbtn call" href="tel:+91${p.phone}">ðŸ“ž</a>`:''}
+    ${wa?`<a class="iconbtn wa" href="${wa}" target="_blank">ðŸ’¬</a>`:''}
+    <button class="btn small ${inSL?'green':'gray'}" onclick='toggleShortlist(${JSON.stringify({id:p.id,name:p.full_name,phone:p.phone}).replace(/'/g,"&#39;")})'>${inSL?'âœ“':'ï¼‹'}</button>
   </div>`;
 }
 function showVolHistory(d){
-  modal(`<h3>${esc(d.n)} — history</h3>` + (d.h.length
+  modal(`<h3>${esc(d.n)} â€” history</h3>` + (d.h.length
     ? `<table class="mini"><tr><th>Activity</th><th>Date</th></tr>${d.h.map(r=>`<tr><td>${esc(r.activity)}</td><td>${fmtD(r.happened_on)}</td></tr>`).join('')}</table>`
     : '<p class="muted">No volunteering history yet.</p>'));
 }
@@ -426,19 +763,13 @@ function toggleShortlist(p){
   renderVols();
 }
 function shareShortlist(){
-  const txt = `Volunteer shortlist (${SHORTLIST.length}):\n` + SHORTLIST.map(s=>`• ${s.name} — ${s.phone||'no phone'}`).join('\n');
-  modal(`<h3>Share with program team</h3><textarea style="min-height:140px">${esc(txt)}</textarea>
-    <a class="btn block" style="text-align:center;text-decoration:none;display:block" href="https://wa.me/?text=${encodeURIComponent(txt)}" target="_blank">📤 Share via WhatsApp</a>
-    <button class="btn ghost block" onclick="navigator.clipboard.writeText(${JSON.stringify(txt)});toast('Copied')">Copy</button>
-    <button class="btn gray block" onclick="exportShortlistCSV()">Download CSV</button>`);
-}
-function exportShortlistCSV(){
-  const csv = 'Name,Phone\n' + SHORTLIST.map(s=>`"${s.name}","${s.phone||''}"`).join('\n');
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv'})); a.download='shortlist.csv'; a.click();
+  const txt = `Volunteer shortlist (${SHORTLIST.length}):\n` + SHORTLIST.map(s=>`â€¢ ${s.name} â€” ${s.phone||'no phone'}`).join('\n');
+  modal(`<h3>Share shortlist</h3><textarea style="min-height:140px">${esc(txt)}</textarea>
+    <a class="btn block" style="text-align:center;text-decoration:none;display:block" href="https://wa.me/?text=${encodeURIComponent(txt)}" target="_blank">ðŸ“¤ Share via WhatsApp</a>
+    <button class="btn ghost block" onclick="navigator.clipboard.writeText(${JSON.stringify(txt)});toast('Copied')">Copy</button>`);
 }
 
-/* ---- volunteer interest form (shared by manual + OCR) ---- */
+/* ---- volunteer interest form ---- */
 function volFormHTML(pre={}){
   return `<label>Name</label><input id="vf-name" value="${esc(pre.name||'')}">
     <label>Phone</label><input id="vf-phone" inputmode="numeric" value="${esc(pre.phone||'')}">
@@ -450,11 +781,11 @@ function volFormHTML(pre={}){
       <option value="weekday_evening">Weekday evenings</option><option value="weekend">Weekends</option></select>
     <label>Mode</label>
     <select id="vf-mode"><option value="both">Online + Offline</option><option value="online">Online only</option><option value="offline">Offline only</option></select>
-    <label>Programs done (IE / advanced…)</label><input id="vf-progs" placeholder="e.g. IE Online 2025, BSP">
+    <label>Programs done</label><input id="vf-progs" placeholder="e.g. IE Online 2025, BSP">
     <label>Languages</label><input id="vf-lang" placeholder="e.g. Kannada, Tamil, English">
-    <div class="choices" style="margin-top:10px"><button id="vf-space" onclick="this.classList.toggle('sel')">🏠 Can offer space for sessions</button></div>
+    <div class="choices" style="margin-top:10px"><button id="vf-space" onclick="this.classList.toggle('sel')">ðŸ  Can offer space</button></div>
     <label>Notes</label><textarea id="vf-notes"></textarea>
-    <button class="btn block" onclick="saveVolForm()">Save volunteer interest</button>`;
+    <button class="btn block" onclick="saveVolForm()">Save</button>`;
 }
 function openVolForm(pre){ modal(`<h3>Volunteer interest</h3>` + volFormHTML(pre||{})); }
 async function saveVolForm(){
@@ -465,19 +796,17 @@ async function saveVolForm(){
   if(!row.full_name && !row.phone) return toast('Name or phone required');
   const {error} = await sb.rpc('import_people', {rows:[row]});
   if(error) return toast(error.message);
-  // enrich profile with extra fields
   const ph = row.phone.replace(/\D/g,'').slice(-10);
   const {data:p} = await sb.from('people').select('id').eq('phone', ph).single();
   if(p) await sb.from('volunteer_profiles').update({
     programs_done:$('vf-progs').value||null, languages:$('vf-lang').value||null,
     screening_notes:$('vf-notes').value||null}).eq('person_id', p.id);
-  closeModal(); toast('Saved 🙏'); renderVols();
+  closeModal(); toast('Saved ðŸ™'); renderVols();
 }
 
-/* ---- paper form OCR (Tesseract.js, lazy-loaded) ---- */
 async function openPaperOCR(){
-  modal(`<h3>📷 Paper form → OCR</h3>
-    <p class="muted">Take a photo of the filled form. Name & phone are auto-extracted — check and correct, then save.</p>
+  modal(`<h3>ðŸ“· Paper form â†’ OCR</h3>
+    <p class="muted">Take a photo of the filled form. Name & phone are auto-extracted â€” check and correct, then save.</p>
     <input id="ocr-file" type="file" accept="image/*" capture="environment">
     <div id="ocr-status" class="muted" style="margin:8px 0"></div>
     <div id="ocr-form"></div>`);
@@ -485,13 +814,13 @@ async function openPaperOCR(){
 }
 async function runOCR(){
   const f = $('ocr-file').files[0]; if(!f) return;
-  $('ocr-status').textContent = 'Loading OCR engine…';
+  $('ocr-status').textContent = 'Loading OCR engineâ€¦';
   if(!window.Tesseract){
     await new Promise((res,rej)=>{ const s=document.createElement('script');
       s.src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'; s.onload=res; s.onerror=rej;
       document.head.appendChild(s); });
   }
-  $('ocr-status').textContent = 'Reading the photo… (10–20s)';
+  $('ocr-status').textContent = 'Reading the photoâ€¦ (10â€“20s)';
   try{
     const {data:{text}} = await Tesseract.recognize(f, 'eng');
     const phone = (text.match(/(?:\+?91[\s-]?)?([6-9]\d{4}[\s-]?\d{5})/)||[])[1]?.replace(/\D/g,'') || '';
@@ -499,24 +828,21 @@ async function runOCR(){
     const nm = text.match(/name\s*[:\-]?\s*([A-Za-z .]{3,40})/i);
     if(nm) name = nm[1].trim();
     else { const line = text.split('\n').map(l=>l.trim()).find(l=>/^[A-Za-z .]{3,40}$/.test(l)); if(line) name=line; }
-    $('ocr-status').textContent = '✔ Extracted — please verify below';
+    $('ocr-status').textContent = 'âœ” Extracted â€” please verify';
     $('ocr-form').innerHTML = volFormHTML({name, phone});
-  }catch(e){ $('ocr-status').textContent = 'OCR failed ('+e.message+') — fill manually:'; $('ocr-form').innerHTML = volFormHTML({}); }
+  }catch(e){ $('ocr-status').textContent = 'OCR failed â€” fill manually:'; $('ocr-form').innerHTML = volFormHTML({}); }
 }
-
 function openGFormHelp(){
   modal(`<h3>Google Form intake</h3>
-    <p class="muted">Two free ways to pull Google Form responses in:</p>
-    <p style="margin:8px 0"><b>1. Quick (manual, 30s):</b> Open the form's response Sheet → File → Download → CSV → use <b>Import CSV</b> on the Meditators tab with type "Volunteers".</p>
-    <p style="margin:8px 0"><b>2. Automatic:</b> Add the Apps Script in <code>/scripts/gform-sync.gs</code> to your response Sheet (Extensions → Apps Script), paste your Supabase URL+key, set a trigger on form submit. Every new response then lands here instantly.</p>`);
+    <p><b>Manual (30s):</b> Open the form's response Sheet â†’ File â†’ Download â†’ CSV â†’ Import CSV above.</p>
+    <p><b>Automatic:</b> Add the Apps Script in <code>/scripts/gform-sync.gs</code> to your Sheet, paste your Supabase URL+key, set a trigger on form submit.</p>`);
 }
 
 /* ============================================================
-   INSIGHTS — Module 10
+   INSIGHTS â€” Module 10
    ============================================================ */
 async function renderInsights(){
-  view().innerHTML = '<div class="empty">Loading…</div>';
-  // scope enforced by RLS automatically
+  view().innerHTML = '<div class="empty">Loadingâ€¦</div>';
   const [{data:js},{data:calls},{data:vh}] = await Promise.all([
     sb.from('journeys').select('id, type, status, sadhana_status, center_id, assigned_to'),
     sb.from('calls').select('id, due_date, completed_at, reachability, journey_id'),
@@ -526,27 +852,21 @@ async function renderInsights(){
   const open = C.filter(c=>!c.completed_at), done = C.filter(c=>c.completed_at);
   const overdue = open.filter(c=>c.due_date < today());
   const answered = done.filter(c=>c.reachability==='answered');
-
-  // sadhana status distribution
   const dist = {};
   J.filter(j=>j.sadhana_status).forEach(j=>dist[j.sadhana_status]=(dist[j.sadhana_status]||0)+1);
-
-  // per-center status clusters → suggestions
   const rules = SETTINGS.suggestion_rules||[];
   const statusKey = s => { s=(s||'').toLowerCase();
-    return s.includes('stopped')?'stopped' : s.includes('irregular')?'irregular'
-      : s.includes('needs support')?'needs_support' : s.includes('correction')?'needs_correction'
-      : s.includes('ashram')?'wants_ashram' : s.includes('sannidhi')?'wants_sannidhi'
-      : s.includes('advanced')||s.includes('another program')?'wants_advanced' : null; };
-  const clusters = {}; // center -> key -> n
+    return s.includes('stopped')?'stopped':s.includes('irregular')?'irregular'
+      :s.includes('needs support')?'needs_support':s.includes('correction')?'needs_correction'
+      :s.includes('ashram')?'wants_ashram':s.includes('sannidhi')?'wants_sannidhi'
+      :s.includes('advanced')||s.includes('another program')?'wants_advanced':null; };
+  const clusters = {};
   J.forEach(j=>{ const k=statusKey(j.sadhana_status); if(k) ((clusters[j.center_id] ||= {})[k] = (clusters[j.center_id][k]||0)+1); });
   const suggestions = [];
   for(const [cid, ks] of Object.entries(clusters))
     for(const r of rules)
       if((ks[r.when_status]||0) >= r.min_count)
-        suggestions.push(`<b>${centerName(cid)}</b>: ${ks[r.when_status]} people "${r.when_status.replace(/_/g,' ')}" → ${esc(r.suggest)}`);
-
-  // mandala completion (module 1)
+        suggestions.push(`<b>${centerName(cid)}</b>: ${ks[r.when_status]} people "${r.when_status.replace(/_/g,' ')}" â†’ ${esc(r.suggest)}`);
   const m1 = J.filter(j=>j.type==='new_meditator');
   const m1done = m1.filter(j=>j.status==='completed').length;
 
@@ -559,13 +879,12 @@ async function renderInsights(){
     <div class="stat"><div class="n">${V.length}</div><div class="l">Volunteering records</div></div>
   </div>`;
   if(suggestions.length)
-    h += `<div class="card"><h2>💡 Planning suggestions</h2>${suggestions.map(s=>`<div class="row"><div class="grow">${s}</div></div>`).join('')}</div>`;
+    h += `<div class="card"><h2>ðŸ’¡ Planning suggestions</h2>${suggestions.map(s=>`<div class="row"><div class="grow">${s}</div></div>`).join('')}</div>`;
   h += `<div class="card"><h2>Sadhana status distribution</h2><canvas id="ch-dist" height="220"></canvas></div>`;
   if(isCoord()) h += `<div class="card"><h2>Call completion by center</h2><canvas id="ch-center" height="200"></canvas></div>`;
   h += `<div class="card"><h2>Per-status counts</h2><table class="mini"><tr><th>Status</th><th>People</th></tr>
     ${Object.entries(dist).sort((a,b)=>b[1]-a[1]).map(([s,n])=>`<tr><td>${esc(s)}</td><td>${n}</td></tr>`).join('')||'<tr><td colspan=2 class="muted">No logged statuses yet</td></tr>'}</table></div>`;
   view().innerHTML = h;
-
   if(Object.keys(dist).length){
     new Chart($('ch-dist'), {type:'doughnut',
       data:{labels:Object.keys(dist), datasets:[{data:Object.values(dist),
@@ -577,9 +896,8 @@ async function renderInsights(){
     const jById = Object.fromEntries(J.map(j=>[j.id,j]));
     C.forEach(c=>{ const j=jById[c.journey_id]; if(!j) return;
       const b = (byC[j.center_id] ||= {done:0,open:0}); c.completed_at?b.done++:b.open++; });
-    const labels = Object.keys(byC).map(centerName);
     new Chart($('ch-center'), {type:'bar',
-      data:{labels, datasets:[
+      data:{labels:Object.keys(byC).map(centerName), datasets:[
         {label:'Completed', data:Object.values(byC).map(b=>b.done), backgroundColor:'#3d8a5f'},
         {label:'Open', data:Object.values(byC).map(b=>b.open), backgroundColor:'#e0d6c8'}]},
       options:{scales:{x:{stacked:true},y:{stacked:true}},plugins:{legend:{position:'bottom'}}}});
@@ -587,74 +905,71 @@ async function renderInsights(){
 }
 
 /* ============================================================
-   ADMIN — roles, pincodes, activities/QR, settings, reminders
+   ADMIN
    ============================================================ */
 async function renderAdmin(){
   if(!isCoord()){ view().innerHTML='<div class="empty">Coordinators only.</div>'; return; }
-  view().innerHTML = '<div class="empty">Loading…</div>';
+  view().innerHTML = '<div class="empty">Loadingâ€¦</div>';
   const [{data:profs},{data:acts}] = await Promise.all([
     sb.from('profiles').select('*').order('created_at'),
     sb.from('activities').select('*').order('activity_date',{ascending:false}).limit(30)]);
 
   let h = '';
-  // --- activities + QR ---
-  h += `<div class="card"><h2>📋 Activities & attendance QR</h2>
-    <button class="btn small ghost" onclick="openNewActivity()">＋ New activity</button>`;
+  h += `<div class="card"><h2>ðŸ“‹ Events & attendance QR</h2>
+    <button class="btn small ghost" onclick="openNewActivity()">ï¼‹ New event</button>`;
   h += (acts||[]).map(a=>`<div class="row"><div class="grow">
       <div class="name">${esc(a.name)} ${a.is_open?'<span class="badge green">open</span>':'<span class="badge gray">closed</span>'}</div>
-      <div class="sub">${centerName(a.center_id)} · ${fmtD(a.activity_date)}</div></div>
+      <div class="sub">${centerName(a.center_id)} Â· ${fmtD(a.activity_date)} ${a.activity_type&&a.activity_type!=='general'?'Â· '+esc(a.activity_type):''}</div></div>
     <button class="btn small ghost" onclick="showQR('${a.qr_token}','${esc(a.name)}')">QR</button>
+    <button class="btn small ghost" onclick="viewAttendees('${a.id}','${esc(a.name)}')">ðŸ‘¥</button>
     <button class="btn small gray" onclick="toggleActivity('${a.id}',${!a.is_open})">${a.is_open?'Close':'Reopen'}</button>
-    </div>`).join('') || '<div class="empty">No activities yet.</div>';
+    </div>`).join('') || '<div class="empty">No events yet.</div>';
   h += `</div>`;
 
-  // --- users & roles (RCO only edits) ---
-  h += `<div class="card"><h2>👥 Users & roles</h2>`;
+  h += `<div class="card"><h2>ðŸ‘¥ Users & roles</h2>`;
   h += (profs||[]).map(p=>`<div class="row"><div class="grow">
       <div class="name">${esc(p.full_name||p.email)}</div>
-      <div class="sub">${esc(p.email||'')} · ${p.phone?esc(p.phone)+' · ':''}${roleLabel(p.role)} · ${centerName(p.center_id)}</div></div>
+      <div class="sub">${esc(p.email||'')} Â· ${roleLabel(p.role)} Â· ${centerName(p.center_id)}</div></div>
     ${ME.role==='rco'?`
       <select style="width:auto;font-size:.78rem;padding:6px" onchange="setRole('${p.id}','role',this.value)">
         ${['volunteer','coordinator','rco'].map(r=>`<option value="${r}" ${p.role===r?'selected':''}>${roleLabel(r)}</option>`).join('')}</select>
       <select style="width:auto;font-size:.78rem;padding:6px" onchange="setRole('${p.id}','center_id',this.value)">
         ${CENTERS.concat([{id:'unassigned',name:'Unassigned'}]).map(c=>`<option value="${c.id}" ${p.center_id===c.id?'selected':''}>${c.name}</option>`).join('')}</select>`:''}
-    ${p.phone?`<a class="iconbtn wa" href="https://wa.me/91${p.phone}?text=${encodeURIComponent('Namaskaram 🙏 Gentle reminder — you have nurturing calls due on the dashboard. Please take a look when you can!')}" target="_blank" title="Nudge">💬</a>`:''}
+    ${p.phone?`<a class="iconbtn wa" href="https://wa.me/91${p.phone}?text=${encodeURIComponent('Namaskaram ðŸ™ Gentle reminder â€” you have nurturing calls due on the dashboard. Please take a look when you can!')}" target="_blank">ðŸ’¬</a>`:''}
     </div>`).join('');
-  h += `<p class="muted" style="margin-top:8px">💬 = tap to nudge a volunteer on WhatsApp about pending calls.</p></div>`;
+  h += `</div>`;
 
-  // --- pincode map (RCO) ---
   if(ME.role==='rco'){
     const pm = SETTINGS.pincode_map||{};
-    h += `<div class="card"><h2>📍 Pincode → center map</h2>
+    h += `<div class="card"><h2>ðŸ“ Pincode â†’ center map</h2>
       <table class="mini"><tr><th>Pincode</th><th>Center</th><th></th></tr>
       ${Object.entries(pm).map(([pin,cid])=>`<tr><td>${pin}</td><td>${centerName(cid)}</td>
-        <td><button class="btn small gray" onclick="delPin('${pin}')">✕</button></td></tr>`).join('')}</table>
+        <td><button class="btn small gray" onclick="delPin('${pin}')">âœ•</button></td></tr>`).join('')}</table>
       <div style="display:flex;gap:8px;margin-top:8px">
         <input id="pin-new" placeholder="560xxx" inputmode="numeric" style="flex:1">
         <select id="pin-center" style="flex:1">${CENTERS.map(c=>`<option value="${c.id}">${c.name}</option>`).join('')}</select>
         <button class="btn small" onclick="addPin()">Add</button></div></div>`;
-
     const rc = SETTINGS.reminder_config||{};
-    h += `<div class="card"><h2>⏰ Reminder settings</h2>
-      <label>Daily reminder email hour (IST, 0–23)</label>
+    h += `<div class="card"><h2>â° Reminder settings</h2>
+      <label>Daily reminder email hour (IST, 0â€“23)</label>
       <input id="rc-hour" type="number" min="0" max="23" value="${rc.email_hour_ist??8}">
-      <label>Treat calls as overdue after (days past due date)</label>
+      <label>Overdue after (days past due)</label>
       <input id="rc-od" type="number" min="0" value="${rc.overdue_after_days??0}">
-      <button class="btn block" onclick="saveReminderCfg()">Save</button>
-      <p class="muted" style="margin-top:8px">Emails are sent by the <code>send-reminders</code> Edge Function — see README §6.</p></div>`;
+      <button class="btn block" onclick="saveReminderCfg()">Save</button></div>`;
   }
   view().innerHTML = h;
 }
+
 async function setRole(id, field, val){
   const {error} = await sb.from('profiles').update({[field]:val}).eq('id', id);
-  toast(error?error.message:'Updated ✔');
+  toast(error?error.message:'Updated âœ”');
 }
 async function addPin(){
   const pin = $('pin-new').value.trim(); if(!/^\d{6}$/.test(pin)) return toast('Enter a 6-digit pincode');
   const pm = {...(SETTINGS.pincode_map||{}), [pin]:$('pin-center').value};
   const {error} = await sb.from('settings').update({value:pm}).eq('key','pincode_map');
   if(error) return toast(error.message);
-  SETTINGS.pincode_map = pm; renderAdmin(); toast('Added ✔');
+  SETTINGS.pincode_map = pm; renderAdmin(); toast('Added âœ”');
 }
 async function delPin(pin){
   const pm = {...(SETTINGS.pincode_map||{})}; delete pm[pin];
@@ -665,34 +980,52 @@ async function saveReminderCfg(){
   const v = {...(SETTINGS.reminder_config||{}), email_hour_ist:+$('rc-hour').value, overdue_after_days:+$('rc-od').value};
   const {error} = await sb.from('settings').update({value:v}).eq('key','reminder_config');
   if(error) return toast(error.message);
-  SETTINGS.reminder_config = v; toast('Saved ✔');
+  SETTINGS.reminder_config = v; toast('Saved âœ”');
 }
+
+/* ---- Events / QR ---- */
+const ACTIVITY_TYPES = ['general','satsang','program_support','calling_seva','annadanam','event_setup','ashram_visit','other'];
 function openNewActivity(){
-  modal(`<h3>New activity</h3>
-    <label>Name</label><input id="na-name" placeholder="e.g. Saturday Satsang setup">
-    <label>Center</label><select id="na-center">${CENTERS.map(c=>`<option value="${c.id}">${c.name}</option>`).join('')}</select>
+  modal(`<h3>Create Event</h3>
+    <label>Event name</label><input id="na-name" placeholder="e.g. Monthly Satsang â€” June 2026">
+    <label>Activity type</label>
+    <select id="na-type">${ACTIVITY_TYPES.map(t=>`<option value="${t}">${t.replace(/_/g,' ')}</option>`).join('')}</select>
+    <label>Center</label>
+    <select id="na-center">${CENTERS.map(c=>`<option value="${c.id}">${c.name}</option>`).join('')}</select>
     <label>Date</label><input id="na-date" type="date" value="${today()}">
+    <label>Description (optional)</label><textarea id="na-desc" placeholder="Brief description for volunteersâ€¦" style="height:60px"></textarea>
     <button class="btn block" onclick="saveActivity()">Create & show QR</button>`);
 }
 async function saveActivity(){
+  const name = $('na-name').value||'Event';
   const {data, error} = await sb.from('activities').insert({
-    name:$('na-name').value||'Activity', center_id:$('na-center').value,
-    activity_date:$('na-date').value, created_by:ME.id}).select().single();
+    name, center_id:$('na-center').value,
+    activity_type:$('na-type').value||'general',
+    activity_date:$('na-date').value,
+    description:$('na-desc').value||null,
+    created_by:ME.id}).select().single();
   if(error) return toast(error.message);
-  showQR(data.qr_token, data.name);
+  closeModal();
+  showQR(data.qr_token, name);
 }
 async function toggleActivity(id, open){
-  await sb.from('activities').update({is_open:open}).eq('id',id); renderAdmin();
+  await sb.from('activities').update({is_open:open}).eq('id',id);
+  // refresh whichever view is current
+  if(document.querySelector('#nav button.active')?.dataset.v === 'vols') renderVols();
+  else renderAdmin();
 }
 function showQR(token, name){
   const base = location.href.replace(/[^/]*$/,'');
   const url = `${base}checkin.html?t=${token}`;
-  modal(`<h3>${esc(name)} — attendance QR</h3>
-    <p class="muted">Print this and stick it at the venue. Volunteers scan to mark Time-In / Time-Out.</p>
-    <div id="qr-box" style="display:flex;justify-content:center;padding:16px"></div>
-    <p class="muted" style="word-break:break-all;text-align:center">${esc(url)}</p>
-    <button class="btn ghost block" onclick="window.print()">🖨️ Print</button>`);
-  new QRCode($('qr-box'), {text:url, width:220, height:220});
+  modal(`<h3>${esc(name)}</h3>
+    <p class="muted">Share this QR or link with volunteers. They can mark attendance, choose their seva, and upload a selfie.</p>
+    <div id="qr-box" style="display:flex;justify-content:center;padding:12px"></div>
+    <p class="muted" style="word-break:break-all;text-align:center;font-size:.78rem">${esc(url)}</p>
+    <div style="display:flex;gap:8px;justify-content:center;margin-top:8px">
+      <button class="btn ghost" onclick="navigator.clipboard.writeText('${esc(url)}');toast('Link copied!')">ðŸ“‹ Copy link</button>
+      <a class="btn ghost" href="https://wa.me/?text=${encodeURIComponent('Join us! Mark your attendance here: '+url)}" target="_blank">ðŸ’¬ Share</a>
+    </div>`);
+  new QRCode($('qr-box'), {text:url, width:200, height:200});
 }
 
 /* ---------------- start ---------------- */
