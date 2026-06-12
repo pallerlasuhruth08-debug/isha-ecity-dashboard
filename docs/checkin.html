@@ -3,53 +3,220 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Isha Attendance</title>
+<title>Isha Volunteer Check-in</title>
 <link rel="stylesheet" href="styles.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>
-<style>body{padding:20px}.wrap{max-width:420px;margin:6vh auto}</style>
+<style>
+body{padding:16px;background:var(--bg)}
+.wrap{max-width:440px;margin:0 auto}
+h1{text-align:center;color:var(--accent);margin-bottom:4px;font-size:1.4rem}
+.act-badge{text-align:center;font-size:.9rem;color:var(--muted);margin-bottom:16px}
+.photo-area{display:flex;flex-direction:column;align-items:center;gap:10px;margin:10px 0}
+#selfie-preview{width:120px;height:120px;border-radius:50%;object-fit:cover;border:3px solid var(--accent);display:none}
+#selfie-placeholder{width:120px;height:120px;border-radius:50%;background:var(--card-bg);border:2px dashed var(--accent);display:flex;align-items:center;justify-content:center;font-size:2.2rem;cursor:pointer}
+.cam-btns{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+#cam-stream{width:100%;max-width:320px;border-radius:12px;display:none}
+#cam-canvas{display:none}
+.step{color:var(--accent);font-weight:600;font-size:.8rem;text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px}
+</style>
 </head>
 <body>
 <div class="wrap">
-  <h1 style="text-align:center;color:var(--accent)">🪷 Isha Attendance</h1>
-  <div class="card">
-    <h2 id="act-name">Loading activity…</h2>
-    <div id="form" class="hidden">
-      <label>Your name</label><input id="nm" autocomplete="name">
-      <label>Phone (10-digit)</label><input id="ph" inputmode="numeric" autocomplete="tel">
-      <button class="btn block green" onclick="mark('in')">✅ Time In</button>
-      <button class="btn block gray"  onclick="mark('out')">🚪 Time Out</button>
+  <h1>🪷 Isha Volunteer Check-in</h1>
+  <div class="act-badge" id="act-name">Loading activity…</div>
+
+  <div id="form-wrap">
+    <div class="card">
+      <!-- Photo -->
+      <div class="step">📸 Your Photo (selfie)</div>
+      <div class="photo-area">
+        <div id="selfie-placeholder" onclick="startCamera()">📷</div>
+        <img id="selfie-preview" alt="selfie">
+        <div class="cam-btns" id="cam-btns" style="display:none">
+          <video id="cam-stream" autoplay playsinline></video><br>
+          <button class="btn small green" onclick="capturePhoto()">📸 Capture</button>
+          <button class="btn small gray" onclick="stopCamera()">Cancel</button>
+        </div>
+        <div class="cam-btns">
+          <button class="btn small ghost" onclick="startCamera()">📷 Take selfie</button>
+          <label class="btn small ghost" style="cursor:pointer">📁 Upload photo<input type="file" accept="image/*" style="display:none" onchange="handleFileUpload(this)"></label>
+        </div>
+      </div>
+      <canvas id="cam-canvas"></canvas>
+
+      <!-- Personal details -->
+      <div class="step" style="margin-top:12px">👤 Your Details</div>
+      <label>Full name *</label><input id="nm" placeholder="Your full name" autocomplete="name">
+      <label>Phone (10-digit) *</label><input id="ph" inputmode="numeric" placeholder="9876543210" autocomplete="tel">
+      <label>Pincode</label><input id="pc" inputmode="numeric" placeholder="560100 (auto-routes you to your center)">
+
+      <!-- Activity -->
+      <div class="step" style="margin-top:12px">🙏 Seva Details</div>
+      <label>What seva are you doing today?</label>
+      <select id="act-detail">
+        <option value="">— Select your activity —</option>
+        <option>Online Calling / Nurturing</option>
+        <option>Online Operations / Backend</option>
+        <option>Offline Program Support</option>
+        <option>Event Setup / Logistics</option>
+        <option>Cooking / Annadanam</option>
+        <option>Transport</option>
+        <option>E-Media / Content</option>
+        <option>Promotions / Outreach</option>
+        <option>Sadhguru Sannidhi Seva</option>
+        <option>Devi Seva</option>
+        <option>Other</option>
+      </select>
+
+      <button class="btn block green" style="margin-top:16px" onclick="doCheckin()">✅ Mark Attendance</button>
     </div>
-    <div id="msg" class="empty hidden"></div>
   </div>
-  <p class="muted" style="text-align:center">Your name & phone are remembered on this phone for next time.</p>
+
+  <div id="msg" class="card hidden" style="text-align:center;padding:28px">
+    <div id="msg-icon" style="font-size:3rem;margin-bottom:8px"></div>
+    <div id="msg-text"></div>
+    <button class="btn ghost" style="margin-top:16px" onclick="resetForm()">Check in someone else</button>
+  </div>
 </div>
+
 <script>
 const sb = supabase.createClient(APP_CONFIG.SUPABASE_URL, APP_CONFIG.SUPABASE_ANON_KEY);
 const token = new URLSearchParams(location.search).get('t');
 const $ = id => document.getElementById(id);
+let _photoBlob = null;
+let _stream = null;
+
+// Load activity info
 (async () => {
-  if(!token){ $('act-name').textContent = 'Invalid link — scan the QR again.'; return; }
-  const {data} = await sb.rpc('activity_by_token', {p_token: token});
-  if(!data || data.error){ $('act-name').textContent='Activity not found.'; return; }
-  $('act-name').textContent = data.name + ' · ' + new Date(data.date).toLocaleDateString('en-IN');
-  $('form').classList.remove('hidden');
+  if (!token) { $('act-name').textContent = 'Invalid link — scan the QR again.'; $('form-wrap').innerHTML = ''; return; }
+  const { data } = await sb.rpc('activity_by_token', { p_token: token });
+  if (!data || data.error) { $('act-name').textContent = 'Activity not found.'; $('form-wrap').innerHTML = ''; return; }
+  if (!data.open) { $('act-name').textContent = data.name + ' — This activity is now closed.'; $('form-wrap').innerHTML = ''; return; }
+  $('act-name').textContent = '📋 ' + data.name + ' · ' + new Date(data.date).toLocaleDateString('en-IN', {day:'numeric',month:'short',year:'numeric'});
+  // Restore saved details
   $('nm').value = localStorage.getItem('isha_name') || '';
   $('ph').value = localStorage.getItem('isha_phone') || '';
+  $('pc').value = localStorage.getItem('isha_pin') || '';
 })();
-async function mark(dir){
-  const nm = $('nm').value.trim(), ph = $('ph').value.trim();
-  if(ph.replace(/\D/g,'').length < 10) return alert('Enter your 10-digit phone number');
-  localStorage.setItem('isha_name', nm); localStorage.setItem('isha_phone', ph);
-  const {data, error} = dir==='in'
-    ? await sb.rpc('checkin',  {p_token: token, p_name: nm, p_phone: ph})
-    : await sb.rpc('checkout', {p_token: token, p_phone: ph});
-  const m = $('msg'); m.classList.remove('hidden');
-  if(error || data.error){ m.textContent = '⚠️ ' + (error?.message || data.error); return; }
-  $('form').classList.add('hidden');
-  m.innerHTML = dir==='in'
-    ? '🙏 <b>Time-In recorded.</b><br>Have a wonderful seva!'
-    : '🙏 <b>Time-Out recorded.</b><br>Thank you for your seva today!';
+
+// Camera
+async function startCamera() {
+  try {
+    _stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
+    const vid = $('cam-stream');
+    vid.srcObject = _stream;
+    vid.style.display = 'block';
+    $('cam-btns').style.display = 'flex';
+    $('cam-btns').style.flexDirection = 'column';
+    $('cam-btns').style.alignItems = 'center';
+    $('selfie-placeholder').style.display = 'none';
+    $('selfie-preview').style.display = 'none';
+  } catch(e) {
+    alert('Camera not available: ' + e.message + '\n\nPlease use "Upload photo" instead.');
+  }
+}
+
+function capturePhoto() {
+  const vid = $('cam-stream');
+  const canvas = $('cam-canvas');
+  canvas.width = vid.videoWidth;
+  canvas.height = vid.videoHeight;
+  canvas.getContext('2d').drawImage(vid, 0, 0);
+  canvas.toBlob(blob => {
+    _photoBlob = blob;
+    const url = URL.createObjectURL(blob);
+    $('selfie-preview').src = url;
+    $('selfie-preview').style.display = 'block';
+    $('selfie-placeholder').style.display = 'none';
+    stopCamera();
+  }, 'image/jpeg', 0.85);
+}
+
+function stopCamera() {
+  if (_stream) { _stream.getTracks().forEach(t => t.stop()); _stream = null; }
+  $('cam-stream').style.display = 'none';
+  $('cam-btns').style.display = 'none';
+  if (!_photoBlob) $('selfie-placeholder').style.display = 'flex';
+}
+
+function handleFileUpload(input) {
+  const file = input.files[0]; if (!file) return;
+  _photoBlob = file;
+  const reader = new FileReader();
+  reader.onload = e => {
+    $('selfie-preview').src = e.target.result;
+    $('selfie-preview').style.display = 'block';
+    $('selfie-placeholder').style.display = 'none';
+  };
+  reader.readAsDataURL(file);
+}
+
+async function uploadPhoto(phone) {
+  if (!_photoBlob) return null;
+  const filename = `${phone}_${Date.now()}.jpg`;
+  const { data, error } = await sb.storage.from('attendance-photos').upload(filename, _photoBlob, {
+    contentType: 'image/jpeg', upsert: true
+  });
+  if (error) { console.warn('Photo upload failed:', error.message); return null; }
+  const { data: { publicUrl } } = sb.storage.from('attendance-photos').getPublicUrl(filename);
+  return publicUrl;
+}
+
+async function doCheckin() {
+  const nm = $('nm').value.trim();
+  const ph = $('ph').value.replace(/\D/g, '').slice(-10);
+  const pc = $('pc').value.trim();
+  const actDetail = $('act-detail').value;
+
+  if (!nm) return alert('Please enter your name');
+  if (ph.length < 10) return alert('Please enter a valid 10-digit phone number');
+
+  const btn = document.querySelector('button.green');
+  btn.disabled = true; btn.textContent = '⏳ Saving…';
+
+  // Upload photo first
+  const photoUrl = await uploadPhoto(ph);
+
+  // Save remembered details
+  localStorage.setItem('isha_name', nm);
+  localStorage.setItem('isha_phone', $('ph').value);
+  if (pc) localStorage.setItem('isha_pin', pc);
+
+  const { data, error } = await sb.rpc('checkin', {
+    p_token: token,
+    p_name: nm,
+    p_phone: ph,
+    p_pincode: pc || null,
+    p_photo_url: photoUrl,
+    p_activity_detail: actDetail || null
+  });
+
+  btn.disabled = false; btn.textContent = '✅ Mark Attendance';
+
+  if (error || data?.error) {
+    alert('⚠️ ' + (error?.message || data?.error)); return;
+  }
+
+  // Show success
+  $('form-wrap').classList.add('hidden');
+  $('msg').classList.remove('hidden');
+  $('msg-icon').textContent = '🙏';
+  $('msg-text').innerHTML = `<b>Attendance recorded!</b><br><br>
+    Namaskaram ${nm.split(' ')[0]}!<br>
+    ${actDetail ? '🌸 ' + actDetail + '<br>' : ''}
+    <span style="color:var(--muted);font-size:.85rem">Thank you for your seva today!</span>`;
+}
+
+function resetForm() {
+  _photoBlob = null;
+  $('selfie-preview').src = ''; $('selfie-preview').style.display = 'none';
+  $('selfie-placeholder').style.display = 'flex';
+  $('nm').value = localStorage.getItem('isha_name') || '';
+  $('ph').value = '';
+  $('act-detail').value = '';
+  $('form-wrap').classList.remove('hidden');
+  $('msg').classList.add('hidden');
 }
 </script>
 </body>
