@@ -277,23 +277,33 @@ async function renderNewMeditators(tabBar){
         ${statusOpts}</select>
       <input placeholder="Search name/phone" style="flex:1;min-width:140px" value="${esc(f.search)}"
         oninput="PF.new_meditator.search=this.value" onkeydown="if(event.key==='Enter')renderPeople()">
-      <input type="date" title="IE date from" value="${f.dateFrom}"
+      <input type="date" title="IE date from (or single date)" value="${f.dateFrom}"
         onchange="PF.new_meditator.dateFrom=this.value;renderPeople()" style="width:130px">
-      <input type="date" title="IE date to" value="${f.dateTo}"
+      <input type="date" title="IE date to (leave blank for a single date)" value="${f.dateTo}"
         onchange="PF.new_meditator.dateTo=this.value;renderPeople()" style="width:130px">
       <button class="btn small ghost" onclick="renderPeople()">Search</button>
+      ${(f.dateFrom||f.dateTo||f.search)?`<button class="btn small gray" onclick="PF.new_meditator.dateFrom='';PF.new_meditator.dateTo='';PF.new_meditator.search='';renderPeople()">Clear</button>`:''}
     </div>
+    <p class="muted" style="font-size:.76rem;margin-top:6px">Pick an IE date (or a from–to range) to load new meditators for that period.</p>
   </div>`;
+
+  // Date-gate: don't dump the whole base. Require a date (or a search).
+  const effFrom = f.dateFrom || f.dateTo;   // single date if only one box is filled
+  const effTo   = f.dateTo   || f.dateFrom;
+  if(!effFrom && !f.search){
+    view().innerHTML = h + `<div class="card"><div class="empty">📅 Choose an IE date or a date range above to see new meditators.<br>This keeps the list focused on the people you want to call — it won't show everyone at once.</div></div>`;
+    return;
+  }
 
   let rows = await fetchAll(() => {
     let q = sb.from('journeys')
-      .select('id, type, program_name, program_date, status, sadhana_status, assigned_to, center_id, people(id, full_name, phone, pincode, center_id, tags, ie_date), calls(id, call_no, due_date, completed_at)')
+      .select('id, type, program_name, program_date, status, sadhana_status, assigned_to, center_id, people(*), calls(id, call_no, due_date, completed_at)')
       .eq('type', 'new_meditator').order('program_date', {ascending:false});
     if(ME.role==='volunteer') q = q.eq('assigned_to', ME.id);
     if(f.center) q = q.eq('center_id', f.center);
     if(f.status) q = q.eq('status', f.status);
-    if(f.dateFrom) q = q.gte('program_date', f.dateFrom);
-    if(f.dateTo) q = q.lte('program_date', f.dateTo);
+    if(effFrom) q = q.gte('program_date', effFrom);
+    if(effTo) q = q.lte('program_date', effTo);
     return q;
   });
   if(f.search){
@@ -369,13 +379,14 @@ function newMeditatorRow(j, vols){
     ${vols.map(v=>`<option value="${v.id}" ${v.id===j.assigned_to?'selected':''}>${esc(v.full_name||v.email)}</option>`).join('')}
   </select>` : '';
   const wa = p?.phone ? `https://wa.me/91${p.phone}?text=${encodeURIComponent(WA_MSG.new_meditator(p.full_name.split(' ')[0]))}` : null;
+  const prof = JSON.stringify({n:p?.full_name,ph:p?.phone,email:p?.email,occ:p?.occupation,gender:p?.gender,dob:p?.date_of_birth,area:p?.area,city:p?.city,street:p?.street,pin:p?.pincode,ctr:p?.center_id,ie:p?.ie_date||j.program_date,tags:p?.tags||[]}).replace(/'/g,"&#39;").replace(/"/g,'&quot;');
   return `<div class="row">
     ${cb}
-    <div class="grow">
+    <div class="grow" style="cursor:pointer" onclick="showPersonProfile(${prof})">
       <div class="name">${esc(p?.full_name||'?')} ${statusBadge} ${tags}</div>
       <div class="sub">IE: ${fmtD(p?.ie_date||j.program_date)} - ${centerName(p?.center_id)}${isPending?'':` - calls ${done}/${total}`}
         ${j.sadhana_status?` - <b>${esc(j.sadhana_status)}</b>`:''}
-        ${assignee?` - ${esc(assignee.full_name||assignee.email)}`:''}</div>
+        ${assignee?` - ${esc(assignee.full_name||assignee.email)}`:''} <span class="muted" style="font-size:.7rem">· tap for profile</span></div>
     </div>
     ${p?.phone?`<a class="iconbtn call" href="tel:+91${p.phone}">Call</a>`:''}
     ${wa?`<a class="iconbtn wa" href="${wa}" target="_blank">WA</a>`:''}
@@ -412,7 +423,7 @@ async function renderMeditatorsList(tabBar){
   </div>`;
 
   let rows = await fetchAll(() => {
-    let q = sb.from('people').select('id, full_name, phone, pincode, center_id, tags, ie_date, bsp_date, shoonya_date, samyama_date, guru_puja_date, source, created_at')
+    let q = sb.from('people').select('*')
       .eq('is_meditator', true).order('ie_date', {ascending:false});
     if(f.center) q = q.eq('center_id', f.center);
     if(f.tag) q = q.contains('tags', [f.tag]);
@@ -436,9 +447,9 @@ function meditatorDetailRow(p){
   const adv = [p.bsp_date&&`BSP: ${fmtD(p.bsp_date)}`, p.shoonya_date&&`Shoonya:${fmtD(p.shoonya_date)}`, p.samyama_date&&`Samyama:${fmtD(p.samyama_date)}`, p.guru_puja_date&&`Guru Puja:${fmtD(p.guru_puja_date)}`].filter(Boolean).join(' - ');
   const wa = p.phone ? `https://wa.me/91${p.phone}?text=${encodeURIComponent(WA_MSG.meditator(p.full_name.split(' ')[0]))}` : null;
   return `<div class="row">
-    <div class="grow" onclick="showMeditatorDetail(${JSON.stringify({id:p.id,n:p.full_name,ph:p.phone,ie:p.ie_date,bsp:p.bsp_date,sh:p.shoonya_date,sam:p.samyama_date,gp:p.guru_puja_date,tags:p.tags||[],ctr:p.center_id}).replace(/'/g,"&#39;").replace(/"/g,'&quot;')})">
-      <div class="name" style="cursor:pointer">${esc(p.full_name)} ${tags}</div>
-      <div class="sub">IE: ${fmtD(p.ie_date)} - ${centerName(p.center_id)}${adv?' - '+adv:''}</div>
+    <div class="grow" style="cursor:pointer" onclick="showMeditatorDetail(${JSON.stringify({id:p.id,n:p.full_name,ph:p.phone,email:p.email,occ:p.occupation,gender:p.gender,dob:p.date_of_birth,area:p.area,city:p.city,street:p.street,pin:p.pincode,ie:p.ie_date,bsp:p.bsp_date,sh:p.shoonya_date,sam:p.samyama_date,gp:p.guru_puja_date,tags:p.tags||[],ctr:p.center_id}).replace(/'/g,"&#39;").replace(/"/g,'&quot;')})">
+      <div class="name">${esc(p.full_name)} ${tags}</div>
+      <div class="sub">IE: ${fmtD(p.ie_date)} - ${centerName(p.center_id)}${adv?' - '+adv:''} <span class="muted" style="font-size:.7rem">· tap for profile</span></div>
     </div>
     ${p.phone?`<a class="iconbtn call" href="tel:+91${p.phone}">Call</a>`:''}
     ${wa?`<a class="iconbtn wa" href="${wa}" target="_blank">WA</a>`:''}
@@ -446,17 +457,29 @@ function meditatorDetailRow(p){
   </div>`;
 }
 
-function showMeditatorDetail(d){
+// Shared full-profile card (used by New Meditators + Meditators rows)
+function profileBody(d){
   const tags = (d.tags||[]).map(t=>`<span class="badge gray">${esc(t)}</span>`).join(' ');
-  modal(`<h3>${esc(d.n)}</h3>
-    <p>${d.ph?`${d.ph}`:''} - ${centerName(d.ctr)}</p>
-    <p>IE date: ${fmtD(d.ie)}</p>
-    ${d.bsp?`<p>BSP: ${fmtD(d.bsp)}</p>`:''}
-    ${d.sh?`<p>Shoonya: ${fmtD(d.sh)}</p>`:''}
-    ${d.sam?`<p>Samyama: ${fmtD(d.sam)}</p>`:''}
-    ${d.gp?`<p>Guru Puja: ${fmtD(d.gp)}</p>`:''}
-    ${tags?`<p style="margin-top:8px">Tags: ${tags}</p>`:''}
-    ${isCoord()?`<button class="btn block" style="margin-top:12px" onclick='closeModal();startNurturing(${JSON.stringify({pid:d.id,name:d.n}).replace(/'/g,"&#39;")})'>Add to nurturing calls</button>`:''}
+  const addr = [d.street,d.area,d.city].filter(Boolean).map(esc).join(', ');
+  const progs = [d.bsp&&`BSP ${fmtD(d.bsp)}`, d.sh&&`Shoonya ${fmtD(d.sh)}`, d.sam&&`Samyama ${fmtD(d.sam)}`, d.gp&&`Guru Puja ${fmtD(d.gp)}`].filter(Boolean).join(' · ');
+  return `
+    ${d.ph?`<p>📞 ${esc(d.ph)}</p>`:''}
+    ${d.email?`<p>✉️ ${esc(d.email)}</p>`:''}
+    <p>🏠 ${addr||'<span class="muted">address not on record</span>'}${d.pin?` · ${esc(d.pin)}`:''}</p>
+    <p>🏢 Center: ${centerName(d.ctr)}</p>
+    ${d.occ?`<p>💼 Occupation: ${esc(d.occ)}</p>`:''}
+    ${d.gender?`<p>🧍 Gender: ${esc(d.gender)}</p>`:''}
+    ${d.dob?`<p>🎂 Date of birth: ${fmtD(d.dob)}</p>`:''}
+    ${d.ie?`<p>🪷 IE date: ${fmtD(d.ie)}</p>`:''}
+    ${progs?`<p>⭐ Advanced: ${progs}</p>`:''}
+    ${tags?`<p style="margin-top:8px">🏷️ ${tags}</p>`:''}`;
+}
+function showPersonProfile(d){
+  modal(`<h3>${esc(d.n)}</h3>${profileBody(d)}`);
+}
+function showMeditatorDetail(d){
+  modal(`<h3>${esc(d.n)}</h3>${profileBody(d)}
+    ${isCoord()?`<button class="btn block" style="margin-top:14px" onclick='closeModal();startNurturing(${JSON.stringify({pid:d.id,name:d.n}).replace(/'/g,"&#39;")})'>Add to nurturing calls</button>`:''}
   `);
 }
 
@@ -734,11 +757,16 @@ function openImport(){
     <div id="im-result" class="muted" style="margin-top:8px"></div>`);
 }
 const COLMAP = {full_name:['name','full name','full_name','participant','participant name'],
-  phone:['phone','mobile','number','contact','phone number','mobile number','whatsapp'],
-  email:['email','e-mail','mail'], pincode:['pincode','pin','pin code','postal','zip'],
-  area:['area','locality','address','city'],
+  phone:['phone','mobile','number','contact','phone number','mobile number','whatsapp','whatsapp number'],
+  email:['email','e-mail','mail','email address'], pincode:['pincode','pin','pin code','postal','zip'],
+  area:['area','locality','sector/district','sector','district','mapped city'],
+  street:['address','street','street2','street address'],
+  city:['city','town','mapped city'],
+  gender:['gender','sex'],
+  occupation:['occupation','profession','job','work'],
+  date_of_birth:['date of birth','dob','date_of_birth','birth date','birthdate'],
   program_name:['program','program name','course','activity','program_name'],
-  program_date:['date','program date','completion date','initiation date','program_date','completed on']};
+  program_date:['date','program date','completion date','initiation date','program_date','completed on','ie date','ie_date']};
 function mapRow(raw){
   const out = {};
   const keys = Object.keys(raw);
@@ -746,7 +774,12 @@ function mapRow(raw){
     const k = keys.find(k => aliases.includes(k.toLowerCase().trim()));
     if(k && raw[k]!=null && raw[k]!=='') out[field] = String(raw[k]).trim();
   }
-  if(out.program_date){ const d = new Date(out.program_date); out.program_date = isNaN(d) ? null : d.toISOString().slice(0,10); }
+  const toISO = v => { if(!v) return null;
+    let m = String(v).match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/); // DD/MM/YYYY
+    if(m) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+    const d = new Date(v); return isNaN(d) ? null : d.toISOString().slice(0,10); };
+  if(out.program_date) out.program_date = toISO(out.program_date);
+  if(out.date_of_birth) out.date_of_birth = toISO(out.date_of_birth);
   return out;
 }
 async function runImport(){
