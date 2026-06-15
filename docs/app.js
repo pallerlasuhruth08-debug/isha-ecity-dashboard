@@ -296,21 +296,26 @@ async function renderNewMeditators(tabBar){
     return;
   }
 
+  // IE completion date = the person's ie_date (what the row shows). Filter & sort on that,
+  // not the journey's program_date, so the date range matches the displayed dates.
+  const ieOf = j => (j.people?.ie_date || j.program_date || '');
   let rows = await fetchAll(() => {
     let q = sb.from('journeys')
-      .select('id, type, program_name, program_date, status, sadhana_status, assigned_to, center_id, people(*), calls(id, call_no, due_date, completed_at)')
-      .eq('type', 'new_meditator').order('program_date', {ascending:false});
+      .select('id, type, program_name, program_date, status, sadhana_status, assigned_to, center_id, people!inner(*), calls(id, call_no, due_date, completed_at)')
+      .eq('type', 'new_meditator');
     if(ME.role==='volunteer') q = q.eq('assigned_to', ME.id);
     if(f.center) q = q.eq('center_id', f.center);
     if(f.status) q = q.eq('status', f.status);
-    if(effFrom) q = q.gte('program_date', effFrom);
-    if(effTo) q = q.lte('program_date', effTo);
     return q;
   });
+  // date range on IE date (inclusive); single date if only one box filled
+  if(effFrom) rows = rows.filter(j=>{ const d=ieOf(j); return d && d>=effFrom && d<=effTo; });
   if(f.search){
     const s = f.search.toLowerCase();
     rows = rows.filter(j=>j.people?.full_name?.toLowerCase().includes(s)||j.people?.phone?.includes(s));
   }
+  // newest IE first (blank IE dates last)
+  rows.sort((a,b)=> (ieOf(b)||'').localeCompare(ieOf(a)||''));
 
   let vols = [];
   if(isCoord()){
