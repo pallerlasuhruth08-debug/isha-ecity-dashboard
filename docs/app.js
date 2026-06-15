@@ -113,12 +113,12 @@ async function renderToday(){
   const {data:upcoming} = await upQ;
 
   let h = '';
-  if(overdue.length) h += `<div class="alert">${overdue.length} overdue call${overdue.length>1?'s':''} -- please catch up today</div>`;
-  h += `<div class="card"><h2>Calls due today ${calls.length?`<span class="badge">${calls.length}</span>`:''}</h2>`;
-  h += calls.length ? calls.map(callRow).join('') : '<div class="empty">All caught up -- no calls due.</div>';
+  if(overdue.length) h += `<div class="alert">⚠️ ${overdue.length} overdue call${overdue.length>1?'s':''} -- please catch up today</div>`;
+  h += `<div class="card"><h2>📞 Calls due today ${calls.length?`<span class="badge">${calls.length}</span>`:''}</h2>`;
+  h += calls.length ? calls.map(callRow).join('') : '<div class="empty">🎉 All caught up -- no calls due.</div>';
   h += '</div>';
   if(upcoming?.length){
-    h += `<div class="card"><h2>Coming up</h2>` + upcoming.map(c=>
+    h += `<div class="card"><h2>⏭️ Coming up</h2>` + upcoming.map(c=>
       `<div class="row"><div class="grow"><div class="name">${esc(c.journeys.people.full_name)}</div>
        <div class="sub">${JT[c.journeys.type]} - Call ${c.call_no} - due ${fmtD(c.due_date)}</div></div></div>`).join('') + '</div>';
   }
@@ -239,10 +239,10 @@ async function renderPeople(tab){
   view().innerHTML = '<div class="empty">Loading...</div>';
 
   const tabDefs = [
-    ['new_meditator','New Meditators'],
-    ['meditator','Meditators'],
-    ['advanced','Advanced Programs'],
-    ['volunteer_nurture','Ashram/SSB Volunteers']
+    ['new_meditator','🌱 New Meditators'],
+    ['meditator','🧘 Meditators'],
+    ['advanced','⭐ Advanced Programs'],
+    ['volunteer_nurture','🙏 Ashram/SSB Volunteers']
   ];
 
   const tabBar = `<div class="tabs">${tabDefs.map(([v,l])=>
@@ -266,8 +266,8 @@ async function renderNewMeditators(tabBar){
 
   let h = tabBar;
   if(isCoord()) h += `<div style="display:flex;gap:8px;margin:6px 0;flex-wrap:wrap">
-    <button class="btn small ghost" onclick="openImport()">Import</button>
-    <button class="btn small ghost" onclick="openAddPerson()">+ Add person</button>
+    <button class="btn small ghost" onclick="openImport()">📥 Import</button>
+    <button class="btn small ghost" onclick="openAddPerson()">➕ Add person</button>
   </div>`;
   h += `<div class="card" style="padding:10px">
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
@@ -308,7 +308,7 @@ async function renderNewMeditators(tabBar){
   }
 
   const pendingShown = rows.filter(r=>r.status==='pending').length;
-  h += `<div class="card"><h2>New Meditators <span class="badge">${rows.length}</span></h2>
+  h += `<div class="card"><h2>🌱 New Meditators <span class="badge">${rows.length}</span></h2>
     <p class="muted" style="font-size:.8rem;margin-bottom:8px">Tick the meditators you want to start nurturing calls for, then press <b>Start calling</b>. Nobody is added to calls automatically.</p>`;
   if(isCoord() && pendingShown){
     h += `<div class="row" style="position:sticky;top:0;background:var(--card-bg);z-index:5;flex-wrap:wrap;gap:6px;padding:8px;border:1px solid var(--border);border-radius:10px;margin-bottom:8px">
@@ -318,7 +318,7 @@ async function renderNewMeditators(tabBar){
         <option value="">(assign later)</option>
         ${vols.map(v=>`<option value="${v.id}">${esc(v.full_name||v.email)}</option>`).join('')}
       </select>
-      <button class="btn small green" onclick="nmStartCalling()">Start calling (<span id="nm-count">${NM_SEL.size}</span>)</button>
+      <button class="btn small green" onclick="nmStartCalling()">📞 Start calling (<span id="nm-count">${NM_SEL.size}</span>)</button>
     </div>`;
   }
   h += rows.length ? rows.map(j=>newMeditatorRow(j, vols)).join('') : '<div class="empty">No records matching filters.</div>';
@@ -391,8 +391,8 @@ async function renderMeditatorsList(tabBar){
 
   let h = tabBar;
   if(isCoord()) h += `<div style="display:flex;gap:8px;margin:6px 0;flex-wrap:wrap">
-    <button class="btn small ghost" onclick="openImport()">Import</button>
-    <button class="btn small ghost" onclick="openAddPerson()">+ Add person</button>
+    <button class="btn small ghost" onclick="openImport()">📥 Import</button>
+    <button class="btn small ghost" onclick="openAddPerson()">➕ Add person</button>
   </div>`;
 
   h += `<div class="card" style="padding:10px">
@@ -425,7 +425,7 @@ async function renderMeditatorsList(tabBar){
     rows = rows.filter(p=>p.full_name?.toLowerCase().includes(s)||p.phone?.includes(s));
   }
 
-  h += `<div class="card"><h2>Meditators <span class="badge">${rows.length}</span></h2>`;
+  h += `<div class="card"><h2>🧘 Meditators <span class="badge">${rows.length}</span></h2>`;
   h += rows.length ? rows.map(p=>meditatorDetailRow(p)).join('') : '<div class="empty">No meditators matching filters.</div>';
   h += '</div>';
   view().innerHTML = h;
@@ -494,12 +494,13 @@ async function renderAdvancedList(tabBar){
 
   let h = tabBar;
   // program picker
+  const progEmoji = {bsp:'🌀', shoonya:'🕉️', samyama:'🧘', guru_puja:'🙏'};
   h += `<div class="tabs">${ADV_PROGS.map(([v,l])=>
-    `<button class="${f.program===v?'active':''}" onclick="PF.advanced.program='${v}';renderPeople()">${l}</button>`).join('')}</div>`;
+    `<button class="${f.program===v?'active':''}" onclick="PF.advanced.program='${v}';renderPeople()">${progEmoji[v]||''} ${l}</button>`).join('')}</div>`;
   // completed vs interested
   h += `<div class="choices" style="margin:8px 0;gap:6px">
-    <button class="${f.view==='completed'?'sel':''}" onclick="PF.advanced.view='completed';renderPeople()">Completed</button>
-    <button class="${f.view==='interested'?'sel':''}" onclick="PF.advanced.view='interested';renderPeople()">Interested (paper)</button>
+    <button class="${f.view==='completed'?'sel':''}" onclick="PF.advanced.view='completed';renderPeople()">✅ Completed</button>
+    <button class="${f.view==='interested'?'sel':''}" onclick="PF.advanced.view='interested';renderPeople()">✋ Interested (paper)</button>
   </div>`;
   // common filters
   h += `<div class="card" style="padding:10px">
@@ -518,7 +519,7 @@ async function renderAdvancedList(tabBar){
         <button class="${f.window==='all'?'sel':''}" onclick="PF.advanced.window='all';renderPeople()">All since ${fmtD(sync.go_live_date)}</button>
       </div>
       <p class="muted" style="font-size:.78rem;margin-top:8px">Completed ${esc(label)} come from the weekly Ishangam scrape. Last synced: <b>${fmtD(sync.last_sync_date)}</b>.
-        ${isCoord()?`<button class="btn small ghost" onclick="markSynced()" style="margin-left:6px">I synced today</button>`:''}</p>
+        ${isCoord()?`<button class="btn small ghost" onclick="markSynced()" style="margin-left:6px">🔄 I synced today</button>`:''}</p>
     </div>`;
     const winStart = f.window==='week' ? sync.prev_sync_date : sync.go_live_date;
     let rows = await fetchAll(() => {
@@ -528,18 +529,18 @@ async function renderAdvancedList(tabBar){
       return q;
     });
     if(f.search){ const s=f.search.toLowerCase(); rows = rows.filter(p=>p.full_name?.toLowerCase().includes(s)||p.phone?.includes(s)); }
-    h += `<div class="card"><h2>Completed ${esc(label)} <span class="badge">${rows.length}</span></h2>`;
+    h += `<div class="card"><h2>✅ Completed ${esc(label)} <span class="badge">${rows.length}</span></h2>`;
     h += rows.length ? rows.map(p=>advCompletedRow(p,col,label)).join('')
       : `<div class="empty">No ${esc(label)} completions in this window.<br>Run the weekly Ishangam scrape, then press "I synced today".</div>`;
     h += '</div>';
   } else {
-    if(isCoord()) h += `<div style="margin:6px 0"><button class="btn small green" onclick="openAddInterest('${f.program}')">+ Add interested (from paper)</button></div>`;
+    if(isCoord()) h += `<div style="margin:6px 0"><button class="btn small green" onclick="openAddInterest('${f.program}')">✋ Add interested (from paper)</button></div>`;
     let rows = await fetchAll(() => sb.from('advanced_interest')
       .select('id, program, interest_date, status, notes, people!inner(id, full_name, phone, center_id, tags)')
       .eq('program', f.program).order('interest_date',{ascending:false}));
     if(f.center) rows = rows.filter(r=>r.people?.center_id===f.center);
     if(f.search){ const s=f.search.toLowerCase(); rows = rows.filter(r=>r.people?.full_name?.toLowerCase().includes(s)||r.people?.phone?.includes(s)); }
-    h += `<div class="card"><h2>Interested in ${esc(label)} <span class="badge">${rows.length}</span></h2>
+    h += `<div class="card"><h2>✋ Interested in ${esc(label)} <span class="badge">${rows.length}</span></h2>
       <p class="muted" style="font-size:.78rem;margin-bottom:6px">People who said on paper they want to do ${esc(label)}. Reach out and help them register.</p>`;
     h += rows.length ? rows.map(r=>advInterestRow(r,label)).join('')
       : `<div class="empty">No interest entries yet. Use "+ Add interested" to enter your paper list.</div>`;
@@ -644,7 +645,7 @@ async function renderVolunteerNurture(tabBar){
     vols = v||[];
   }
 
-  h += `<div class="card"><h2>Ashram/SSB Volunteers <span class="badge">${rows.length}</span></h2>`;
+  h += `<div class="card"><h2>🙏 Ashram/SSB Volunteers <span class="badge">${rows.length}</span></h2>`;
   h += rows.length ? rows.map(j=>journeyRow(j, vols)).join('') : '<div class="empty">No volunteer nurturing journeys yet.</div>';
   h += '</div>';
   view().innerHTML = h;
@@ -809,22 +810,22 @@ async function renderVols(){
   const {data:acts} = await sb.from('activities').select('id, name, activity_type, activity_date, is_open, qr_token, center_id').order('activity_date',{ascending:false}).limit(10);
 
   let h = `<div style="display:flex;gap:8px;margin:6px 0;flex-wrap:wrap">
-    <button class="btn small ghost" onclick="openPaperOCR()">Paper Form (OCR)</button>
-    <button class="btn small ghost" onclick="openVolForm()">+ Add interest</button>
-    <button class="btn small ghost" onclick="openGFormHelp()">Google Form</button>
-    <button class="btn small green" onclick="openNewActivity()">Create Event</button>
-    ${SHORTLIST.length?`<button class="btn small green" onclick="shareShortlist()">Share shortlist (${SHORTLIST.length})</button>`:''}
+    <button class="btn small ghost" onclick="openPaperOCR()">📄 Paper Form (OCR)</button>
+    <button class="btn small ghost" onclick="openVolForm()">➕ Add interest</button>
+    <button class="btn small ghost" onclick="openGFormHelp()">📝 Google Form</button>
+    <button class="btn small green" onclick="openNewActivity()">🎉 Create Event</button>
+    ${SHORTLIST.length?`<button class="btn small green" onclick="shareShortlist()">📤 Share shortlist (${SHORTLIST.length})</button>`:''}
   </div>`;
 
   // two folders: new volunteer interest | all existing volunteers
   h += `<div class="tabs">
-    <button class="${VOL_TAB==='new'?'active':''}" onclick="VOL_TAB='new';renderVols()">New volunteer interest <span class="badge">${newCount}</span></button>
-    <button class="${VOL_TAB==='all'?'active':''}" onclick="VOL_TAB='all';renderVols()">All existing volunteers <span class="badge">${allCount}</span></button>
+    <button class="${VOL_TAB==='new'?'active':''}" onclick="VOL_TAB='new';renderVols()">✨ New volunteer interest <span class="badge">${newCount}</span></button>
+    <button class="${VOL_TAB==='all'?'active':''}" onclick="VOL_TAB='all';renderVols()">🙌 All existing volunteers <span class="badge">${allCount}</span></button>
   </div>`;
 
   // Recent events (compact)
   if(acts?.length){
-    h += `<div class="card"><h2>Recent Events</h2>`;
+    h += `<div class="card"><h2>📅 Recent Events</h2>`;
     h += acts.map(a=>`<div class="row"><div class="grow">
       <div class="name">${esc(a.name)} ${a.is_open?'<span class="badge green">open</span>':'<span class="badge gray">closed</span>'}
         ${a.activity_type&&a.activity_type!=='general'?`<span class="badge">${esc(a.activity_type)}</span>`:''}</div>
@@ -836,7 +837,7 @@ async function renderVols(){
     h += `</div>`;
   }
 
-  h += `<div class="card"><h2>Filter & match volunteers</h2>
+  h += `<div class="card"><h2>🔍 Filter & match volunteers</h2>
     <div class="choices" style="flex-wrap:wrap;gap:6px">
       <select style="width:auto" onchange="VFILTER.center=this.value;renderVols()">
         <option value="">All centers</option>${CENTERS.map(c=>`<option value="${c.id}" ${VFILTER.center===c.id?'selected':''}>${c.name}</option>`).join('')}</select>
@@ -1012,18 +1013,18 @@ async function renderInsights(){
   const m1done = m1.filter(j=>j.status==='completed').length;
 
   let h = '<div class="stats">' +
-    '<div class="stat"><div class="n">' + m1.length + '</div><div class="l">New meditators</div></div>' +
-    '<div class="stat"><div class="n">' + m1done + '</div><div class="l">Mandala journeys done</div></div>' +
-    '<div class="stat"><div class="n">' + overdue.length + '</div><div class="l">Overdue calls</div></div>' +
-    '<div class="stat"><div class="n">' + (done.length?Math.round(answered.length/done.length*100):0) + '%</div><div class="l">Answer rate</div></div>' +
-    '<div class="stat"><div class="n">' + J.filter(j=>j.type==='advanced').length + '</div><div class="l">Advanced completers</div></div>' +
-    '<div class="stat"><div class="n">' + V.length + '</div><div class="l">Volunteering records</div></div>' +
+    '<div class="stat"><div class="n">' + m1.length + '</div><div class="l">🌱 New meditators</div></div>' +
+    '<div class="stat"><div class="n">' + m1done + '</div><div class="l">✅ Mandala journeys done</div></div>' +
+    '<div class="stat"><div class="n">' + overdue.length + '</div><div class="l">⏰ Overdue calls</div></div>' +
+    '<div class="stat"><div class="n">' + (done.length?Math.round(answered.length/done.length*100):0) + '%</div><div class="l">📈 Answer rate</div></div>' +
+    '<div class="stat"><div class="n">' + J.filter(j=>j.type==='advanced').length + '</div><div class="l">⭐ Advanced completers</div></div>' +
+    '<div class="stat"><div class="n">' + V.length + '</div><div class="l">🙌 Volunteering records</div></div>' +
     '</div>';
   if(suggestions.length)
-    h += '<div class="card"><h2>Planning Suggestions</h2>' + suggestions.map(s=>'<div class="row"><div class="grow">' + s + '</div></div>').join('') + '</div>';
-  h += '<div class="card"><h2>Sadhana status distribution</h2><canvas id="ch-dist" height="220"></canvas></div>';
-  if(isCoord()) h += '<div class="card"><h2>Call completion by center</h2><canvas id="ch-center" height="200"></canvas></div>';
-  h += '<div class="card"><h2>Per-status counts</h2><table class="mini"><tr><th>Status</th><th>People</th></tr>' +
+    h += '<div class="card"><h2>💡 Planning Suggestions</h2>' + suggestions.map(s=>'<div class="row"><div class="grow">' + s + '</div></div>').join('') + '</div>';
+  h += '<div class="card"><h2>🧘 Sadhana status distribution</h2><canvas id="ch-dist" height="220"></canvas></div>';
+  if(isCoord()) h += '<div class="card"><h2>📊 Call completion by center</h2><canvas id="ch-center" height="200"></canvas></div>';
+  h += '<div class="card"><h2>📋 Per-status counts</h2><table class="mini"><tr><th>Status</th><th>People</th></tr>' +
     (Object.entries(dist).sort((a,b)=>b[1]-a[1]).map(([s,n])=>'<tr><td>' + esc(s) + '</td><td>' + n + '</td></tr>').join('')||'<tr><td colspan=2 class="muted">No logged statuses yet</td></tr>') +
     '</table></div>';
   view().innerHTML = h;
@@ -1057,8 +1058,8 @@ async function renderAdmin(){
     sb.from('activities').select('*').order('activity_date',{ascending:false}).limit(30)]);
 
   let h = '';
-  h += '<div class="card"><h2>Activities & Attendance QR</h2>' +
-    '<button class="btn small ghost" onclick="openNewActivity()">+ New activity</button>';
+  h += '<div class="card"><h2>🎉 Activities & Attendance QR</h2>' +
+    '<button class="btn small ghost" onclick="openNewActivity()">➕ New activity</button>';
   h += (acts||[]).map(a=>'<div class="row"><div class="grow">' +
       '<div class="name">' + esc(a.name) + ' ' + (a.is_open?'<span class="badge green">open</span>':'<span class="badge gray">closed</span>') + '</div>' +
       '<div class="sub">' + centerName(a.center_id) + ' - ' + fmtD(a.activity_date) + (a.activity_type&&a.activity_type!=='general'?' - '+esc(a.activity_type):'') + '</div></div>' +
@@ -1068,7 +1069,7 @@ async function renderAdmin(){
     '</div>').join('') || '<div class="empty">No activities yet.</div>';
   h += '</div>';
 
-  h += '<div class="card"><h2>Users & Roles</h2>';
+  h += '<div class="card"><h2>👥 Users & Roles</h2>';
   h += (profs||[]).map(p=>'<div class="row"><div class="grow">' +
       '<div class="name">' + esc(p.full_name||p.email) + '</div>' +
       '<div class="sub">' + esc(p.email||'') + ' - ' + roleLabel(p.role) + ' - ' + centerName(p.center_id) + '</div></div>' +
@@ -1084,7 +1085,7 @@ async function renderAdmin(){
 
   if(ME.role==='rco'){
     const pm = SETTINGS.pincode_map||{};
-    h += '<div class="card"><h2>Pincode -- Center Map</h2>' +
+    h += '<div class="card"><h2>📍 Pincode -- Center Map</h2>' +
       '<table class="mini"><tr><th>Pincode</th><th>Center</th><th></th></tr>' +
       Object.entries(pm).map(([pin,cid])=>'<tr><td>' + pin + '</td><td>' + centerName(cid) + '</td>' +
         '<td><button class="btn small gray" onclick="delPin(\'' + pin + '\')">Remove</button></td></tr>').join('') + '</table>' +
@@ -1093,7 +1094,7 @@ async function renderAdmin(){
         '<select id="pin-center" style="flex:1">' + CENTERS.map(c=>'<option value="' + c.id + '">' + c.name + '</option>').join('') + '</select>' +
         '<button class="btn small" onclick="addPin()">Add</button></div></div>';
     const rc = SETTINGS.reminder_config||{};
-    h += '<div class="card"><h2>Reminder Settings</h2>' +
+    h += '<div class="card"><h2>🔔 Reminder Settings</h2>' +
       '<label>Daily reminder email hour (IST, 0-23)</label>' +
       '<input id="rc-hour" type="number" min="0" max="23" value="' + (rc.email_hour_ist??8) + '">' +
       '<label>Overdue after (days past due)</label>' +
