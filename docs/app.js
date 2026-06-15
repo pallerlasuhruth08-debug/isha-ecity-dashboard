@@ -296,9 +296,11 @@ async function renderNewMeditators(tabBar){
     return;
   }
 
-  // IE completion date = the person's ie_date (what the row shows). Filter & sort on that,
-  // not the journey's program_date, so the date range matches the displayed dates.
-  const ieOf = j => (j.people?.ie_date || j.program_date || '');
+  // New Meditators is STRICTLY about IE completion date. Use the person's ie_date only
+  // (no fallback to the journey's program_date) so the from/to range matches the dates shown.
+  const ieOf = j => (j.people?.ie_date || '');
+  // Anyone who has already completed an advanced program is no longer a "new meditator".
+  const isAdvanced = j => { const p=j.people||{}; return !!(p.bsp_date||p.shoonya_date||p.samyama_date||p.guru_puja_date); };
   let rows = await fetchAll(() => {
     let q = sb.from('journeys')
       .select('id, type, program_name, program_date, status, sadhana_status, assigned_to, center_id, people!inner(*), calls(id, call_no, due_date, completed_at)')
@@ -308,14 +310,16 @@ async function renderNewMeditators(tabBar){
     if(f.status) q = q.eq('status', f.status);
     return q;
   });
+  // exclude advanced practitioners, and anyone without a real IE date
+  rows = rows.filter(j => !isAdvanced(j) && ieOf(j));
   // date range on IE date (inclusive); single date if only one box filled
-  if(effFrom) rows = rows.filter(j=>{ const d=ieOf(j); return d && d>=effFrom && d<=effTo; });
+  if(effFrom) rows = rows.filter(j=>{ const d=ieOf(j); return d>=effFrom && d<=effTo; });
   if(f.search){
     const s = f.search.toLowerCase();
     rows = rows.filter(j=>j.people?.full_name?.toLowerCase().includes(s)||j.people?.phone?.includes(s));
   }
-  // newest IE first (blank IE dates last)
-  rows.sort((a,b)=> (ieOf(b)||'').localeCompare(ieOf(a)||''));
+  // newest IE first
+  rows.sort((a,b)=> ieOf(b).localeCompare(ieOf(a)));
 
   let vols = [];
   if(isCoord()){
