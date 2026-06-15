@@ -884,11 +884,11 @@ async function renderVols(){
   </div>`;
 
   // three folders: new volunteer interest | all existing volunteers | Ashram/SSB follow-up
-  h += `<div class="tabs">
-    <button class="${VOL_TAB==='new'?'active':''}" onclick="VOL_TAB='new';renderVols()">✨ New volunteer interest <span class="badge">${newCount}</span></button>
-    <button class="${VOL_TAB==='all'?'active':''}" onclick="VOL_TAB='all';renderVols()">🙌 All existing volunteers <span class="badge">${allCount}</span></button>
+  h += `<div class="tabs" style="flex-wrap:wrap;overflow:visible">
+    <button class="${VOL_TAB==='new'?'active':''}" onclick="VOL_TAB='new';renderVols()">✨ New interest <span class="badge">${newCount}</span></button>
+    <button class="${VOL_TAB==='all'?'active':''}" onclick="VOL_TAB='all';renderVols()">🙌 All volunteers <span class="badge">${allCount}</span></button>
     <button class="${VOL_TAB==='ashram'?'active':''}" onclick="VOL_TAB='ashram';renderVols()">🙏 Ashram/SSB <span class="badge">${ashram.length}</span></button>
-    <button class="${VOL_TAB==='ie_completion'?'active':''}" onclick="VOL_TAB='ie_completion';renderVols()">🪷 IE Completion interest <span class="badge">${icvCount}</span></button>
+    <button class="${VOL_TAB==='ie_completion'?'active':''}" onclick="VOL_TAB='ie_completion';renderVols()">🪷 IE Completion <span class="badge">${icvCount}</span></button>
   </div>`;
 
   // IE Completion volunteer-interest folder (sorted by IE date, newest first)
