@@ -238,11 +238,13 @@ async function renderPeople(tab){
   if(tab) PEOPLE_TAB = tab;
   view().innerHTML = '<div class="empty">Loading...</div>';
 
+  // Ashram/SSB volunteers moved to the Volunteers tab.
+  if(PEOPLE_TAB==='volunteer_nurture') PEOPLE_TAB = 'new_meditator';
+
   const tabDefs = [
     ['new_meditator','🌱 New Meditators'],
     ['meditator','🧘 Meditators'],
-    ['advanced','⭐ Advanced Programs'],
-    ['volunteer_nurture','🙏 Ashram/SSB Volunteers']
+    ['advanced','⭐ Advanced Programs']
   ];
 
   const tabBar = `<div class="tabs">${tabDefs.map(([v,l])=>
@@ -250,8 +252,7 @@ async function renderPeople(tab){
 
   if(PEOPLE_TAB==='new_meditator') await renderNewMeditators(tabBar);
   else if(PEOPLE_TAB==='meditator') await renderMeditatorsList(tabBar);
-  else if(PEOPLE_TAB==='advanced') await renderAdvancedList(tabBar);
-  else await renderVolunteerNurture(tabBar);
+  else await renderAdvancedList(tabBar);
 }
 
 /* ---- New Meditators (nurturer chooses who to call -- nothing is automatic) ---- */
@@ -839,6 +840,15 @@ async function renderVols(){
     return true;
   });
 
+  // Ashram/SSB volunteering follow-up journeys (moved here from Meditators)
+  const ashram = await fetchAll(() => {
+    let q = sb.from('journeys')
+      .select('id, type, program_name, program_date, status, sadhana_status, assigned_to, center_id, people(id, full_name, phone, center_id), calls(id, call_no, due_date, completed_at)')
+      .eq('type', 'volunteer_nurture').order('program_date', {ascending:false});
+    if(ME.role==='volunteer') q = q.eq('assigned_to', ME.id);
+    return q;
+  });
+
   // fetch recent activities for event management
   const {data:acts} = await sb.from('activities').select('id, name, activity_type, activity_date, is_open, qr_token, center_id').order('activity_date',{ascending:false}).limit(10);
 
@@ -850,11 +860,30 @@ async function renderVols(){
     ${SHORTLIST.length?`<button class="btn small green" onclick="shareShortlist()">📤 Share shortlist (${SHORTLIST.length})</button>`:''}
   </div>`;
 
-  // two folders: new volunteer interest | all existing volunteers
+  // three folders: new volunteer interest | all existing volunteers | Ashram/SSB follow-up
   h += `<div class="tabs">
     <button class="${VOL_TAB==='new'?'active':''}" onclick="VOL_TAB='new';renderVols()">✨ New volunteer interest <span class="badge">${newCount}</span></button>
     <button class="${VOL_TAB==='all'?'active':''}" onclick="VOL_TAB='all';renderVols()">🙌 All existing volunteers <span class="badge">${allCount}</span></button>
+    <button class="${VOL_TAB==='ashram'?'active':''}" onclick="VOL_TAB='ashram';renderVols()">🙏 Ashram/SSB <span class="badge">${ashram.length}</span></button>
   </div>`;
+
+  // Ashram/SSB folder: post Ashram/IYC/SSB volunteering follow-up calls
+  if(VOL_TAB==='ashram'){
+    let vols = [];
+    if(isCoord()){ const {data:v} = await sb.from('profiles').select('id, full_name, email, role, center_id').eq('active', true); vols = v||[]; }
+    let rows = ashram;
+    if(VFILTER.center) rows = rows.filter(j=>(j.people?.center_id||j.center_id)===VFILTER.center);
+    h += `<div class="card" style="padding:10px">
+      <select style="width:auto" onchange="VFILTER.center=this.value;renderVols()">
+        <option value="">All centers</option>${CENTERS.map(c=>`<option value="${c.id}" ${VFILTER.center===c.id?'selected':''}>${c.name}</option>`).join('')}</select>
+    </div>`;
+    h += `<div class="card"><h2>🙏 Ashram / SSB / IYC volunteers <span class="badge">${rows.length}</span></h2>
+      <p class="muted" style="font-size:.78rem;margin-bottom:6px">Follow-up calls for people who volunteered at the Ashram, SSB, or IYC.</p>`;
+    h += rows.length ? rows.map(j=>journeyRow(j, vols)).join('') : '<div class="empty">No Ashram/SSB volunteering follow-ups yet.</div>';
+    h += '</div>';
+    view().innerHTML = h;
+    return;
+  }
 
   // Recent events (compact)
   if(acts?.length){
