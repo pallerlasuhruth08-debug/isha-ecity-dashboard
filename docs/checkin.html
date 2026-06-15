@@ -23,39 +23,39 @@ h1{text-align:center;color:var(--accent);margin-bottom:4px;font-size:1.4rem}
 </head>
 <body>
 <div class="wrap">
-  <h1>🪷 Isha Volunteer Check-in</h1>
-  <div class="act-badge" id="act-name">Loading activity…</div>
+  <h1>Isha Volunteer Check-in</h1>
+  <div class="act-badge" id="act-name">Loading activity...</div>
 
   <div id="form-wrap">
     <div class="card">
       <!-- Photo -->
-      <div class="step">📸 Your Photo (selfie)</div>
+      <div class="step">Your Photo (selfie)</div>
       <div class="photo-area">
-        <div id="selfie-placeholder" onclick="startCamera()">📷</div>
+        <div id="selfie-placeholder" onclick="startCamera()">[+]</div>
         <img id="selfie-preview" alt="selfie">
         <div class="cam-btns" id="cam-btns" style="display:none">
           <video id="cam-stream" autoplay playsinline></video><br>
-          <button class="btn small green" onclick="capturePhoto()">📸 Capture</button>
+          <button class="btn small green" onclick="capturePhoto()">Capture</button>
           <button class="btn small gray" onclick="stopCamera()">Cancel</button>
         </div>
         <div class="cam-btns">
-          <button class="btn small ghost" onclick="startCamera()">📷 Take selfie</button>
-          <label class="btn small ghost" style="cursor:pointer">📁 Upload photo<input type="file" accept="image/*" style="display:none" onchange="handleFileUpload(this)"></label>
+          <button class="btn small ghost" onclick="startCamera()">Take selfie</button>
+          <label class="btn small ghost" style="cursor:pointer">Upload photo<input type="file" accept="image/*" style="display:none" onchange="handleFileUpload(this)"></label>
         </div>
       </div>
       <canvas id="cam-canvas"></canvas>
 
       <!-- Personal details -->
-      <div class="step" style="margin-top:12px">👤 Your Details</div>
+      <div class="step" style="margin-top:12px">Your Details</div>
       <label>Full name *</label><input id="nm" placeholder="Your full name" autocomplete="name">
       <label>Phone (10-digit) *</label><input id="ph" inputmode="numeric" placeholder="9876543210" autocomplete="tel">
       <label>Pincode</label><input id="pc" inputmode="numeric" placeholder="560100 (auto-routes you to your center)">
 
       <!-- Activity -->
-      <div class="step" style="margin-top:12px">🙏 Seva Details</div>
+      <div class="step" style="margin-top:12px">Seva Details</div>
       <label>What seva are you doing today?</label>
       <select id="act-detail">
-        <option value="">— Select your activity —</option>
+        <option value="">-- Select your activity --</option>
         <option>Online Calling / Nurturing</option>
         <option>Online Operations / Backend</option>
         <option>Offline Program Support</option>
@@ -69,7 +69,7 @@ h1{text-align:center;color:var(--accent);margin-bottom:4px;font-size:1.4rem}
         <option>Other</option>
       </select>
 
-      <button class="btn block green" style="margin-top:16px" onclick="doCheckin()">✅ Mark Attendance</button>
+      <button class="btn block green" style="margin-top:16px" onclick="doCheckin()">Mark Attendance</button>
     </div>
   </div>
 
@@ -89,12 +89,11 @@ let _stream = null;
 
 // Load activity info
 (async () => {
-  if (!token) { $('act-name').textContent = 'Invalid link — scan the QR again.'; $('form-wrap').innerHTML = ''; return; }
+  if (!token) { $('act-name').textContent = 'Invalid link -- scan the QR again.'; $('form-wrap').innerHTML = ''; return; }
   const { data } = await sb.rpc('activity_by_token', { p_token: token });
   if (!data || data.error) { $('act-name').textContent = 'Activity not found.'; $('form-wrap').innerHTML = ''; return; }
-  if (!data.open) { $('act-name').textContent = data.name + ' — This activity is now closed.'; $('form-wrap').innerHTML = ''; return; }
-  $('act-name').textContent = '📋 ' + data.name + ' · ' + new Date(data.date).toLocaleDateString('en-IN', {day:'numeric',month:'short',year:'numeric'});
-  // Restore saved details
+  if (!data.open) { $('act-name').textContent = data.name + ' -- This activity is now closed.'; $('form-wrap').innerHTML = ''; return; }
+  $('act-name').textContent = data.name + ' - ' + new Date(data.date).toLocaleDateString('en-IN', {day:'numeric',month:'short',year:'numeric'});
   $('nm').value = localStorage.getItem('isha_name') || '';
   $('ph').value = localStorage.getItem('isha_phone') || '';
   $('pc').value = localStorage.getItem('isha_pin') || '';
@@ -154,7 +153,7 @@ function handleFileUpload(input) {
 
 async function uploadPhoto(phone) {
   if (!_photoBlob) return null;
-  const filename = `${phone}_${Date.now()}.jpg`;
+  const filename = phone + '_' + Date.now() + '.jpg';
   const { data, error } = await sb.storage.from('attendance-photos').upload(filename, _photoBlob, {
     contentType: 'image/jpeg', upsert: true
   });
@@ -173,12 +172,10 @@ async function doCheckin() {
   if (ph.length < 10) return alert('Please enter a valid 10-digit phone number');
 
   const btn = document.querySelector('button.green');
-  btn.disabled = true; btn.textContent = '⏳ Saving…';
+  btn.disabled = true; btn.textContent = 'Saving...';
 
-  // Upload photo first
   const photoUrl = await uploadPhoto(ph);
 
-  // Save remembered details
   localStorage.setItem('isha_name', nm);
   localStorage.setItem('isha_phone', $('ph').value);
   if (pc) localStorage.setItem('isha_pin', pc);
@@ -192,20 +189,19 @@ async function doCheckin() {
     p_activity_detail: actDetail || null
   });
 
-  btn.disabled = false; btn.textContent = '✅ Mark Attendance';
+  btn.disabled = false; btn.textContent = 'Mark Attendance';
 
   if (error || data?.error) {
-    alert('⚠️ ' + (error?.message || data?.error)); return;
+    alert('Error: ' + (error?.message || data?.error)); return;
   }
 
-  // Show success
   $('form-wrap').classList.add('hidden');
   $('msg').classList.remove('hidden');
-  $('msg-icon').textContent = '🙏';
-  $('msg-text').innerHTML = `<b>Attendance recorded!</b><br><br>
-    Namaskaram ${nm.split(' ')[0]}!<br>
-    ${actDetail ? '🌸 ' + actDetail + '<br>' : ''}
-    <span style="color:var(--muted);font-size:.85rem">Thank you for your seva today!</span>`;
+  $('msg-icon').textContent = ':)';
+  $('msg-text').innerHTML = '<b>Attendance recorded!</b><br><br>'
+    + 'Namaskaram ' + nm.split(' ')[0] + '!<br>'
+    + (actDetail ? actDetail + '<br>' : '')
+    + '<span style="color:var(--muted);font-size:.85rem">Thank you for your seva today!</span>';
 }
 
 function resetForm() {
