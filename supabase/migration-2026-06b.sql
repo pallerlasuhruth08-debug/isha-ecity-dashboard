@@ -82,15 +82,18 @@ begin
         update people set ie_date = pdate where id = pid and (ie_date is null or ie_date < pdate);
       end if;
 
-      insert into journeys (person_id, type, program_name, program_date, status)
-      values (pid,
-              case knd when 'advanced' then 'advanced'
-                       when 'meditator' then 'meditator'
-                       else 'new_meditator' end,
-              r->>'program_name', pdate,
-              case when knd = 'new_meditator' then 'pending' else 'active' end)
-      on conflict do nothing;
-      jcount := jcount + 1;
+      -- 'meditator' = directory entry only (no call journey, avoids flooding Today
+      -- with thousands of calls on a bulk base import). new_meditator + advanced
+      -- still create journeys.
+      if knd <> 'meditator' then
+        insert into journeys (person_id, type, program_name, program_date, status)
+        values (pid,
+                case knd when 'advanced' then 'advanced' else 'new_meditator' end,
+                r->>'program_name', pdate,
+                case when knd = 'new_meditator' then 'pending' else 'active' end)
+        on conflict do nothing;
+        jcount := jcount + 1;
+      end if;
 
     elsif knd = 'volunteer' then
       insert into volunteer_profiles (person_id, interests, preferred_timing, mode, can_offer_space, interest_source)
