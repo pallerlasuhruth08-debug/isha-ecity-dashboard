@@ -888,7 +888,7 @@ async function renderVols(){
     <button class="${VOL_TAB==='new'?'active':''}" onclick="VOL_TAB='new';renderVols()">✨ New interest <span class="badge">${newCount}</span></button>
     <button class="${VOL_TAB==='all'?'active':''}" onclick="VOL_TAB='all';renderVols()">🙌 All volunteers <span class="badge">${allCount}</span></button>
     <button class="${VOL_TAB==='ashram'?'active':''}" onclick="VOL_TAB='ashram';renderVols()">🙏 Ashram/SSB <span class="badge">${ashram.length}</span></button>
-    <button class="${VOL_TAB==='ie_completion'?'active':''}" onclick="VOL_TAB='ie_completion';renderVols()">🪷 IE Completion <span class="badge">${icvCount}</span></button>
+    <button class="${VOL_TAB==='ie_completion'?'active':''}" onclick="VOL_TAB='ie_completion';renderVols()">🪷 IEO Completion Form <span class="badge">${icvCount}</span></button>
   </div>`;
 
   // IE Completion volunteer-interest folder (sorted by IE date, newest first)
@@ -899,7 +899,7 @@ async function renderVols(){
       <input placeholder="Search name/phone" style="width:100%" value="${esc(VFILTER.search||'')}"
         oninput="VFILTER.search=this.value" onkeydown="if(event.key==='Enter')renderVols()">
     </div>`;
-    h += `<div class="card"><h2>🪷 IE Completion — Volunteer Interest <span class="badge">${rows.length}</span></h2>
+    h += `<div class="card"><h2>🪷 IEO Completion Form — Volunteer Interest <span class="badge">${rows.length}</span></h2>
       <p class="muted" style="font-size:.78rem;margin-bottom:6px">People who ticked "Volunteer" on an IE completion form in Ishangam (Electronic City). Newest IE first.</p>`;
     h += rows.length ? rows.map(icvRow).join('') : '<div class="empty">No records yet — run the IE-completion sync.</div>';
     h += '</div>';
