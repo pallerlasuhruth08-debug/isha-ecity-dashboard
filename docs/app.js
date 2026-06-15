@@ -818,6 +818,22 @@ let VOL_TAB = 'new';   // 'new' = new volunteer interest | 'all' = all existing 
 // "New interest" = only fresh submissions (added via form / photo OCR / CSV), marked status 'new'.
 const isNewInterest = v => v.status==='new';
 
+function icvRow(r){
+  const ph = r.phone;
+  const wa = ph ? `https://wa.me/91${ph}?text=${encodeURIComponent('Namaskaram '+((r.full_name||'').split(' ')[0])+' -- You had expressed interest to volunteer when you completed Inner Engineering. We would love to have you involved at Isha Electronic City. When is a good time to talk?')}` : null;
+  const sel = isCoord() ? `<select style="width:auto;font-size:.75rem;padding:4px 6px" onchange="setIcvStatus('${r.id}',this.value)">${['new','contacted','active','done','dropped'].map(s=>`<option value="${s}" ${r.status===s?'selected':''}>${s}</option>`).join('')}</select>` : '';
+  return `<div class="row">
+    <div class="grow">
+      <div class="name">${esc(r.full_name||'?')} <span class="badge ${r.status==='active'||r.status==='done'?'green':'gray'}">${esc(r.status||'new')}</span></div>
+      <div class="sub">🪷 IE: ${fmtD(r.ie_date)}${r.program_name?' - '+esc(r.program_name):''} - ${centerName(r.center_id)}</div>
+    </div>
+    ${ph?`<a class="iconbtn call" href="tel:+91${ph}">Call</a>`:''}
+    ${wa?`<a class="iconbtn wa" href="${wa}" target="_blank">WA</a>`:''}
+    ${sel}
+  </div>`;
+}
+async function setIcvStatus(id, status){ const {error}=await sb.from('ie_completion_volunteer').update({status}).eq('id', id); toast(error?error.message:'Updated'); }
+
 async function renderVols(){
   view().innerHTML = '<div class="empty">Loading...</div>';
   const vps = await fetchAll(() => sb.from('volunteer_profiles')
@@ -854,6 +870,11 @@ async function renderVols(){
   // fetch recent activities for event management
   const {data:acts} = await sb.from('activities').select('id, name, activity_type, activity_date, is_open, qr_token, center_id').order('activity_date',{ascending:false}).limit(10);
 
+  // IE Completion volunteer-interest (from Ishangam ie.completion, volunteer=true). Guarded: table may not exist pre-migration.
+  let icvCount = 0;
+  const icvCntRes = await sb.from('ie_completion_volunteer').select('*', {count:'exact', head:true});
+  if(!icvCntRes.error) icvCount = icvCntRes.count || 0;
+
   let h = `<div style="display:flex;gap:8px;margin:6px 0;flex-wrap:wrap">
     <button class="btn small ghost" onclick="openPaperOCR()">📄 Paper Form (OCR)</button>
     <button class="btn small ghost" onclick="openVolForm()">➕ Add interest</button>
@@ -867,7 +888,24 @@ async function renderVols(){
     <button class="${VOL_TAB==='new'?'active':''}" onclick="VOL_TAB='new';renderVols()">✨ New volunteer interest <span class="badge">${newCount}</span></button>
     <button class="${VOL_TAB==='all'?'active':''}" onclick="VOL_TAB='all';renderVols()">🙌 All existing volunteers <span class="badge">${allCount}</span></button>
     <button class="${VOL_TAB==='ashram'?'active':''}" onclick="VOL_TAB='ashram';renderVols()">🙏 Ashram/SSB <span class="badge">${ashram.length}</span></button>
+    <button class="${VOL_TAB==='ie_completion'?'active':''}" onclick="VOL_TAB='ie_completion';renderVols()">🪷 IE Completion interest <span class="badge">${icvCount}</span></button>
   </div>`;
+
+  // IE Completion volunteer-interest folder (sorted by IE date, newest first)
+  if(VOL_TAB==='ie_completion'){
+    let rows = await fetchAll(() => sb.from('ie_completion_volunteer').select('*').order('ie_date',{ascending:false,nullsFirst:false}));
+    if(VFILTER.search){ const s=VFILTER.search.toLowerCase(); rows = rows.filter(r=>r.full_name?.toLowerCase().includes(s)||r.phone?.includes(s)); }
+    h += `<div class="card" style="padding:10px">
+      <input placeholder="Search name/phone" style="width:100%" value="${esc(VFILTER.search||'')}"
+        oninput="VFILTER.search=this.value" onkeydown="if(event.key==='Enter')renderVols()">
+    </div>`;
+    h += `<div class="card"><h2>🪷 IE Completion — Volunteer Interest <span class="badge">${rows.length}</span></h2>
+      <p class="muted" style="font-size:.78rem;margin-bottom:6px">People who ticked "Volunteer" on an IE completion form in Ishangam (Electronic City). Newest IE first.</p>`;
+    h += rows.length ? rows.map(icvRow).join('') : '<div class="empty">No records yet — run the IE-completion sync.</div>';
+    h += '</div>';
+    view().innerHTML = h;
+    return;
+  }
 
   // Ashram/SSB folder: post Ashram/IYC/SSB volunteering follow-up calls
   if(VOL_TAB==='ashram'){
