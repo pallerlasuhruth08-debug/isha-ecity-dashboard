@@ -14,6 +14,20 @@ const today = () => new Date().toISOString().slice(0,10);
 function toast(m){ const t=$('toast'); t.textContent=m; t.classList.add('show');
   setTimeout(()=>t.classList.remove('show'), 2600); }
 
+/* Fetch EVERY matching row, paging past Supabase's 1000-row-per-request cap.
+   makeQuery() must return a fresh query builder each call (so .range() can be re-applied). */
+async function fetchAll(makeQuery, pageSize=1000){
+  let from = 0, all = [];
+  for(;;){
+    const {data, error} = await makeQuery().range(from, from + pageSize - 1);
+    if(error){ toast(error.message); break; }
+    all = all.concat(data||[]);
+    if(!data || data.length < pageSize) break;
+    from += pageSize;
+  }
+  return all;
+}
+
 /* ---------------- AUTH ---------------- */
 async function doLogin(){
   const {error} = await sb.auth.signInWithPassword({email:$('login-email').value.trim(), password:$('login-pass').value});
@@ -196,11 +210,21 @@ let PEOPLE_TAB = 'new_meditator';
 
 // Per-tab filter state
 const PF = {
-  new_meditator: { center:'', dateFrom:'', dateTo:'', search:'' },
+  new_meditator: { center:'', status:'pending', dateFrom:'', dateTo:'', search:'' },
   meditator:     { center:'', tag:'', dateFrom:'', dateTo:'', search:'' },
-  advanced:      { center:'', program:'', dateFrom:'', dateTo:'', search:'' },
+  advanced:      { program:'bsp', view:'completed', window:'week', center:'', search:'' },
   volunteer_nurture: { center:'', search:'' }
 };
+
+// Advanced programs: [key, label, completion-date column on people]
+const ADV_PROGS = [
+  ['bsp','BSP','bsp_date'], ['shoonya','Shoonya','shoonya_date'],
+  ['samyama','Samyama','samyama_date'], ['guru_puja','Guru Puja','guru_puja_date']
+];
+const advSync = () => SETTINGS.advanced_sync || {go_live_date:today(), last_sync_date:today(), prev_sync_date:today()};
+
+// New-meditator selection (nurturer chooses who to start calling)
+const NM_SEL = new Set();
 
 // Common Ishangam tags to filter by
 const COMMON_TAGS = [
@@ -230,10 +254,15 @@ async function renderPeople(tab){
   else await renderVolunteerNurture(tabBar);
 }
 
-/* ---- New Meditators ---- */
+/* ---- New Meditators (nurturer chooses who to call -- nothing is automatic) ---- */
 async function renderNewMeditators(tabBar){
   const f = PF.new_meditator;
   const centerOpts = `<option value="">All Centers</option>${CENTERS.map(c=>`<option value="${c.id}" ${f.center===c.id?'selected':''}>${c.name}</option>`).join('')}`;
+  const statusOpts = `
+    <option value="pending" ${f.status==='pending'?'selected':''}>Not yet calling</option>
+    <option value="active" ${f.status==='active'?'selected':''}>Calling now</option>
+    <option value="completed" ${f.status==='completed'?'selected':''}>Calls done</option>
+    <option value="" ${f.status===''?'selected':''}>All</option>`;
 
   let h = tabBar;
   if(isCoord()) h += `<div style="display:flex;gap:8px;margin:6px 0;flex-wrap:wrap">
@@ -244,6 +273,8 @@ async function renderNewMeditators(tabBar){
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
       <select style="width:auto" onchange="PF.new_meditator.center=this.value;renderPeople()">
         ${centerOpts}</select>
+      <select style="width:auto" title="Calling status" onchange="PF.new_meditator.status=this.value;renderPeople()">
+        ${statusOpts}</select>
       <input placeholder="Search name/phone" style="flex:1;min-width:140px" value="${esc(f.search)}"
         oninput="PF.new_meditator.search=this.value" onkeydown="if(event.key==='Enter')renderPeople()">
       <input type="date" title="IE date from" value="${f.dateFrom}"
@@ -254,16 +285,17 @@ async function renderNewMeditators(tabBar){
     </div>
   </div>`;
 
-  let q = sb.from('journeys')
-    .select('id, type, program_name, program_date, status, sadhana_status, assigned_to, center_id, people(id, full_name, phone, pincode, center_id, tags, ie_date), calls(id, call_no, due_date, completed_at)')
-    .eq('type', 'new_meditator').order('program_date', {ascending:false}).limit(300);
-  if(ME.role==='volunteer') q = q.eq('assigned_to', ME.id);
-  if(f.center) q = q.eq('center_id', f.center);
-  if(f.dateFrom) q = q.gte('program_date', f.dateFrom);
-  if(f.dateTo) q = q.lte('program_date', f.dateTo);
-
-  const {data:js, error} = await q;
-  let rows = js||[];
+  let rows = await fetchAll(() => {
+    let q = sb.from('journeys')
+      .select('id, type, program_name, program_date, status, sadhana_status, assigned_to, center_id, people(id, full_name, phone, pincode, center_id, tags, ie_date), calls(id, call_no, due_date, completed_at)')
+      .eq('type', 'new_meditator').order('program_date', {ascending:false});
+    if(ME.role==='volunteer') q = q.eq('assigned_to', ME.id);
+    if(f.center) q = q.eq('center_id', f.center);
+    if(f.status) q = q.eq('status', f.status);
+    if(f.dateFrom) q = q.gte('program_date', f.dateFrom);
+    if(f.dateTo) q = q.lte('program_date', f.dateTo);
+    return q;
+  });
   if(f.search){
     const s = f.search.toLowerCase();
     rows = rows.filter(j=>j.people?.full_name?.toLowerCase().includes(s)||j.people?.phone?.includes(s));
@@ -275,11 +307,48 @@ async function renderNewMeditators(tabBar){
     vols = v||[];
   }
 
+  const pendingShown = rows.filter(r=>r.status==='pending').length;
   h += `<div class="card"><h2>New Meditators <span class="badge">${rows.length}</span></h2>
-    <p class="muted" style="font-size:.8rem;margin-bottom:8px">Select people from this list to assign for nurturing calls.</p>`;
+    <p class="muted" style="font-size:.8rem;margin-bottom:8px">Tick the meditators you want to start nurturing calls for, then press <b>Start calling</b>. Nobody is added to calls automatically.</p>`;
+  if(isCoord() && pendingShown){
+    h += `<div class="row" style="position:sticky;top:0;background:var(--card-bg);z-index:5;flex-wrap:wrap;gap:6px;padding:8px;border:1px solid var(--border);border-radius:10px;margin-bottom:8px">
+      <button class="btn small ghost" onclick="nmSelectAllShown()">Select all shown</button>
+      <button class="btn small ghost" onclick="nmClearSel()">Clear</button>
+      <select id="nm-assign" style="width:auto;font-size:.78rem;padding:4px 6px">
+        <option value="">(assign later)</option>
+        ${vols.map(v=>`<option value="${v.id}">${esc(v.full_name||v.email)}</option>`).join('')}
+      </select>
+      <button class="btn small green" onclick="nmStartCalling()">Start calling (<span id="nm-count">${NM_SEL.size}</span>)</button>
+    </div>`;
+  }
   h += rows.length ? rows.map(j=>newMeditatorRow(j, vols)).join('') : '<div class="empty">No records matching filters.</div>';
   h += '</div>';
   view().innerHTML = h;
+}
+
+function nmToggle(id,on){ on?NM_SEL.add(id):NM_SEL.delete(id); const c=$('nm-count'); if(c)c.textContent=NM_SEL.size; }
+function nmSelectAllShown(){
+  document.querySelectorAll('#view input.nm-cb').forEach(cb=>{ cb.checked=true; NM_SEL.add(cb.dataset.jid); });
+  const c=$('nm-count'); if(c)c.textContent=NM_SEL.size;
+}
+function nmClearSel(){
+  NM_SEL.clear();
+  document.querySelectorAll('#view input.nm-cb').forEach(cb=>cb.checked=false);
+  const c=$('nm-count'); if(c)c.textContent=0;
+}
+async function nmStartCalling(){
+  if(!NM_SEL.size) return toast('Tick at least one meditator first');
+  const assign = $('nm-assign')?.value || '';
+  const ids = [...NM_SEL];
+  toast('Starting nurturing...');
+  for(const id of ids){
+    const {error} = await sb.rpc('activate_journey', {j_id:id});
+    if(error) return toast(error.message);
+    if(assign) await sb.from('journeys').update({assigned_to:assign}).eq('id', id);
+  }
+  NM_SEL.clear();
+  toast(`Calling started for ${ids.length} meditator${ids.length>1?'s':''}`);
+  renderPeople();
 }
 
 function newMeditatorRow(j, vols){
@@ -288,17 +357,23 @@ function newMeditatorRow(j, vols){
   const total = (j.calls||[]).length;
   const tags = (p?.tags||[]).slice(0,3).map(t=>`<span class="badge gray" style="font-size:.7rem">${esc(t)}</span>`).join(' ');
   const assignee = vols.find(v=>v.id===j.assigned_to);
-  const assignSel = isCoord() ? `<select style="width:auto;font-size:.78rem;padding:4px 6px" onchange="assignJourney('${j.id}', this.value)">
+  const isPending = j.status==='pending';
+  const statusBadge = isPending ? '<span class="badge gray">not calling</span>'
+    : j.status==='completed' ? '<span class="badge green">done</span>'
+    : '<span class="badge">calling</span>';
+  const cb = (isCoord() && isPending)
+    ? `<input type="checkbox" class="nm-cb" data-jid="${j.id}" ${NM_SEL.has(j.id)?'checked':''} onchange="nmToggle('${j.id}',this.checked)" style="width:20px;height:20px;flex-shrink:0;margin-right:4px">`
+    : '';
+  const assignSel = (isCoord() && !isPending) ? `<select style="width:auto;font-size:.78rem;padding:4px 6px" onchange="assignJourney('${j.id}', this.value)">
     <option value="">-- assign --</option>
     ${vols.map(v=>`<option value="${v.id}" ${v.id===j.assigned_to?'selected':''}>${esc(v.full_name||v.email)}</option>`).join('')}
   </select>` : '';
   const wa = p?.phone ? `https://wa.me/91${p.phone}?text=${encodeURIComponent(WA_MSG.new_meditator(p.full_name.split(' ')[0]))}` : null;
   return `<div class="row">
+    ${cb}
     <div class="grow">
-      <div class="name">${esc(p?.full_name||'?')}
-        ${j.status==='completed'?'<span class="badge green">done</span>':''}
-        ${tags}</div>
-      <div class="sub">IE: ${fmtD(p?.ie_date||j.program_date)} - ${centerName(p?.center_id)} - calls ${done}/${total}
+      <div class="name">${esc(p?.full_name||'?')} ${statusBadge} ${tags}</div>
+      <div class="sub">IE: ${fmtD(p?.ie_date||j.program_date)} - ${centerName(p?.center_id)}${isPending?'':` - calls ${done}/${total}`}
         ${j.sadhana_status?` - <b>${esc(j.sadhana_status)}</b>`:''}
         ${assignee?` - ${esc(assignee.full_name||assignee.email)}`:''}</div>
     </div>
@@ -336,15 +411,15 @@ async function renderMeditatorsList(tabBar){
     </div>
   </div>`;
 
-  let q = sb.from('people').select('id, full_name, phone, pincode, center_id, tags, ie_date, bsp_date, shoonya_date, samyama_date, source, created_at')
-    .eq('is_meditator', true).order('ie_date', {ascending:false}).limit(400);
-  if(f.center) q = q.eq('center_id', f.center);
-  if(f.tag) q = q.contains('tags', [f.tag]);
-  if(f.dateFrom) q = q.gte('ie_date', f.dateFrom);
-  if(f.dateTo) q = q.lte('ie_date', f.dateTo);
-
-  const {data:people, error} = await q;
-  let rows = people||[];
+  let rows = await fetchAll(() => {
+    let q = sb.from('people').select('id, full_name, phone, pincode, center_id, tags, ie_date, bsp_date, shoonya_date, samyama_date, guru_puja_date, source, created_at')
+      .eq('is_meditator', true).order('ie_date', {ascending:false});
+    if(f.center) q = q.eq('center_id', f.center);
+    if(f.tag) q = q.contains('tags', [f.tag]);
+    if(f.dateFrom) q = q.gte('ie_date', f.dateFrom);
+    if(f.dateTo) q = q.lte('ie_date', f.dateTo);
+    return q;
+  });
   if(f.search){
     const s = f.search.toLowerCase();
     rows = rows.filter(p=>p.full_name?.toLowerCase().includes(s)||p.phone?.includes(s));
@@ -358,10 +433,10 @@ async function renderMeditatorsList(tabBar){
 
 function meditatorDetailRow(p){
   const tags = (p.tags||[]).slice(0,4).map(t=>`<span class="badge gray" style="font-size:.68rem">${esc(t)}</span>`).join(' ');
-  const adv = [p.bsp_date&&`BSP: ${fmtD(p.bsp_date)}`, p.shoonya_date&&`Shoonya:${fmtD(p.shoonya_date)}`, p.samyama_date&&`Samyama:${fmtD(p.samyama_date)}`].filter(Boolean).join(' - ');
+  const adv = [p.bsp_date&&`BSP: ${fmtD(p.bsp_date)}`, p.shoonya_date&&`Shoonya:${fmtD(p.shoonya_date)}`, p.samyama_date&&`Samyama:${fmtD(p.samyama_date)}`, p.guru_puja_date&&`Guru Puja:${fmtD(p.guru_puja_date)}`].filter(Boolean).join(' - ');
   const wa = p.phone ? `https://wa.me/91${p.phone}?text=${encodeURIComponent(WA_MSG.meditator(p.full_name.split(' ')[0]))}` : null;
   return `<div class="row">
-    <div class="grow" onclick="showMeditatorDetail(${JSON.stringify({id:p.id,n:p.full_name,ph:p.phone,ie:p.ie_date,bsp:p.bsp_date,sh:p.shoonya_date,sam:p.samyama_date,tags:p.tags||[],ctr:p.center_id}).replace(/'/g,"&#39;").replace(/"/g,'&quot;')})">
+    <div class="grow" onclick="showMeditatorDetail(${JSON.stringify({id:p.id,n:p.full_name,ph:p.phone,ie:p.ie_date,bsp:p.bsp_date,sh:p.shoonya_date,sam:p.samyama_date,gp:p.guru_puja_date,tags:p.tags||[],ctr:p.center_id}).replace(/'/g,"&#39;").replace(/"/g,'&quot;')})">
       <div class="name" style="cursor:pointer">${esc(p.full_name)} ${tags}</div>
       <div class="sub">IE: ${fmtD(p.ie_date)} - ${centerName(p.center_id)}${adv?' - '+adv:''}</div>
     </div>
@@ -379,6 +454,7 @@ function showMeditatorDetail(d){
     ${d.bsp?`<p>BSP: ${fmtD(d.bsp)}</p>`:''}
     ${d.sh?`<p>Shoonya: ${fmtD(d.sh)}</p>`:''}
     ${d.sam?`<p>Samyama: ${fmtD(d.sam)}</p>`:''}
+    ${d.gp?`<p>Guru Puja: ${fmtD(d.gp)}</p>`:''}
     ${tags?`<p style="margin-top:8px">Tags: ${tags}</p>`:''}
     ${isCoord()?`<button class="btn block" style="margin-top:12px" onclick='closeModal();startNurturing(${JSON.stringify({pid:d.id,name:d.n}).replace(/'/g,"&#39;")})'>Add to nurturing calls</button>`:''}
   `);
@@ -408,77 +484,129 @@ async function saveNurturing(pid){
   closeModal(); toast('Journey created -- will appear in Today\'s calls');
 }
 
-/* ---- Advanced Programs ---- */
+/* ---- Advanced Programs (per-program: Completed this week + Interested) ---- */
 async function renderAdvancedList(tabBar){
   const f = PF.advanced;
+  const meta = ADV_PROGS.find(p=>p[0]===f.program) || ADV_PROGS[0];
+  const col = meta[2], label = meta[1];
+  const sync = advSync();
   const centerOpts = `<option value="">All Centers</option>${CENTERS.map(c=>`<option value="${c.id}" ${f.center===c.id?'selected':''}>${c.name}</option>`).join('')}`;
-  const progOpts = `<option value="">All Programs</option>
-    <option value="bsp" ${f.program==='bsp'?'selected':''}>BSP (Bhava Spandana)</option>
-    <option value="shoonya" ${f.program==='shoonya'?'selected':''}>Shoonya</option>
-    <option value="samyama" ${f.program==='samyama'?'selected':''}>Samyama</option>`;
 
   let h = tabBar;
+  // program picker
+  h += `<div class="tabs">${ADV_PROGS.map(([v,l])=>
+    `<button class="${f.program===v?'active':''}" onclick="PF.advanced.program='${v}';renderPeople()">${l}</button>`).join('')}</div>`;
+  // completed vs interested
+  h += `<div class="choices" style="margin:8px 0;gap:6px">
+    <button class="${f.view==='completed'?'sel':''}" onclick="PF.advanced.view='completed';renderPeople()">Completed</button>
+    <button class="${f.view==='interested'?'sel':''}" onclick="PF.advanced.view='interested';renderPeople()">Interested (paper)</button>
+  </div>`;
+  // common filters
   h += `<div class="card" style="padding:10px">
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-      <select style="width:auto" onchange="PF.advanced.center=this.value;renderPeople()">
-        ${centerOpts}</select>
-      <select style="width:auto" onchange="PF.advanced.program=this.value;renderPeople()">
-        ${progOpts}</select>
-      <input type="date" title="Program date from" value="${f.dateFrom}"
-        onchange="PF.advanced.dateFrom=this.value;renderPeople()" style="width:130px">
-      <input type="date" title="Program date to" value="${f.dateTo}"
-        onchange="PF.advanced.dateTo=this.value;renderPeople()" style="width:130px">
-      <input placeholder="Search name" style="flex:1;min-width:130px" value="${esc(f.search)}"
+      <select style="width:auto" onchange="PF.advanced.center=this.value;renderPeople()">${centerOpts}</select>
+      <input placeholder="Search name/phone" style="flex:1;min-width:140px" value="${esc(f.search)}"
         oninput="PF.advanced.search=this.value" onkeydown="if(event.key==='Enter')renderPeople()">
       <button class="btn small ghost" onclick="renderPeople()">Search</button>
     </div>
   </div>`;
 
-  // Build query -- filter by which program has a date
-  let q = sb.from('people').select('id, full_name, phone, center_id, tags, ie_date, bsp_date, shoonya_date, samyama_date')
-    .eq('is_meditator', true).order('created_at', {ascending:false}).limit(500);
-  if(f.center) q = q.eq('center_id', f.center);
-  if(f.program === 'bsp') q = q.not('bsp_date', 'is', null);
-  else if(f.program === 'shoonya') q = q.not('shoonya_date', 'is', null);
-  else if(f.program === 'samyama') q = q.not('samyama_date', 'is', null);
-  else q = q.or('bsp_date.not.is.null,shoonya_date.not.is.null,samyama_date.not.is.null');
-
-  if(f.dateFrom || f.dateTo){
-    // filter the selected program's date range
-    const col = f.program==='shoonya'?'shoonya_date':f.program==='samyama'?'samyama_date':'bsp_date';
-    if(f.dateFrom) q = q.gte(col, f.dateFrom);
-    if(f.dateTo) q = q.lte(col, f.dateTo);
+  if(f.view === 'completed'){
+    h += `<div class="card" style="padding:10px">
+      <div class="choices" style="gap:6px">
+        <button class="${f.window==='week'?'sel':''}" onclick="PF.advanced.window='week';renderPeople()">New this week</button>
+        <button class="${f.window==='all'?'sel':''}" onclick="PF.advanced.window='all';renderPeople()">All since ${fmtD(sync.go_live_date)}</button>
+      </div>
+      <p class="muted" style="font-size:.78rem;margin-top:8px">Completed ${esc(label)} come from the weekly Ishangam scrape. Last synced: <b>${fmtD(sync.last_sync_date)}</b>.
+        ${isCoord()?`<button class="btn small ghost" onclick="markSynced()" style="margin-left:6px">I synced today</button>`:''}</p>
+    </div>`;
+    const winStart = f.window==='week' ? sync.prev_sync_date : sync.go_live_date;
+    let rows = await fetchAll(() => {
+      let q = sb.from('people').select(`id, full_name, phone, center_id, tags, ${col}`)
+        .eq('is_meditator', true).not(col,'is',null).gte(col, winStart).order(col,{ascending:false});
+      if(f.center) q = q.eq('center_id', f.center);
+      return q;
+    });
+    if(f.search){ const s=f.search.toLowerCase(); rows = rows.filter(p=>p.full_name?.toLowerCase().includes(s)||p.phone?.includes(s)); }
+    h += `<div class="card"><h2>Completed ${esc(label)} <span class="badge">${rows.length}</span></h2>`;
+    h += rows.length ? rows.map(p=>advCompletedRow(p,col,label)).join('')
+      : `<div class="empty">No ${esc(label)} completions in this window.<br>Run the weekly Ishangam scrape, then press "I synced today".</div>`;
+    h += '</div>';
+  } else {
+    if(isCoord()) h += `<div style="margin:6px 0"><button class="btn small green" onclick="openAddInterest('${f.program}')">+ Add interested (from paper)</button></div>`;
+    let rows = await fetchAll(() => sb.from('advanced_interest')
+      .select('id, program, interest_date, status, notes, people!inner(id, full_name, phone, center_id, tags)')
+      .eq('program', f.program).order('interest_date',{ascending:false}));
+    if(f.center) rows = rows.filter(r=>r.people?.center_id===f.center);
+    if(f.search){ const s=f.search.toLowerCase(); rows = rows.filter(r=>r.people?.full_name?.toLowerCase().includes(s)||r.people?.phone?.includes(s)); }
+    h += `<div class="card"><h2>Interested in ${esc(label)} <span class="badge">${rows.length}</span></h2>
+      <p class="muted" style="font-size:.78rem;margin-bottom:6px">People who said on paper they want to do ${esc(label)}. Reach out and help them register.</p>`;
+    h += rows.length ? rows.map(r=>advInterestRow(r,label)).join('')
+      : `<div class="empty">No interest entries yet. Use "+ Add interested" to enter your paper list.</div>`;
+    h += '</div>';
   }
-
-  const {data:people} = await q;
-  let rows = people||[];
-  if(f.search){
-    const s = f.search.toLowerCase();
-    rows = rows.filter(p=>p.full_name?.toLowerCase().includes(s)||p.phone?.includes(s));
-  }
-
-  h += `<div class="card"><h2>Advanced Program Completers <span class="badge">${rows.length}</span></h2>`;
-  h += rows.length ? rows.map(p=>advancedRow(p)).join('') : '<div class="empty">No records matching filters.</div>';
-  h += '</div>';
   view().innerHTML = h;
 }
 
-function advancedRow(p){
-  const progs = [
-    p.bsp_date && `BSP: ${fmtD(p.bsp_date)}`,
-    p.shoonya_date && `Shoonya: ${fmtD(p.shoonya_date)}`,
-    p.samyama_date && `Samyama: ${fmtD(p.samyama_date)}`
-  ].filter(Boolean).join(' - ');
+function advCompletedRow(p, col, label){
   const wa = p.phone ? `https://wa.me/91${p.phone}?text=${encodeURIComponent(WA_MSG.advanced(p.full_name.split(' ')[0]))}` : null;
   return `<div class="row">
     <div class="grow">
       <div class="name">${esc(p.full_name)}</div>
-      <div class="sub">${progs} - ${centerName(p.center_id)}</div>
+      <div class="sub">${esc(label)}: ${fmtD(p[col])} - ${centerName(p.center_id)}</div>
     </div>
     ${p.phone?`<a class="iconbtn call" href="tel:+91${p.phone}">Call</a>`:''}
     ${wa?`<a class="iconbtn wa" href="${wa}" target="_blank">WA</a>`:''}
     ${isCoord()?`<button class="btn small ghost" onclick='startNurturing(${JSON.stringify({pid:p.id,name:p.full_name}).replace(/'/g,"&#39;")})'>Nurture</button>`:''}
   </div>`;
+}
+
+function advInterestRow(r, label){
+  const p = r.people || {};
+  const wa = p.phone ? `https://wa.me/91${p.phone}?text=${encodeURIComponent('Namaskaram '+(p.full_name||'').split(' ')[0]+' -- You had expressed interest in '+label+'. We would love to help you register. When is a good time to talk?')}` : null;
+  const statusSel = isCoord() ? `<select style="width:auto;font-size:.75rem;padding:4px 6px" onchange="setInterestStatus('${r.id}',this.value)">
+    ${['new','contacted','registered','done','dropped'].map(s=>`<option value="${s}" ${r.status===s?'selected':''}>${s}</option>`).join('')}
+  </select>` : '';
+  return `<div class="row">
+    <div class="grow">
+      <div class="name">${esc(p.full_name||'?')} <span class="badge ${r.status==='registered'||r.status==='done'?'green':'gray'}">${esc(r.status)}</span></div>
+      <div class="sub">Interested: ${fmtD(r.interest_date)} - ${centerName(p.center_id)}${r.notes?' - '+esc(r.notes):''}</div>
+    </div>
+    ${p.phone?`<a class="iconbtn call" href="tel:+91${p.phone}">Call</a>`:''}
+    ${wa?`<a class="iconbtn wa" href="${wa}" target="_blank">WA</a>`:''}
+    ${statusSel}
+  </div>`;
+}
+
+function openAddInterest(program){
+  const label = (ADV_PROGS.find(p=>p[0]===program)||[])[1] || program;
+  modal(`<h3>Add interest -- ${esc(label)}</h3>
+    <p class="muted">Enter a person from your paper list who wants to do ${esc(label)}.</p>
+    <label>Full name</label><input id="ai-name">
+    <label>Phone (10-digit)</label><input id="ai-phone" inputmode="numeric">
+    <label>Pincode (optional)</label><input id="ai-pin" inputmode="numeric" placeholder="auto-routes to center">
+    <label>Notes (optional)</label><textarea id="ai-notes" placeholder="e.g. wants the June batch"></textarea>
+    <button class="btn block" onclick="saveAddInterest('${program}')">Save</button>`);
+}
+async function saveAddInterest(program){
+  const name = $('ai-name').value.trim(), phone = $('ai-phone').value.trim();
+  if(!name && !phone) return toast('Name or phone required');
+  const {data, error} = await sb.rpc('add_advanced_interest', {
+    p_name:name, p_phone:phone, p_program:program,
+    p_notes:$('ai-notes').value||null, p_pincode:$('ai-pin').value||null});
+  if(error) return toast(error.message);
+  if(data?.error) return toast(data.error);
+  closeModal(); toast('Interest saved'); renderPeople();
+}
+async function setInterestStatus(id, status){
+  const {error} = await sb.from('advanced_interest').update({status}).eq('id', id);
+  toast(error?error.message:'Updated');
+}
+async function markSynced(){
+  const {data, error} = await sb.rpc('mark_advanced_sync');
+  if(error) return toast(error.message);
+  if(data) SETTINGS.advanced_sync = data;
+  toast('Marked synced today'); renderPeople();
 }
 
 /* ---- Ashram/SSB Volunteers ---- */
@@ -650,19 +778,25 @@ async function runImport(){
 const INTERESTS = ['Online Calling','Online Operations','Offline Programs','Sadhguru Sannidhi','E-Media','Promotions','Devi Seva','Event Setup','Cooking/Annadanam','Transport'];
 let VFILTER = {center:'', interest:'', mode:'', timing:'', space:false};
 let SHORTLIST = [];
+let VOL_TAB = 'new';   // 'new' = new volunteer interest | 'all' = all existing volunteers
+const isNewInterest = v => v.status==='new' || v.screened!==true;
 
 async function renderVols(){
   view().innerHTML = '<div class="empty">Loading...</div>';
-  let q = sb.from('volunteer_profiles')
+  const vps = await fetchAll(() => sb.from('volunteer_profiles')
     .select('*, people!inner(id, full_name, phone, pincode, center_id)')
-    .order('updated_at', {ascending:false}).limit(500);
-  const {data:vps, error} = await q;
-  if(error){ view().innerHTML=`<div class="empty">${esc(error.message)}</div>`; return; }
-  const {data:hist} = await sb.from('volunteer_history').select('person_id, activity, happened_on').order('happened_on',{ascending:false}).limit(2000);
+    .order('updated_at', {ascending:false}));
+  const hist = await fetchAll(() => sb.from('volunteer_history')
+    .select('person_id, activity, happened_on').order('happened_on',{ascending:false}));
   const histBy = {};
   (hist||[]).forEach(r=>{ (histBy[r.person_id] ||= []).push(r); });
 
+  // split into the two folders the team asked for
+  const newCount = (vps||[]).filter(isNewInterest).length;
+  const allCount = (vps||[]).length;
+
   const list = (vps||[]).filter(v=>{
+    if(VOL_TAB==='new' && !isNewInterest(v)) return false;
     if(VFILTER.center && v.people.center_id!==VFILTER.center) return false;
     if(VFILTER.interest && !(v.interests||[]).includes(VFILTER.interest)) return false;
     if(VFILTER.mode && v.mode!==VFILTER.mode && v.mode!=='both') return false;
@@ -680,6 +814,12 @@ async function renderVols(){
     <button class="btn small ghost" onclick="openGFormHelp()">Google Form</button>
     <button class="btn small green" onclick="openNewActivity()">Create Event</button>
     ${SHORTLIST.length?`<button class="btn small green" onclick="shareShortlist()">Share shortlist (${SHORTLIST.length})</button>`:''}
+  </div>`;
+
+  // two folders: new volunteer interest | all existing volunteers
+  h += `<div class="tabs">
+    <button class="${VOL_TAB==='new'?'active':''}" onclick="VOL_TAB='new';renderVols()">New volunteer interest <span class="badge">${newCount}</span></button>
+    <button class="${VOL_TAB==='all'?'active':''}" onclick="VOL_TAB='all';renderVols()">All existing volunteers <span class="badge">${allCount}</span></button>
   </div>`;
 
   // Recent events (compact)
@@ -709,7 +849,7 @@ async function renderVols(){
         <option value="weekday_evening">Weekday PM</option><option value="weekend">Weekends</option></select>
       <button class="${VFILTER.space?'sel':''}" onclick="VFILTER.space=!VFILTER.space;renderVols()">Can offer space</button>
     </div></div>
-  <div class="card"><h2>Volunteers <span class="badge">${list.length}</span></h2>`;
+  <div class="card"><h2>${VOL_TAB==='new'?'New volunteer interest':'All existing volunteers'} <span class="badge">${list.length}</span></h2>`;
   h += list.length ? list.map(v=>volRow(v, histBy[v.person_id]||[])).join('') : '<div class="empty">No matches.</div>';
   h += '</div>';
   view().innerHTML = h;
@@ -769,8 +909,7 @@ function shareShortlist(){
     '<button class="btn ghost block" onclick="navigator.clipboard.writeText(' + JSON.stringify(txt) + ');toast(\'Copied\')">Copy text</button>');
 }
 
-/* ---- volunteer interest form ---- */
-const INTERESTS = ['Online Calling','Online Operations','Offline Programs','Sadhguru Sannidhi','E-Media','Promotions','Devi Seva','Event Setup','Cooking/Annadanam','Transport'];
+/* ---- volunteer interest form (INTERESTS declared once near top) ---- */
 function volFormHTML(pre){
   pre = pre || {};
   return '<label>Name</label><input id="vf-name" value="' + esc(pre.name||'') + '">' +
