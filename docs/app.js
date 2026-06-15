@@ -524,7 +524,7 @@ async function renderAdvancedList(tabBar){
   // completed vs interested
   h += `<div class="choices" style="margin:8px 0;gap:6px">
     <button class="${f.view==='completed'?'sel':''}" onclick="PF.advanced.view='completed';renderPeople()">✅ Completed</button>
-    <button class="${f.view==='interested'?'sel':''}" onclick="PF.advanced.view='interested';renderPeople()">✋ Interested (paper)</button>
+    <button class="${f.view==='interested'?'sel':''}" onclick="PF.advanced.view='interested';renderPeople()">✋ Interested</button>
   </div>`;
   // common filters
   h += `<div class="card" style="padding:10px">
@@ -566,7 +566,7 @@ async function renderAdvancedList(tabBar){
     if(f.center) rows = rows.filter(r=>r.people?.center_id===f.center);
     if(f.search){ const s=f.search.toLowerCase(); rows = rows.filter(r=>r.people?.full_name?.toLowerCase().includes(s)||r.people?.phone?.includes(s)); }
     h += `<div class="card"><h2>✋ Interested in ${esc(label)} <span class="badge">${rows.length}</span></h2>
-      <p class="muted" style="font-size:.78rem;margin-bottom:6px">People who said on paper they want to do ${esc(label)}. Reach out and help them register.</p>`;
+      <p class="muted" style="font-size:.78rem;margin-bottom:6px">People interested in ${esc(label)} — from Ishangam willingness + paper sign-ups. Reach out and help them register.</p>`;
     h += rows.length ? rows.map(r=>advInterestRow(r,label)).join('')
       : `<div class="empty">No interest entries yet. Use "+ Add interested" to enter your paper list.</div>`;
     h += '</div>';
