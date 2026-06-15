@@ -814,7 +814,8 @@ const INTERESTS = ['Online Calling','Online Operations','Offline Programs','Sadh
 let VFILTER = {center:'', interest:'', mode:'', timing:'', space:false};
 let SHORTLIST = [];
 let VOL_TAB = 'new';   // 'new' = new volunteer interest | 'all' = all existing volunteers
-const isNewInterest = v => v.status==='new' || v.screened!==true;
+// "New interest" = only fresh submissions (added via form / photo OCR / CSV), marked status 'new'.
+const isNewInterest = v => v.status==='new';
 
 async function renderVols(){
   view().innerHTML = '<div class="empty">Loading...</div>';
@@ -1004,7 +1005,7 @@ async function saveVolForm(){
   const {data:p} = await sb.from('people').select('id').eq('phone', ph).single();
   if(p) await sb.from('volunteer_profiles').update({
     programs_done:$('vf-progs').value||null, languages:$('vf-lang').value||null,
-    screening_notes:$('vf-notes').value||null}).eq('person_id', p.id);
+    screening_notes:$('vf-notes').value||null, status:'new'}).eq('person_id', p.id);
   closeModal(); toast('Saved!'); renderVols();
 }
 
