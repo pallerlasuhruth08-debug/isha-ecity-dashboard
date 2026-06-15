@@ -35,7 +35,7 @@ Open https://ishangam.isha.in , sign in, open DevTools Console (F12), paste:
     email:cl(r.email), pincode:cl(r.zip), city:cl(r.city), street:cl(r.street), gender:g(r.gender),
     occupation:cl(r.occupation), date_of_birth:r.dob||null, ie_date:r.ie_date||null,
     bsp_date:r.bsp_date||null, shoonya_date:r.shoonya_date||null, samyama_date:r.samyama_date||null,
-    tags:[...new Set([...(r.category_id||[]).map(i=>cm[i]).filter(Boolean),...(r.pgm_tag_ids||[]).map(i=>pm[i]).filter(Boolean)])],
+    tags:(r.pgm_tag_ids||[]).map(i=>pm[i]).filter(Boolean), // Program Tags only (per team choice)
     is_meditator:true, source:'ishangam'}));
   const interest=[];
   all.forEach(r=>{const ph=String(r.mobile||r.phone||'').replace(/\D/g,'').slice(-10); if(ph.length!==10)return;
