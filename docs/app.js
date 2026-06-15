@@ -540,15 +540,16 @@ async function renderAdvancedList(tabBar){
     h += `<div class="card" style="padding:10px">
       <div class="choices" style="gap:6px">
         <button class="${f.window==='week'?'sel':''}" onclick="PF.advanced.window='week';renderPeople()">New this week</button>
-        <button class="${f.window==='all'?'sel':''}" onclick="PF.advanced.window='all';renderPeople()">All since ${fmtD(sync.go_live_date)}</button>
+        <button class="${f.window==='all'?'sel':''}" onclick="PF.advanced.window='all';renderPeople()">All completers</button>
       </div>
-      <p class="muted" style="font-size:.78rem;margin-top:8px">Completed ${esc(label)} come from the weekly Ishangam scrape. Last synced: <b>${fmtD(sync.last_sync_date)}</b>.
+      <p class="muted" style="font-size:.78rem;margin-top:8px">Completed ${esc(label)} from Ishangam. Last synced: <b>${fmtD(sync.last_sync_date)}</b>.
         ${isCoord()?`<button class="btn small ghost" onclick="markSynced()" style="margin-left:6px">🔄 I synced today</button>`:''}</p>
     </div>`;
-    const winStart = f.window==='week' ? sync.prev_sync_date : sync.go_live_date;
+    const winStart = f.window==='week' ? sync.prev_sync_date : null;   // 'all' = every completer, any date
     let rows = await fetchAll(() => {
       let q = sb.from('people').select(`id, full_name, phone, center_id, tags, ${col}`)
-        .eq('is_meditator', true).not(col,'is',null).gte(col, winStart).order(col,{ascending:false});
+        .eq('is_meditator', true).not(col,'is',null).order(col,{ascending:false});
+      if(winStart) q = q.gte(col, winStart);
       if(f.center) q = q.eq('center_id', f.center);
       return q;
     });
