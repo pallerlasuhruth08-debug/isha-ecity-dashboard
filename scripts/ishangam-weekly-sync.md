@@ -17,8 +17,9 @@ Open https://ishangam.isha.in , sign in, then open DevTools Console
     headers:{'Content-Type':'application/json'},
     body:JSON.stringify({jsonrpc:"2.0",method:"call",params:{model:m,method:me,args:a,kwargs:k}})}).then(r=>r.json());
   const CENTER=584; // Electronic City (isha.center id)
-  const domain=[['center_id','=',CENTER],['ie_date','!=',false]];
-  const fields=['name','mobile','phone','email','zip','city','street','gender','occupation','dob','ie_date','category_id','pgm_tag_ids'];
+  // E-City AND (has IE OR BSP OR Shoonya OR Samyama date)
+  const domain=[['center_id','=',CENTER],'|','|','|',['ie_date','!=',false],['bsp_date','!=',false],['shoonya_date','!=',false],['samyama_date','!=',false]];
+  const fields=['name','mobile','phone','email','zip','city','street','gender','occupation','dob','ie_date','bsp_date','shoonya_date','samyama_date','category_id','pgm_tag_ids'];
   let all=[],off=0;
   while(true){const r=await rpc('res.partner','search_read',[domain,fields],{limit:1000,offset:off});
     const rows=r.result||[];all=all.concat(rows);if(rows.length<1000)break;off+=1000;if(off>20000)break;}
@@ -32,6 +33,7 @@ Open https://ishangam.isha.in , sign in, then open DevTools Console
     full_name:cl(r.name)||'(no name)', phone:String(r.mobile||r.phone).replace(/\D/g,'').slice(-10),
     email:cl(r.email), pincode:cl(r.zip), city:cl(r.city), street:cl(r.street), gender:g(r.gender),
     occupation:cl(r.occupation), date_of_birth:r.dob||null, ie_date:r.ie_date||null,
+    bsp_date:r.bsp_date||null, shoonya_date:r.shoonya_date||null, samyama_date:r.samyama_date||null,
     tags:[...new Set([...(r.category_id||[]).map(i=>cm[i]).filter(Boolean),
                       ...(r.pgm_tag_ids||[]).map(i=>pm[i]).filter(Boolean)])],
     is_meditator:true, source:'ishangam'}));
