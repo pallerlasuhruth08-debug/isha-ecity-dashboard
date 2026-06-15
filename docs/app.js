@@ -227,11 +227,11 @@ const advSync = () => SETTINGS.advanced_sync || {go_live_date:today(), last_sync
 const NM_SEL = new Set();
 
 // Common Ishangam tags to filter by
+// Ishangam Program Tags (what we sync onto meditator profiles) — used in the Meditators tag filter
 const COMMON_TAGS = [
-  'IE Ishanga','IE 7 Days English Ishanga','IE 7 Days Hindi Ishanga','IE 7 Days Tamil Ishanga',
-  'IE English Hybrid Ishanga','IE Tamil Hybrid Ishanga','BSP Ishanga','Satsang Ishanga',
-  'Uyir Nokkam','Uyirnokkam Ishanga','IEL','Has Sadhguru Sannidhi','SG App','MoM','IE-Wave',
-  'Nurturer','Caller','Volunteer','Ananda Alai Online','MSR-Complimentary'
+  'IE','IEO','FMF','IEO-R','IE-R','BSP','EOE-R','IECSO-R','Shoonya','LOM','Yogasanas','Samyama',
+  'Surya Kriya','MoM 1st Int','Angamardana','Bhuta Shuddhi','Guru Pooja','Uyir Nokkam',
+  'Free Yoga','SP','CYW','MoM Only'
 ];
 
 async function renderPeople(tab){
