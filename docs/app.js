@@ -1018,12 +1018,12 @@ function openGFormHelp(){
    ============================================================ */
 async function renderInsights(){
   view().innerHTML = '<div class="empty">Loading...</div>';
-  const [{data:js},{data:calls},{data:vh}] = await Promise.all([
-    sb.from('journeys').select('id, type, status, sadhana_status, center_id, assigned_to'),
-    sb.from('calls').select('id, due_date, completed_at, reachability, journey_id'),
-    sb.from('volunteer_history').select('id, person_id, activity, center_id, happened_on')
+  // Exclude 'dropped' journeys (e.g. cleared stale backlog) from all insights.
+  const [J, C, V] = await Promise.all([
+    fetchAll(()=> sb.from('journeys').select('id, type, status, sadhana_status, center_id, assigned_to').neq('status','dropped')),
+    fetchAll(()=> sb.from('calls').select('id, due_date, completed_at, reachability, journey_id, journeys!inner(status)').neq('journeys.status','dropped')),
+    fetchAll(()=> sb.from('volunteer_history').select('id, person_id, activity, center_id, happened_on'))
   ]);
-  const J = js||[], C = calls||[], V = vh||[];
   const open = C.filter(c=>!c.completed_at), done = C.filter(c=>c.completed_at);
   const overdue = open.filter(c=>c.due_date < today());
   const answered = done.filter(c=>c.reachability==='answered');
