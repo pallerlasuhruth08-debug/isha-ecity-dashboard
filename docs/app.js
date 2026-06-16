@@ -532,8 +532,10 @@ async function renderMeditatorsList(tabBar){
 
   // Load the full meditator directory once (cached); filter client-side so
   // changing center/tag/date/search is instant and doesn't re-hit the DB.
+  // Slim columns for the list; the full profile (address/occupation/etc.) is
+  // loaded on demand when a row is tapped (keeps this big fetch light).
   const all = await cached('people_all', () => fetchAll(() => sb.from('people')
-    .select('id,full_name,phone,email,occupation,gender,date_of_birth,area,city,street,pincode,center_id,ie_date,bsp_date,shoonya_date,samyama_date,guru_puja_date,tags')
+    .select('id,full_name,phone,center_id,ie_date,bsp_date,shoonya_date,samyama_date,guru_puja_date,tags')
     .eq('is_meditator', true).order('ie_date', {ascending:false})));
   MED_INDEX = {}; all.forEach(p=>MED_INDEX[p.id]=p);
   const s = (f.search||'').toLowerCase();
@@ -554,7 +556,12 @@ async function renderMeditatorsList(tabBar){
 
 let MED_INDEX = {};
 const medProfile = p => ({id:p.id,n:p.full_name,ph:p.phone,email:p.email,occ:p.occupation,gender:p.gender,dob:p.date_of_birth,area:p.area,city:p.city,street:p.street,pin:p.pincode,ie:p.ie_date,bsp:p.bsp_date,sh:p.shoonya_date,sam:p.samyama_date,gp:p.guru_puja_date,tags:p.tags||[],ctr:p.center_id});
-function showMedById(id){ const p=MED_INDEX[id]; if(p) showMeditatorDetail(medProfile(p)); }
+async function showMedById(id){
+  const p=MED_INDEX[id]; if(!p) return;
+  // fetch the full profile row on demand (list only holds slim columns)
+  const {data} = await sb.from('people').select('id,full_name,phone,email,occupation,gender,date_of_birth,area,city,street,pincode,center_id,ie_date,bsp_date,shoonya_date,samyama_date,guru_puja_date,tags').eq('id', id).single();
+  showMeditatorDetail(medProfile(data||p));
+}
 function nurtureById(id){ const p=MED_INDEX[id]; if(p) startNurturing({pid:p.id,name:p.full_name}); }
 function meditatorDetailRow(p){
   const tags = (p.tags||[]).slice(0,4).map(t=>`<span class="badge gray" style="font-size:.68rem">${esc(t)}</span>`).join(' ');
