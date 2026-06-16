@@ -236,6 +236,10 @@ async function renderToday(){
   const overdue = calls.filter(c=>c.due_date < today());
 
   let h = '';
+  h += `<div style="display:flex;gap:8px;margin:6px 0;flex-wrap:wrap">
+    <button class="btn small green" onclick="openMessageAll()">✉️ Message all</button>
+    <button class="btn small ghost" onclick="openTemplates()">📝 Templates</button>
+  </div>`;
   if(overdue.length) h += `<div class="alert">⚠️ ${overdue.length} overdue call${overdue.length>1?'s':''} -- please catch up today</div>`;
   h += `<div class="card"><h2>📞 Calls due today ${calls.length?`<span class="badge">${calls.length}</span>`:''}</h2>`;
   h += calls.length ? calls.map(callRow).join('') : '<div class="empty">🎉 All caught up -- no calls due.</div>';
@@ -633,6 +637,84 @@ function openPhoto(src){
   d.onclick=()=>d.remove();
   d.innerHTML=`<img src="${esc(src)}" alt="">`;
   document.body.appendChild(d);
+}
+
+/* ---------------- WhatsApp message templates ---------------- */
+let MSG_TPL=null, MSG_PEOPLE=[], MSG_TS=[];
+const loadTemplates = () => cached('templates', async()=>(await sb.from('message_templates').select('*').order('created_at')).data||[]);
+function applyTpl(body, name){
+  const first=((name||'').trim().split(' ')[0])||'';
+  return (body||'').replace(/\{name\}/g, first).replace(/\{my_name\}/g, (ME.full_name||ME.email||''));
+}
+async function openTemplates(){
+  const ts = await loadTemplates();
+  let h = `<h3>📝 Message templates</h3>
+    <p class="muted" style="font-size:.8rem">Use <b>{name}</b> for the person's first name and <b>{my_name}</b> for your name.</p>`;
+  h += ts.map(t=>`<div class="row"><div class="grow"><div class="name">${esc(t.name)}</div>
+      <div class="sub" style="white-space:pre-wrap">${esc(t.body)}</div></div>
+      <button class="btn small gray" onclick="editTemplate('${t.id}')">Edit</button>
+      <button class="btn small gray" onclick="delTemplate('${t.id}')">Delete</button></div>`).join('')
+    || '<div class="empty">No templates yet.</div>';
+  h += `<button class="btn block" style="margin-top:10px" onclick="editTemplate('')">➕ New template</button>`;
+  modal(h);
+}
+async function editTemplate(id){
+  const ts = await loadTemplates();
+  const t = ts.find(x=>x.id===id) || {name:'',body:''};
+  modal(`<h3>${id?'Edit':'New'} template</h3>
+    <label>Name</label><input id="tpl-name" value="${esc(t.name)}" placeholder="e.g. First call">
+    <label>Message</label><textarea id="tpl-body" style="min-height:130px">${esc(t.body)}</textarea>
+    <div class="choices" style="margin-top:6px">
+      <button onclick="insTpl('{name}')">+ {name}</button>
+      <button onclick="insTpl('{my_name}')">+ {my_name}</button>
+    </div>
+    <button class="btn block" style="margin-top:10px" onclick="saveTemplate('${id}')">Save</button>`);
+}
+function insTpl(tok){ const ta=$('tpl-body'); if(!ta)return; const a=ta.selectionStart??ta.value.length, b=ta.selectionEnd??a;
+  ta.value=ta.value.slice(0,a)+tok+ta.value.slice(b); ta.focus(); ta.selectionStart=ta.selectionEnd=a+tok.length; }
+async function saveTemplate(id){
+  const name=($('tpl-name').value||'').trim()||'Template'; const body=$('tpl-body').value||'';
+  const res = id ? await sb.from('message_templates').update({name,body}).eq('id',id)
+                 : await sb.from('message_templates').insert({name,body});
+  if(res.error) return toast(res.error.message);
+  toast('Saved'); openTemplates();
+}
+async function delTemplate(id){
+  const {error}=await sb.from('message_templates').delete().eq('id',id);
+  if(error) return toast(error.message);
+  toast('Deleted'); openTemplates();
+}
+async function openMessageAll(){
+  const ts = await loadTemplates();
+  if(!ts.length){ toast('Create a template first'); return openTemplates(); }
+  MSG_TS = ts;
+  if(!MSG_TPL || !ts.find(t=>t.id===MSG_TPL)) MSG_TPL = ts[0].id;
+  const js = await fetchAll(()=> sb.from('journeys')
+    .select('assigned_to, status, people(id, full_name, phone)')
+    .eq('assigned_to', ME.id).neq('status','dropped'));
+  const seen=new Map();
+  (js||[]).forEach(j=>{ const p=j.people; if(p && p.phone && !seen.has(p.id)) seen.set(p.id,p); });
+  MSG_PEOPLE=[...seen.values()];
+  renderMessageAll();
+}
+function renderMessageAll(){
+  const t = MSG_TS.find(x=>x.id===MSG_TPL) || MSG_TS[0];
+  const sample = applyTpl(t.body, MSG_PEOPLE[0] ? MSG_PEOPLE[0].full_name : 'Name');
+  let h = `<h3>✉️ Message all <span class="badge">${MSG_PEOPLE.length}</span></h3>
+    <label>Template</label>
+    <select onchange="MSG_TPL=this.value;renderMessageAll()">${MSG_TS.map(x=>`<option value="${x.id}" ${x.id===MSG_TPL?'selected':''}>${esc(x.name)}</option>`).join('')}</select>
+    <button class="btn small ghost" style="margin:8px 0" onclick="openTemplates()">📝 Edit templates</button>
+    <div class="card" style="padding:10px;white-space:pre-wrap;font-size:.9rem">${esc(sample)||'<span class="muted">(empty template)</span>'}</div>
+    <p class="muted" style="font-size:.78rem">Tap each person to open WhatsApp with the message ready, then press send. Opened ones dim.</p>
+    <div style="max-height:46vh;overflow:auto">`;
+  h += MSG_PEOPLE.length ? MSG_PEOPLE.map(p=>{
+      const wa=`https://wa.me/91${p.phone}?text=${encodeURIComponent(applyTpl(t.body,p.full_name))}`;
+      return `<div class="row"><div class="grow"><div class="name">${esc(p.full_name||'?')}</div><div class="sub">${esc(p.phone||'')}</div></div>
+        <a class="iconbtn call" href="tel:+91${p.phone}">Call</a>
+        <a class="iconbtn wa" href="${wa}" target="_blank" onclick="this.closest('.row').style.opacity='.45'">WA</a></div>`;
+    }).join('') : '<div class="empty">No one is assigned to you yet.</div>';
+  h += '</div>';
+  modal(h);
 }
 function showMeditatorDetail(d){
   modal(`<h3>${esc(d.n)}</h3>${profileBody(d)}
