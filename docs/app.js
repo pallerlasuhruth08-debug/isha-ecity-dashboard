@@ -181,7 +181,7 @@ function profileSummary(p){
   ].filter(Boolean).join(' · ');
 }
 // Build the data object profileBody() expects from a people row.
-const personToProfile = p => ({n:p.full_name,ph:p.phone,email:p.email,occ:p.occupation,gender:p.gender,dob:p.date_of_birth,area:p.area,city:p.city,street:p.street,pin:p.pincode,ctr:derivedCenter(p),ie:p.ie_date,bsp:p.bsp_date,sh:p.shoonya_date,sam:p.samyama_date,gp:p.guru_puja_date,tags:p.tags||[]});
+const personToProfile = p => ({n:p.full_name,ph:p.phone,email:p.email,occ:p.occupation,gender:p.gender,dob:p.date_of_birth,area:p.area,city:p.city,street:p.street,pin:p.pincode,ctr:derivedCenter(p),ie:p.ie_date,bsp:p.bsp_date,sh:p.shoonya_date,sam:p.samyama_date,gp:p.guru_puja_date,tags:p.tags||[],photo:p.photo_url});
 
 /* ---------------- NAV ---------------- */
 let CURRENT_VIEW = 'today';
@@ -512,9 +512,10 @@ function newMeditatorRow(j, vols){
     ${vols.map(v=>`<option value="${v.id}" ${v.id===j.assigned_to?'selected':''}>${esc(v.full_name||v.email)}</option>`).join('')}
   </select>` : '';
   const wa = p?.phone ? `https://wa.me/91${p.phone}?text=${encodeURIComponent(WA_MSG.new_meditator(p.full_name.split(' ')[0]))}` : null;
-  const prof = JSON.stringify({n:p?.full_name,ph:p?.phone,email:p?.email,occ:p?.occupation,gender:p?.gender,dob:p?.date_of_birth,area:p?.area,city:p?.city,street:p?.street,pin:p?.pincode,ctr:p?.center_id,ie:p?.ie_date||j.program_date,tags:p?.tags||[]}).replace(/'/g,"&#39;").replace(/"/g,'&quot;');
+  const prof = JSON.stringify({n:p?.full_name,ph:p?.phone,email:p?.email,occ:p?.occupation,gender:p?.gender,dob:p?.date_of_birth,area:p?.area,city:p?.city,street:p?.street,pin:p?.pincode,ctr:p?.center_id,ie:p?.ie_date||j.program_date,tags:p?.tags||[],photo:p?.photo_url}).replace(/'/g,"&#39;").replace(/"/g,'&quot;');
   return `<div class="row">
     ${cb}
+    ${p?.photo_url?`<img class="av" src="${esc(p.photo_url)}" loading="lazy" alt="" onclick="showPersonProfile(${prof})" onerror="this.style.display='none'">`:''}
     <div class="grow" style="cursor:pointer" onclick="showPersonProfile(${prof})">
       <div class="name">${esc(p?.full_name||'?')} ${statusBadge} ${tags}</div>
       <div class="sub">IE: ${fmtD(p?.ie_date||j.program_date)} - ${centerName(p?.center_id)}${isPending?'':` - calls ${done}/${total}`}
@@ -560,7 +561,7 @@ async function renderMeditatorsList(tabBar){
   // Slim columns for the list; the full profile (address/occupation/etc.) is
   // loaded on demand when a row is tapped (keeps this big fetch light).
   const all = await cached('people_all', () => fetchAll(() => sb.from('people')
-    .select('id,full_name,phone,center_id,ie_date,bsp_date,shoonya_date,samyama_date,guru_puja_date,tags')
+    .select('id,full_name,phone,center_id,ie_date,bsp_date,shoonya_date,samyama_date,guru_puja_date,tags,photo_url')
     .eq('is_meditator', true).order('ie_date', {ascending:false})));
   MED_INDEX = {}; all.forEach(p=>MED_INDEX[p.id]=p);
   const s = (f.search||'').toLowerCase();
@@ -581,11 +582,11 @@ async function renderMeditatorsList(tabBar){
 }
 
 let MED_INDEX = {};
-const medProfile = p => ({id:p.id,n:p.full_name,ph:p.phone,email:p.email,occ:p.occupation,gender:p.gender,dob:p.date_of_birth,area:p.area,city:p.city,street:p.street,pin:p.pincode,ie:p.ie_date,bsp:p.bsp_date,sh:p.shoonya_date,sam:p.samyama_date,gp:p.guru_puja_date,tags:p.tags||[],ctr:p.center_id});
+const medProfile = p => ({id:p.id,n:p.full_name,ph:p.phone,email:p.email,occ:p.occupation,gender:p.gender,dob:p.date_of_birth,area:p.area,city:p.city,street:p.street,pin:p.pincode,ie:p.ie_date,bsp:p.bsp_date,sh:p.shoonya_date,sam:p.samyama_date,gp:p.guru_puja_date,tags:p.tags||[],ctr:p.center_id,photo:p.photo_url});
 async function showMedById(id){
   const p=MED_INDEX[id]; if(!p) return;
   // fetch the full profile row on demand (list only holds slim columns)
-  const {data} = await sb.from('people').select('id,full_name,phone,email,occupation,gender,date_of_birth,area,city,street,pincode,center_id,ie_date,bsp_date,shoonya_date,samyama_date,guru_puja_date,tags').eq('id', id).single();
+  const {data} = await sb.from('people').select('id,full_name,phone,email,occupation,gender,date_of_birth,area,city,street,pincode,center_id,ie_date,bsp_date,shoonya_date,samyama_date,guru_puja_date,tags,photo_url').eq('id', id).single();
   showMeditatorDetail(medProfile(data||p));
 }
 function nurtureById(id){ const p=MED_INDEX[id]; if(p) startNurturing({pid:p.id,name:p.full_name}); }
@@ -594,6 +595,7 @@ function meditatorDetailRow(p){
   const adv = [p.bsp_date&&`BSP: ${fmtD(p.bsp_date)}`, p.shoonya_date&&`Shoonya:${fmtD(p.shoonya_date)}`, p.samyama_date&&`Samyama:${fmtD(p.samyama_date)}`, p.guru_puja_date&&`Guru Puja:${fmtD(p.guru_puja_date)}`].filter(Boolean).join(' - ');
   const wa = p.phone ? `https://wa.me/91${p.phone}?text=${encodeURIComponent(WA_MSG.meditator((p.full_name||'').split(' ')[0]))}` : null;
   return `<div class="row">
+    ${p.photo_url?`<img class="av" src="${esc(p.photo_url)}" loading="lazy" alt="" onclick="showMedById('${p.id}')" onerror="this.style.display='none'">`:''}
     <div class="grow" style="cursor:pointer" onclick="showMedById('${p.id}')">
       <div class="name">${esc(p.full_name)} ${tags}</div>
       <div class="sub">IE: ${fmtD(p.ie_date)} - ${centerName(p.center_id)}${adv?' - '+adv:''} <span class="muted" style="font-size:.7rem">· tap for profile</span></div>
@@ -610,6 +612,7 @@ function profileBody(d){
   const addr = [d.street,d.area,d.city].filter(Boolean).map(esc).join(', ');
   const progs = [d.bsp&&`BSP ${fmtD(d.bsp)}`, d.sh&&`Shoonya ${fmtD(d.sh)}`, d.sam&&`Samyama ${fmtD(d.sam)}`, d.gp&&`Guru Puja ${fmtD(d.gp)}`].filter(Boolean).join(' · ');
   return `
+    ${d.photo?`<img class="pfp" src="${esc(d.photo)}" alt="" onerror="this.style.display='none'">`:''}
     ${d.ph?`<p>📞 ${esc(d.ph)}</p>`:''}
     ${d.email?`<p>✉️ ${esc(d.email)}</p>`:''}
     <p>🏠 ${addr||'<span class="muted">address not on record</span>'}${d.pin?` · ${esc(d.pin)}`:''}</p>
@@ -693,7 +696,7 @@ async function renderAdvancedList(tabBar){
     </div>`;
     const winStart = f.window==='week' ? sync.prev_sync_date : null;   // 'all' = every completer, any date
     let rows = await fetchAll(() => {
-      let q = sb.from('people').select(`id, full_name, phone, center_id, tags, ${col}`)
+      let q = sb.from('people').select(`id, full_name, phone, center_id, tags, photo_url, ${col}`)
         .eq('is_meditator', true).not(col,'is',null).order(col,{ascending:false});
       if(winStart) q = q.gte(col, winStart);
       if(f.center) q = q.eq('center_id', f.center);
@@ -707,7 +710,7 @@ async function renderAdvancedList(tabBar){
   } else {
     if(isCoord()) h += `<div style="margin:6px 0"><button class="btn small green" onclick="openAddInterest('${f.program}')">✋ Add interested (from paper)</button></div>`;
     let rows = await fetchAll(() => sb.from('advanced_interest')
-      .select('id, program, interest_date, status, notes, people!inner(id, full_name, phone, center_id, tags)')
+      .select('id, program, interest_date, status, notes, people!inner(id, full_name, phone, center_id, tags, photo_url)')
       .eq('program', f.program).order('interest_date',{ascending:false}));
     if(f.center) rows = rows.filter(r=>r.people?.center_id===f.center);
     if(f.search){ const s=f.search.toLowerCase(); rows = rows.filter(r=>r.people?.full_name?.toLowerCase().includes(s)||r.people?.phone?.includes(s)); }
@@ -722,10 +725,12 @@ async function renderAdvancedList(tabBar){
 
 function advCompletedRow(p, col, label){
   const wa = p.phone ? `https://wa.me/91${p.phone}?text=${encodeURIComponent(WA_MSG.advanced(p.full_name.split(' ')[0]))}` : null;
+  const onclk = `showPersonProfile(${JSON.stringify(personToProfile(p)).replace(/'/g,"&#39;")})`;
   return `<div class="row">
-    <div class="grow">
+    ${p.photo_url?`<img class="av" src="${esc(p.photo_url)}" loading="lazy" alt="" onclick='${onclk}' onerror="this.style.display='none'">`:''}
+    <div class="grow" style="cursor:pointer" onclick='${onclk}'>
       <div class="name">${esc(p.full_name)}</div>
-      <div class="sub">${esc(label)}: ${fmtD(p[col])} - ${centerName(p.center_id)}</div>
+      <div class="sub">${esc(label)}: ${fmtD(p[col])} - ${centerName(p.center_id)} <span class="muted" style="font-size:.7rem">· tap for profile</span></div>
     </div>
     ${p.phone?`<a class="iconbtn call" href="tel:+91${p.phone}">Call</a>`:''}
     ${wa?`<a class="iconbtn wa" href="${wa}" target="_blank">WA</a>`:''}
@@ -739,10 +744,12 @@ function advInterestRow(r, label){
   const statusSel = isCoord() ? `<select style="width:auto;font-size:.75rem;padding:4px 6px" onchange="setInterestStatus('${r.id}',this.value)">
     ${['new','contacted','registered','done','dropped'].map(s=>`<option value="${s}" ${r.status===s?'selected':''}>${s}</option>`).join('')}
   </select>` : '';
+  const onclk = `showPersonProfile(${JSON.stringify(personToProfile(p)).replace(/'/g,"&#39;")})`;
   return `<div class="row">
-    <div class="grow">
+    ${p.photo_url?`<img class="av" src="${esc(p.photo_url)}" loading="lazy" alt="" onclick='${onclk}' onerror="this.style.display='none'">`:''}
+    <div class="grow" style="cursor:pointer" onclick='${onclk}'>
       <div class="name">${esc(p.full_name||'?')} <span class="badge ${r.status==='registered'||r.status==='done'?'green':'gray'}">${esc(r.status)}</span></div>
-      <div class="sub">Interested: ${fmtD(r.interest_date)} - ${centerName(p.center_id)}${r.notes?' - '+esc(r.notes):''}</div>
+      <div class="sub">Interested: ${fmtD(r.interest_date)} - ${centerName(p.center_id)}${r.notes?' - '+esc(r.notes):''} <span class="muted" style="font-size:.7rem">· tap for profile</span></div>
     </div>
     ${p.phone?`<a class="iconbtn call" href="tel:+91${p.phone}">Call</a>`:''}
     ${wa?`<a class="iconbtn wa" href="${wa}" target="_blank">WA</a>`:''}
@@ -975,6 +982,7 @@ function icvRow(r, prof){
     : '🪷 IE: '+fmtD(r.ie_date)+(r.program_name?' - '+esc(r.program_name):'')+' · <span class="muted">profile not yet synced</span>';
   const tap = prof ? ` style="cursor:pointer" onclick='showPersonProfile(${JSON.stringify(personToProfile(prof)).replace(/'/g,"&#39;")})'` : '';
   return `<div class="row">
+    ${prof&&prof.photo_url?`<img class="av" src="${esc(prof.photo_url)}" loading="lazy" alt="" onerror="this.style.display='none'">`:''}
     <div class="grow"${tap}>
       <div class="name">${esc(prof?.full_name||r.full_name||'?')} <span class="badge ${r.status==='active'||r.status==='done'?'green':'gray'}">${esc(r.status||'new')}</span></div>
       <div class="sub">${line2}${prof?' <span class="muted" style="font-size:.7rem">· tap for profile</span>':''}</div>
@@ -989,7 +997,7 @@ async function setIcvStatus(id, status){ const {error}=await sb.from('ie_complet
 async function renderVols(){
   view().innerHTML = '<div class="empty">Loading...</div>';
   const vps = await cached('vols', () => fetchAll(() => sb.from('volunteer_profiles')
-    .select('*, people!inner(id, full_name, phone, email, pincode, center_id, ie_date, bsp_date, shoonya_date, samyama_date, guru_puja_date, occupation, gender, date_of_birth, street, city, area, tags)')
+    .select('*, people!inner(id, full_name, phone, email, pincode, center_id, ie_date, bsp_date, shoonya_date, samyama_date, guru_puja_date, occupation, gender, date_of_birth, street, city, area, tags, photo_url)')
     .order('updated_at', {ascending:false})));
   const hist = await cached('vol_hist', () => fetchAll(() => sb.from('volunteer_history')
     .select('person_id, activity, happened_on').order('happened_on',{ascending:false})));
@@ -1051,7 +1059,7 @@ async function renderVols(){
       const map={};
       for(let i=0;i<phones.length;i+=300){
         const {data} = await sb.from('people')
-          .select('id, full_name, phone, email, pincode, center_id, ie_date, bsp_date, shoonya_date, samyama_date, guru_puja_date, occupation, gender, date_of_birth, street, city, area, tags')
+          .select('id, full_name, phone, email, pincode, center_id, ie_date, bsp_date, shoonya_date, samyama_date, guru_puja_date, occupation, gender, date_of_birth, street, city, area, tags, photo_url')
           .in('phone', phones.slice(i,i+300));
         (data||[]).forEach(p=>map[p.phone]=p);
       }
@@ -1157,8 +1165,10 @@ function volRow(v, hist){
   const inSL = SHORTLIST.some(s=>s.id===p.id);
   const interests = (v.interests||[]).join(', ');
   const meta = [v.mode, v.can_offer_space?'space avail.':null, hist.length?(hist.length+' activit'+(hist.length===1?'y':'ies')):null].filter(Boolean).join(' · ');
+  const onclk = `showVolProfile(${JSON.stringify({p:personToProfile(p),id:p.id,interests:v.interests||[],mode:v.mode,space:v.can_offer_space,screened:v.screened,h:hist.slice(0,15)}).replace(/'/g,"&#39;")})`;
   return `<div class="row">
-    <div class="grow" style="cursor:pointer" onclick='showVolProfile(${JSON.stringify({p:personToProfile(p),id:p.id,interests:v.interests||[],mode:v.mode,space:v.can_offer_space,screened:v.screened,h:hist.slice(0,15)}).replace(/'/g,"&#39;")})'>
+    ${p.photo_url?`<img class="av" src="${esc(p.photo_url)}" loading="lazy" alt="" onclick='${onclk}' onerror="this.style.display='none'">`:''}
+    <div class="grow" style="cursor:pointer" onclick='${onclk}'>
       <div class="name">${esc(p.full_name)} ${v.screened?'<span class="badge green">screened</span>':'<span class="badge gray">new</span>'}</div>
       <div class="sub">${profileSummary(p)} <span class="muted" style="font-size:.7rem">· tap for profile</span></div>
       <div class="sub">${interests||'<span class="muted">no interests yet</span>'}${meta?' — '+meta:''}</div>
