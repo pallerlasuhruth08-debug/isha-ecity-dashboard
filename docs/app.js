@@ -191,6 +191,15 @@ function go(v){
   return ({today:renderToday, people:renderPeople, vols:renderVols,
     insights:renderInsights, admin:renderAdmin}[v])();
 }
+// Tap an Insights number to jump straight to the matching list (optionally pre-filtered).
+function drillTo(v, tab, opt){
+  if(tab && PF[tab]){
+    if(opt) Object.assign(PF[tab], opt);
+    if(opt && opt.status==='completed' && !PF[tab].dateFrom){ PF[tab].dateFrom='2018-01-01'; PF[tab].dateTo=today(); }
+  }
+  if(tab) PEOPLE_TAB = tab;
+  go(v);
+}
 
 /* ---------------- MODAL ---------------- */
 function modal(html){
@@ -260,7 +269,8 @@ function callRow(c){
   const j = c.journeys, p = j.people;
   const day = dayInJourney(j);
   const od = c.due_date < today();
-  const wa = p.phone ? `https://wa.me/91${p.phone}?text=${encodeURIComponent((WA_MSG[j.type]||WA_MSG.meditator)(p.full_name.split(' ')[0]))}` : null;
+  const first0 = p.full_name.split(' ')[0];
+  const wa = p.phone ? `https://wa.me/91${p.phone}?text=${encodeURIComponent(decorateMsg((WA_MSG[j.type]||WA_MSG.meditator)(first0), first0))}` : null;
   return `<div class="row">
     <div class="grow">
       <div class="name">${esc(p.full_name)} ${od?'<span class="badge red">overdue</span>':''}</div>
@@ -642,9 +652,22 @@ function openPhoto(src){
 /* ---------------- WhatsApp message templates ---------------- */
 let MSG_TPL=null, MSG_PEOPLE=[], MSG_TS=[];
 const loadTemplates = () => cached('templates', async()=>(await sb.from('message_templates').select('*').order('created_at')).data||[]);
+// Adds the Isha touch to every outgoing WhatsApp message: a 🙏 right after the
+// person's name, and a "Pranam 🙏" closing line. Skips either if already present
+// (so a template that already has them won't get doubled).
+function decorateMsg(text, first){
+  let t = (text||'').replace(/\s+$/,'');
+  if(first && t.indexOf('🙏')===-1){
+    const i = t.indexOf(first);
+    if(i>=0) t = t.slice(0, i+first.length) + ' 🙏' + t.slice(i+first.length);
+  }
+  if(!/pranam/i.test(t)) t = t + '\n\nPranam 🙏';
+  return t;
+}
 function applyTpl(body, name){
   const first=((name||'').trim().split(' ')[0])||'';
-  return (body||'').replace(/\{name\}/g, first).replace(/\{my_name\}/g, (ME.full_name||ME.email||''));
+  const t=(body||'').replace(/\{name\}/g, first).replace(/\{my_name\}/g, (ME.full_name||ME.email||''));
+  return decorateMsg(t, first);
 }
 async function openTemplates(){
   const ts = await loadTemplates();
@@ -1390,13 +1413,14 @@ async function renderInsights(){
   const m1 = J.filter(j=>j.type==='new_meditator');
   const m1done = m1.filter(j=>j.status==='completed').length;
 
+  const tap = 'style="cursor:pointer" ';
   let h = '<div class="stats">' +
-    '<div class="stat"><div class="n">' + m1.length + '</div><div class="l">🌱 New meditators</div></div>' +
-    '<div class="stat"><div class="n">' + m1done + '</div><div class="l">✅ Mandala journeys done</div></div>' +
-    '<div class="stat"><div class="n">' + overdue.length + '</div><div class="l">⏰ Overdue calls</div></div>' +
+    '<div class="stat" ' + tap + 'onclick="drillTo(\'people\',\'new_meditator\')"><div class="n">' + m1.length + '</div><div class="l">🌱 New meditators ›</div></div>' +
+    '<div class="stat" ' + tap + 'onclick="drillTo(\'people\',\'new_meditator\',{status:\'completed\'})"><div class="n">' + m1done + '</div><div class="l">✅ Mandala journeys done ›</div></div>' +
+    '<div class="stat" ' + tap + 'onclick="drillTo(\'today\')"><div class="n">' + overdue.length + '</div><div class="l">⏰ Overdue calls ›</div></div>' +
     '<div class="stat"><div class="n">' + (done.length?Math.round(answered.length/done.length*100):0) + '%</div><div class="l">📈 Answer rate</div></div>' +
-    '<div class="stat"><div class="n">' + J.filter(j=>j.type==='advanced').length + '</div><div class="l">⭐ Advanced completers</div></div>' +
-    '<div class="stat"><div class="n">' + V.length + '</div><div class="l">🙌 Volunteering records</div></div>' +
+    '<div class="stat" ' + tap + 'onclick="drillTo(\'people\',\'advanced\')"><div class="n">' + J.filter(j=>j.type==='advanced').length + '</div><div class="l">⭐ Advanced completers ›</div></div>' +
+    '<div class="stat" ' + tap + 'onclick="drillTo(\'vols\')"><div class="n">' + V.length + '</div><div class="l">🙌 Volunteering records ›</div></div>' +
     '</div>';
   if(suggestions.length)
     h += '<div class="card"><h2>💡 Planning Suggestions</h2>' + suggestions.map(s=>'<div class="row"><div class="grow">' + s + '</div></div>').join('') + '</div>';
@@ -1447,6 +1471,7 @@ async function renderAdmin(){
       '<div class="sub">' + centerName(a.center_id) + ' - ' + fmtD(a.activity_date) + (a.activity_type&&a.activity_type!=='general'?' - '+esc(a.activity_type):'') + '</div></div>' +
     '<button class="btn small ghost" onclick="showQR(\'' + a.qr_token + '\',\'' + esc(a.name) + '\')">QR</button>' +
     '<button class="btn small ghost" onclick="viewAttendees(\'' + a.id + '\',\'' + esc(a.name) + '\')">Attendees</button>' +
+    '<button class="btn small ghost" onclick="openEditActivity(\'' + a.id + '\')">Edit</button>' +
     '<button class="btn small gray" onclick="toggleActivity(\'' + a.id + '\',' + (!a.is_open) + ')">' + (a.is_open?'Close':'Reopen') + '</button>' +
     '</div>').join('') || '<div class="empty">No activities yet.</div>';
   h += '</div>';
@@ -1570,6 +1595,38 @@ async function toggleActivity(id, open){
   await sb.from('activities').update({is_open:open}).eq('id',id);
   if(document.querySelector('#nav button.active')?.dataset.v === 'vols') renderVols();
   else renderAdmin();
+}
+async function openEditActivity(id){
+  const {data:a, error} = await sb.from('activities').select('*').eq('id',id).single();
+  if(error) return toast(error.message);
+  modal('<h3>Edit Activity</h3>' +
+    '<label>Activity name</label><input id="ea-name" value="' + esc(a.name||'') + '">' +
+    '<label>Activity type</label>' +
+    '<select id="ea-type">' + ACTIVITY_TYPES.map(t=>'<option value="' + t + '"' + (a.activity_type===t?' selected':'') + '>' + t.replace(/_/g,' ') + '</option>').join('') + '</select>' +
+    '<label>Center</label>' +
+    '<select id="ea-center">' + CENTERS.map(c=>'<option value="' + c.id + '"' + (a.center_id===c.id?' selected':'') + '>' + c.name + '</option>').join('') + '</select>' +
+    '<label>Date</label><input id="ea-date" type="date" value="' + (a.activity_date||today()) + '">' +
+    '<label>Description (optional)</label><textarea id="ea-desc" style="height:60px">' + esc(a.description||'') + '</textarea>' +
+    '<button class="btn block" onclick="saveEditActivity(\'' + id + '\')">Save changes</button>' +
+    '<button class="btn block gray" style="margin-top:8px" onclick="deleteActivity(\'' + id + '\')">🗑 Delete activity</button>');
+}
+async function saveEditActivity(id){
+  const {error} = await sb.from('activities').update({
+    name:$('ea-name').value||'Activity',
+    activity_type:$('ea-type').value||'general',
+    center_id:$('ea-center').value,
+    activity_date:$('ea-date').value,
+    description:$('ea-desc').value||null
+  }).eq('id',id);
+  if(error) return toast(error.message);
+  toast('Saved'); closeModal(); renderAdmin();
+}
+async function deleteActivity(id){
+  if(!confirm('Delete this activity? Its attendance records will also be removed. This cannot be undone.')) return;
+  await sb.from('attendance').delete().eq('activity_id', id);
+  const {error} = await sb.from('activities').delete().eq('id', id);
+  if(error) return toast(error.message);
+  toast('Activity deleted'); closeModal(); renderAdmin();
 }
 async function showQR(token, name){
   const base = location.href.replace(/[^/]*$/,'');
