@@ -64,6 +64,29 @@ async function boot(){
 const roleLabel = r => ({volunteer:'Volunteer', coordinator:'Coordinator', rco:'RCO'}[r]||r);
 const centerName = id => (CENTERS.find(c=>c.id===id)||{}).name || 'Unassigned';
 const isCoord = () => ME.role==='coordinator' || ME.role==='rco';
+// Center for a person: use the stored center if set, else derive it from the
+// pincode -> center map (Admin page). Lets us segregate by center even when
+// center_id hasn't been written yet.
+function derivedCenter(p){
+  if(!p) return 'unassigned';
+  if(p.center_id && p.center_id!=='unassigned') return p.center_id;
+  const pm = SETTINGS.pincode_map||{};
+  return pm[(p.pincode||'').trim()] || 'unassigned';
+}
+// Short profile summary line shown under a volunteer's name.
+function profileSummary(p){
+  if(!p) return '';
+  const adv=[p.bsp_date&&'BSP', p.shoonya_date&&'Shoonya', p.samyama_date&&'Samyama', p.guru_puja_date&&'Guru Puja'].filter(Boolean);
+  return [
+    '🏢 '+centerName(derivedCenter(p)),
+    p.pincode?('📍 '+esc(p.pincode)):null,
+    p.ie_date?('🪷 IE '+fmtD(p.ie_date)):null,
+    adv.length?('⭐ '+adv.join('/')):null,
+    p.occupation?('💼 '+esc(p.occupation)):null
+  ].filter(Boolean).join(' · ');
+}
+// Build the data object profileBody() expects from a people row.
+const personToProfile = p => ({n:p.full_name,ph:p.phone,email:p.email,occ:p.occupation,gender:p.gender,dob:p.date_of_birth,area:p.area,city:p.city,street:p.street,pin:p.pincode,ctr:derivedCenter(p),ie:p.ie_date,bsp:p.bsp_date,sh:p.shoonya_date,sam:p.samyama_date,gp:p.guru_puja_date,tags:p.tags||[]});
 
 /* ---------------- NAV ---------------- */
 function go(v){
@@ -827,14 +850,18 @@ let VOL_TAB = 'new';   // 'new' = new volunteer interest | 'all' = all existing 
 // "New interest" = only fresh submissions (added via form / photo OCR / CSV), marked status 'new'.
 const isNewInterest = v => v.status==='new';
 
-function icvRow(r){
+function icvRow(r, prof){
   const ph = r.phone;
   const wa = ph ? `https://wa.me/91${ph}?text=${encodeURIComponent('Namaskaram '+((r.full_name||'').split(' ')[0])+' -- You had expressed interest to volunteer when you completed Inner Engineering. We would love to have you involved at Isha Electronic City. When is a good time to talk?')}` : null;
   const sel = isCoord() ? `<select style="width:auto;font-size:.75rem;padding:4px 6px" onchange="setIcvStatus('${r.id}',this.value)">${['new','contacted','active','done','dropped'].map(s=>`<option value="${s}" ${r.status===s?'selected':''}>${s}</option>`).join('')}</select>` : '';
+  // prof = matched people row (back-annotation), if any
+  const line2 = prof ? profileSummary(prof)
+    : '🪷 IE: '+fmtD(r.ie_date)+(r.program_name?' - '+esc(r.program_name):'')+' · <span class="muted">profile not yet synced</span>';
+  const tap = prof ? ` style="cursor:pointer" onclick='showPersonProfile(${JSON.stringify(personToProfile(prof)).replace(/'/g,"&#39;")})'` : '';
   return `<div class="row">
-    <div class="grow">
-      <div class="name">${esc(r.full_name||'?')} <span class="badge ${r.status==='active'||r.status==='done'?'green':'gray'}">${esc(r.status||'new')}</span></div>
-      <div class="sub">🪷 IE: ${fmtD(r.ie_date)}${r.program_name?' - '+esc(r.program_name):''} - ${centerName(r.center_id)}</div>
+    <div class="grow"${tap}>
+      <div class="name">${esc(prof?.full_name||r.full_name||'?')} <span class="badge ${r.status==='active'||r.status==='done'?'green':'gray'}">${esc(r.status||'new')}</span></div>
+      <div class="sub">${line2}${prof?' <span class="muted" style="font-size:.7rem">· tap for profile</span>':''}</div>
     </div>
     ${ph?`<a class="iconbtn call" href="tel:+91${ph}">Call</a>`:''}
     ${wa?`<a class="iconbtn wa" href="${wa}" target="_blank">WA</a>`:''}
@@ -846,7 +873,7 @@ async function setIcvStatus(id, status){ const {error}=await sb.from('ie_complet
 async function renderVols(){
   view().innerHTML = '<div class="empty">Loading...</div>';
   const vps = await fetchAll(() => sb.from('volunteer_profiles')
-    .select('*, people!inner(id, full_name, phone, pincode, center_id)')
+    .select('*, people!inner(id, full_name, phone, email, pincode, center_id, ie_date, bsp_date, shoonya_date, samyama_date, guru_puja_date, occupation, gender, date_of_birth, street, city, area, tags)')
     .order('updated_at', {ascending:false}));
   const hist = await fetchAll(() => sb.from('volunteer_history')
     .select('person_id, activity, happened_on').order('happened_on',{ascending:false}));
@@ -859,7 +886,7 @@ async function renderVols(){
 
   const list = (vps||[]).filter(v=>{
     if(VOL_TAB==='new' && !isNewInterest(v)) return false;
-    if(VFILTER.center && v.people.center_id!==VFILTER.center) return false;
+    if(VFILTER.center && derivedCenter(v.people)!==VFILTER.center) return false;
     if(VFILTER.interest && !(v.interests||[]).includes(VFILTER.interest)) return false;
     if(VFILTER.mode && v.mode!==VFILTER.mode && v.mode!=='both') return false;
     if(VFILTER.timing && v.preferred_timing!==VFILTER.timing && v.preferred_timing!=='flexible') return false;
@@ -903,14 +930,30 @@ async function renderVols(){
   // IE Completion volunteer-interest folder (sorted by IE date, newest first)
   if(VOL_TAB==='ie_completion'){
     let rows = await fetchAll(() => sb.from('ie_completion_volunteer').select('*').order('ie_date',{ascending:false,nullsFirst:false}));
+    // back-annotate: match each row to a people profile by phone
+    const phones=[...new Set(rows.map(r=>r.phone).filter(Boolean))];
+    const profByPhone={};
+    for(let i=0;i<phones.length;i+=300){
+      const {data} = await sb.from('people')
+        .select('id, full_name, phone, email, pincode, center_id, ie_date, bsp_date, shoonya_date, samyama_date, guru_puja_date, occupation, gender, date_of_birth, street, city, area, tags')
+        .in('phone', phones.slice(i,i+300));
+      (data||[]).forEach(p=>profByPhone[p.phone]=p);
+    }
     if(VFILTER.search){ const s=VFILTER.search.toLowerCase(); rows = rows.filter(r=>r.full_name?.toLowerCase().includes(s)||r.phone?.includes(s)); }
+    if(VFILTER.center){ rows = rows.filter(r=>derivedCenter(profByPhone[r.phone])===VFILTER.center); }
+    const matched = rows.filter(r=>profByPhone[r.phone]).length;
     h += `<div class="card" style="padding:10px">
+      <div class="choices" style="gap:6px;margin-bottom:8px">
+        <select style="width:auto" onchange="VFILTER.center=this.value;renderVols()">
+          <option value="">All centers</option>${CENTERS.map(c=>`<option value="${c.id}" ${VFILTER.center===c.id?'selected':''}>${c.name}</option>`).join('')}
+          <option value="unassigned" ${VFILTER.center==='unassigned'?'selected':''}>Unassigned</option></select>
+      </div>
       <input placeholder="Search name/phone" style="width:100%" value="${esc(VFILTER.search||'')}"
         oninput="VFILTER.search=this.value" onkeydown="if(event.key==='Enter')renderVols()">
     </div>`;
     h += `<div class="card"><h2>🪷 IEO Completion Form — Volunteer Interest <span class="badge">${rows.length}</span></h2>
-      <p class="muted" style="font-size:.78rem;margin-bottom:6px">People who ticked "Volunteer" on an IE completion form in Ishangam (Electronic City). Newest IE first.</p>`;
-    h += rows.length ? rows.map(icvRow).join('') : '<div class="empty">No records yet — run the IE-completion sync.</div>';
+      <p class="muted" style="font-size:.78rem;margin-bottom:6px">People who ticked "Volunteer" on an IE completion form in Ishangam (Electronic City), segregated by center (from pincode). ${matched}/${rows.length} shown have a synced profile. Newest IE first.</p>`;
+    h += rows.length ? rows.map(r=>icvRow(r, profByPhone[r.phone])).join('') : '<div class="empty">No records yet — run the IE-completion sync.</div>';
     h += '</div>';
     view().innerHTML = h;
     return;
@@ -951,7 +994,8 @@ async function renderVols(){
   h += `<div class="card"><h2>🔍 Filter & match volunteers</h2>
     <div class="choices" style="flex-wrap:wrap;gap:6px">
       <select style="width:auto" onchange="VFILTER.center=this.value;renderVols()">
-        <option value="">All centers</option>${CENTERS.map(c=>`<option value="${c.id}" ${VFILTER.center===c.id?'selected':''}>${c.name}</option>`).join('')}</select>
+        <option value="">All centers</option>${CENTERS.map(c=>`<option value="${c.id}" ${VFILTER.center===c.id?'selected':''}>${c.name}</option>`).join('')}
+        <option value="unassigned" ${VFILTER.center==='unassigned'?'selected':''}>Unassigned</option></select>
       <select style="width:auto" onchange="VFILTER.interest=this.value;renderVols()">
         <option value="">Any activity</option>${INTERESTS.map(i=>`<option ${VFILTER.interest===i?'selected':''}>${i}</option>`).join('')}</select>
       <select style="width:auto" onchange="VFILTER.mode=this.value;renderVols()">
@@ -991,23 +1035,29 @@ async function viewAttendees(actId, actName){
 
 function volRow(v, hist){
   const p = v.people;
-  const wa = p.phone ? `https://wa.me/91${p.phone}?text=${encodeURIComponent(`Namaskaram ${p.full_name.split(' ')[0]} -- There's a volunteering opportunity at Isha ${centerName(p.center_id)} that matches your interest${v.interests?.length?' in '+v.interests[0]:''}. Would you like to join?`)}` : null;
+  const wa = p.phone ? `https://wa.me/91${p.phone}?text=${encodeURIComponent(`Namaskaram ${p.full_name.split(' ')[0]} -- There's a volunteering opportunity at Isha ${centerName(derivedCenter(p))} that matches your interest${v.interests?.length?' in '+v.interests[0]:''}. Would you like to join?`)}` : null;
   const inSL = SHORTLIST.some(s=>s.id===p.id);
+  const interests = (v.interests||[]).join(', ');
+  const meta = [v.mode, v.can_offer_space?'space avail.':null, hist.length?(hist.length+' activit'+(hist.length===1?'y':'ies')):null].filter(Boolean).join(' · ');
   return `<div class="row">
-    <div class="grow" onclick='showVolHistory(${JSON.stringify({n:p.full_name,h:hist.slice(0,15)}).replace(/'/g,"&#39;")})'>
+    <div class="grow" style="cursor:pointer" onclick='showVolProfile(${JSON.stringify({p:personToProfile(p),id:p.id,interests:v.interests||[],mode:v.mode,space:v.can_offer_space,screened:v.screened,h:hist.slice(0,15)}).replace(/'/g,"&#39;")})'>
       <div class="name">${esc(p.full_name)} ${v.screened?'<span class="badge green">screened</span>':'<span class="badge gray">new</span>'}</div>
-      <div class="sub">${centerName(p.center_id)} - ${(v.interests||[]).join(', ')||'no interests yet'}
-        ${v.mode?' - '+v.mode:''}${v.can_offer_space?' | space avail.':''} - ${hist.length} activit${hist.length===1?'y':'ies'}</div>
+      <div class="sub">${profileSummary(p)} <span class="muted" style="font-size:.7rem">· tap for profile</span></div>
+      <div class="sub">${interests||'<span class="muted">no interests yet</span>'}${meta?' — '+meta:''}</div>
     </div>
     ${p.phone?`<a class="iconbtn call" href="tel:+91${p.phone}">Call</a>`:''}
     ${wa?`<a class="iconbtn wa" href="${wa}" target="_blank">WA</a>`:''}
     <button class="btn small ${inSL?'green':'gray'}" onclick='toggleShortlist(${JSON.stringify({id:p.id,name:p.full_name,phone:p.phone}).replace(/'/g,"&#39;")})'>${inSL?'Added':'+'}</button>
   </div>`;
 }
-function showVolHistory(d){
-  modal(`<h3>${esc(d.n)} -- history</h3>` + (d.h.length
-    ? `<table class="mini"><tr><th>Activity</th><th>Date</th></tr>${d.h.map(r=>`<tr><td>${esc(r.activity)}</td><td>${fmtD(r.happened_on)}</td></tr>`).join('')}</table>`
-    : '<p class="muted">No volunteering history yet.</p>'));
+function showVolProfile(d){
+  const interests = (d.interests||[]).length ? `<p>🤝 Interests: ${(d.interests).map(esc).join(', ')}</p>` : '';
+  const pref = [d.mode, d.space?'can offer space':null].filter(Boolean).map(esc).join(' · ');
+  const hist = (d.h&&d.h.length)
+    ? `<p style="margin-top:8px">📋 Volunteering history:</p><table class="mini"><tr><th>Activity</th><th>Date</th></tr>${d.h.map(r=>`<tr><td>${esc(r.activity)}</td><td>${fmtD(r.happened_on)}</td></tr>`).join('')}</table>`
+    : '<p class="muted" style="margin-top:8px">No volunteering history yet.</p>';
+  modal(`<h3>${esc(d.p.n)}</h3>${profileBody(d.p)}
+    ${interests}${pref?`<p>🕒 ${pref}</p>`:''}${hist}`);
 }
 function toggleShortlist(p){
   const i = SHORTLIST.findIndex(s=>s.id===p.id);
