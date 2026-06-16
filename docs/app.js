@@ -1252,7 +1252,7 @@ async function renderAdmin(){
     '</div>').join('') || '<div class="empty">No activities yet.</div>';
   h += '</div>';
 
-  const assignCenters = CENTERS.concat([{id:'all',name:'All Centers'}]);
+  const assignCenters = CENTERS.concat([{id:'all',name:'All Centers'},{id:'unassigned',name:'Unassigned'}]);
   const roleOpts = (sel,id,pre)=>'<select id="'+(pre||'')+id+'" style="width:auto;font-size:.78rem;padding:6px">' +
       ROLES.map(r=>'<option value="'+r+'" '+(sel===r?'selected':'')+'>'+roleLabel(r)+'</option>').join('')+'</select>';
   const centerOptsSel = (sel,id,pre)=>'<select id="'+(pre||'')+id+'" style="width:auto;font-size:.78rem;padding:6px">' +
