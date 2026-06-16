@@ -612,7 +612,7 @@ function profileBody(d){
   const addr = [d.street,d.area,d.city].filter(Boolean).map(esc).join(', ');
   const progs = [d.bsp&&`BSP ${fmtD(d.bsp)}`, d.sh&&`Shoonya ${fmtD(d.sh)}`, d.sam&&`Samyama ${fmtD(d.sam)}`, d.gp&&`Guru Puja ${fmtD(d.gp)}`].filter(Boolean).join(' · ');
   return `
-    ${d.photo?`<img class="pfp" src="${esc(d.photo)}" alt="" onerror="this.style.display='none'">`:''}
+    ${d.photo?`<img class="pfp" src="${esc(d.photo)}" alt="" title="Tap to enlarge" onclick="openPhoto(this.src)" onerror="this.style.display='none'">`:''}
     ${d.ph?`<p>📞 ${esc(d.ph)}</p>`:''}
     ${d.email?`<p>✉️ ${esc(d.email)}</p>`:''}
     <p>🏠 ${addr||'<span class="muted">address not on record</span>'}${d.pin?` · ${esc(d.pin)}`:''}</p>
@@ -626,6 +626,13 @@ function profileBody(d){
 }
 function showPersonProfile(d){
   modal(`<h3>${esc(d.n)}</h3>${profileBody(d)}`);
+}
+function openPhoto(src){
+  if(!src) return;
+  const d=document.createElement('div'); d.className='lightbox';
+  d.onclick=()=>d.remove();
+  d.innerHTML=`<img src="${esc(src)}" alt="">`;
+  document.body.appendChild(d);
 }
 function showMeditatorDetail(d){
   modal(`<h3>${esc(d.n)}</h3>${profileBody(d)}
