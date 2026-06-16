@@ -48,11 +48,29 @@ async function boot(){
   if(!session){ $('login-view').classList.remove('hidden'); return; }
   const {data:prof} = await sb.from('profiles').select('*').eq('id', session.user.id).single();
   ME = prof;
+  // Pending approval: new sign-ups are inactive until a Central Coordinator approves.
+  if(!ME || ME.active === false){
+    $('login-view').classList.add('hidden');
+    $('app').classList.add('hidden'); $('nav').classList.add('hidden');
+    let pv = document.getElementById('pending-view');
+    if(!pv){ pv = document.createElement('div'); pv.id='pending-view'; pv.className='login-wrap'; document.body.appendChild(pv); }
+    pv.classList.remove('hidden');
+    pv.innerHTML = `<h1>🪷 Isha E-City</h1>
+      <div class="card" style="text-align:center">
+        <div style="font-size:2.4rem;margin-bottom:6px">⏳</div>
+        <h2 style="margin-bottom:8px">Awaiting approval</h2>
+        <p class="muted">Namaskaram ${esc((ME&&(ME.full_name||ME.email))||'')} 🙏<br><br>
+        Your account has been created and is waiting for a coordinator to approve access and assign your people. You'll be able to sign in normally once that's done.</p>
+        <button class="btn ghost block" style="margin-top:14px" onclick="doLogout()">Sign out</button>
+      </div>`;
+    return;
+  }
   const [{data:set},{data:cen}] = await Promise.all([
     sb.from('settings').select('*'), sb.from('centers').select('*')]);
   (set||[]).forEach(r=>SETTINGS[r.key]=r.value);
   CENTERS = (cen||[]).filter(c=>c.id!=='unassigned');
   $('login-view').classList.add('hidden');
+  const pv=document.getElementById('pending-view'); if(pv) pv.classList.add('hidden');
   $('app').classList.remove('hidden'); $('nav').classList.remove('hidden');
   $('who-name').textContent = ME.full_name || ME.email;
   $('who-role').textContent = roleLabel(ME.role) + (ME.role!=='rco' ? ' - '+centerName(ME.center_id) : ' - Sector');
@@ -61,7 +79,7 @@ async function boot(){
   }
   go('today');
 }
-const roleLabel = r => ({volunteer:'Volunteer', coordinator:'Coordinator', rco:'RCO'}[r]||r);
+const roleLabel = r => ({volunteer:'Nurturer', coordinator:'Nurturing Coordinator', rco:'Central Coordinator'}[r]||r);
 const centerName = id => (CENTERS.find(c=>c.id===id)||{}).name || 'Unassigned';
 const isCoord = () => ME.role==='coordinator' || ME.role==='rco';
 // Center for a person: use the stored center if set, else derive it from the
@@ -1230,15 +1248,34 @@ async function renderAdmin(){
     '</div>').join('') || '<div class="empty">No activities yet.</div>';
   h += '</div>';
 
+  const roleOpts = (sel,id,pre)=>'<select id="'+(pre||'')+id+'" style="width:auto;font-size:.78rem;padding:6px">' +
+      ['volunteer','coordinator','rco'].map(r=>'<option value="'+r+'" '+(sel===r?'selected':'')+'>'+roleLabel(r)+'</option>').join('')+'</select>';
+  const centerOptsSel = (sel,id,pre)=>'<select id="'+(pre||'')+id+'" style="width:auto;font-size:.78rem;padding:6px">' +
+      CENTERS.concat([{id:'unassigned',name:'Unassigned'}]).map(c=>'<option value="'+c.id+'" '+(sel===c.id?'selected':'')+'>'+c.name+'</option>').join('')+'</select>';
+
+  // Pending approvals (Central Coordinator only)
+  if(ME.role==='rco'){
+    const pending = (profs||[]).filter(p=>p.active===false);
+    h += '<div class="card"><h2>🕒 Pending approvals <span class="badge">'+pending.length+'</span></h2>';
+    h += pending.length ? pending.map(p=>'<div class="row"><div class="grow">' +
+        '<div class="name">'+esc(p.full_name||p.email)+'</div>' +
+        '<div class="sub">'+esc(p.email||'')+(p.phone?' · '+esc(p.phone):'')+'</div>' +
+        '<div class="choices" style="gap:6px;margin-top:6px">'+roleOpts('volunteer',p.id,'pa-role-')+centerOptsSel(p.center_id||'unassigned',p.id,'pa-ctr-')+'</div></div>' +
+      '<button class="btn small green" onclick="approveUser(\''+p.id+'\')">Approve</button></div>').join('')
+      : '<div class="empty">No one waiting for approval.</div>';
+    h += '</div>';
+  }
+
   h += '<div class="card"><h2>👥 Users & Roles</h2>';
-  h += (profs||[]).map(p=>'<div class="row"><div class="grow">' +
+  h += (profs||[]).filter(p=>p.active!==false).map(p=>'<div class="row"><div class="grow">' +
       '<div class="name">' + esc(p.full_name||p.email) + '</div>' +
       '<div class="sub">' + esc(p.email||'') + ' - ' + roleLabel(p.role) + ' - ' + centerName(p.center_id) + '</div></div>' +
     (ME.role==='rco'?
       '<select style="width:auto;font-size:.78rem;padding:6px" onchange="setRole(\'' + p.id + '\',\'role\',this.value)">' +
         ['volunteer','coordinator','rco'].map(r=>'<option value="' + r + '" ' + (p.role===r?'selected':'') + '>' + roleLabel(r) + '</option>').join('') + '</select>' +
       '<select style="width:auto;font-size:.78rem;padding:6px" onchange="setRole(\'' + p.id + '\',\'center_id\',this.value)">' +
-        CENTERS.concat([{id:'unassigned',name:'Unassigned'}]).map(c=>'<option value="' + c.id + '" ' + (p.center_id===c.id?'selected':'') + '>' + c.name + '</option>').join('') + '</select>'
+        CENTERS.concat([{id:'unassigned',name:'Unassigned'}]).map(c=>'<option value="' + c.id + '" ' + (p.center_id===c.id?'selected':'') + '>' + c.name + '</option>').join('') + '</select>' +
+      (p.id!==ME.id?'<button class="btn small gray" onclick="setActive(\''+p.id+'\',false)">Deactivate</button>':'')
       :'') +
     (p.phone?'<a class="iconbtn wa" href="https://wa.me/91' + p.phone + '?text=' + encodeURIComponent('Namaskaram - Gentle reminder: you have nurturing calls due on the dashboard. Please take a look when you can!') + '" target="_blank">WA</a>':'') +
     '</div>').join('');
@@ -1268,6 +1305,18 @@ async function renderAdmin(){
 async function setRole(id, field, val){
   const {error} = await sb.from('profiles').update({[field]:val}).eq('id', id);
   toast(error?error.message:'Updated');
+}
+async function approveUser(id){
+  const role = ($('pa-role-'+id)||{}).value || 'volunteer';
+  const center = ($('pa-ctr-'+id)||{}).value || 'unassigned';
+  const {error} = await sb.from('profiles').update({role, center_id:center, active:true}).eq('id', id);
+  if(error) return toast(error.message);
+  toast('Approved'); renderAdmin();
+}
+async function setActive(id, val){
+  const {error} = await sb.from('profiles').update({active:val}).eq('id', id);
+  if(error) return toast(error.message);
+  toast(val?'Activated':'Deactivated'); renderAdmin();
 }
 async function addPin(){
   const pin = $('pin-new').value.trim(); if(!/^\d{6}$/.test(pin)) return toast('Enter a 6-digit pincode');
