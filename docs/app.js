@@ -77,24 +77,26 @@ function cacheBust(){ CACHE = {}; }
 /* Windowed list rendering: paint a small first batch instantly, then append
    more as the user scrolls near the end. Keeps the DOM light even for 6,000+
    rows so the first open is fast. items=array, rowFn(item)->html string. */
-let _io = null;
-function mountList(host, items, rowFn, batch=60){
-  if(_io){ _io.disconnect(); _io=null; }
+function mountList(host, items, rowFn, batch=80){
+  if(window.__listScroll){ window.removeEventListener('scroll', window.__listScroll); window.__listScroll=null; }
   let n = 0;
-  const sentinel = document.createElement('div');
-  sentinel.style.height = '1px';
-  host.appendChild(sentinel);
-  function more(){
-    if(n >= items.length){ if(_io){_io.disconnect();_io=null;} sentinel.remove(); return; }
-    const frag = document.createElement('template');
-    frag.innerHTML = items.slice(n, n+batch).map(rowFn).join('');
-    host.insertBefore(frag.content, sentinel);
+  function chunk(){
+    if(n >= items.length) return;
+    const t = document.createElement('template');
+    t.innerHTML = items.slice(n, n+batch).map(rowFn).join('');
+    host.appendChild(t.content);
     n += batch;
-    if(n >= items.length){ if(_io){_io.disconnect();_io=null;} sentinel.remove(); }
   }
-  _io = new IntersectionObserver(es=>{ if(es.some(e=>e.isIntersecting)) more(); }, {root:null, rootMargin:'800px'});
-  _io.observe(sentinel);
-  more(); // first batch (paints immediately)
+  function onScroll(){
+    if(n >= items.length){ window.removeEventListener('scroll', onScroll); window.__listScroll=null; return; }
+    if(window.innerHeight + window.scrollY >= document.body.offsetHeight - 1200) chunk();
+  }
+  window.__listScroll = onScroll;
+  window.addEventListener('scroll', onScroll, {passive:true});
+  chunk(); // first batch paints immediately
+  // ensure the page is tall enough to scroll (so more can load), without rendering everything
+  let guard = 0;
+  while(n < items.length && document.body.offsetHeight <= window.innerHeight + 1200 && guard++ < 80) chunk();
 }
 async function refreshNow(){ cacheBust(); toast('Refreshing...'); await go(CURRENT_VIEW||'today'); toast('Up to date'); }
 
