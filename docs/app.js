@@ -4,7 +4,8 @@
 const sb = supabase.createClient(APP_CONFIG.SUPABASE_URL, APP_CONFIG.SUPABASE_ANON_KEY);
 let ME = null;
 let SETTINGS = {};
-let CENTERS = [];
+let CENTERS = [];        // real centers only (for data filters)
+let CENTERS_ALL = [];    // includes 'all' and 'unassigned' (for naming/assignment)
 const $ = id => document.getElementById(id);
 const view = () => $('view');
 const esc = s => (s ?? '').toString().replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -68,20 +69,25 @@ async function boot(){
   const [{data:set},{data:cen}] = await Promise.all([
     sb.from('settings').select('*'), sb.from('centers').select('*')]);
   (set||[]).forEach(r=>SETTINGS[r.key]=r.value);
-  CENTERS = (cen||[]).filter(c=>c.id!=='unassigned');
+  CENTERS_ALL = cen||[];
+  CENTERS = (cen||[]).filter(c=>c.id!=='unassigned' && c.id!=='all');
   $('login-view').classList.add('hidden');
   const pv=document.getElementById('pending-view'); if(pv) pv.classList.add('hidden');
   $('app').classList.remove('hidden'); $('nav').classList.remove('hidden');
   $('who-name').textContent = ME.full_name || ME.email;
-  $('who-role').textContent = roleLabel(ME.role) + (ME.role!=='rco' ? ' - '+centerName(ME.center_id) : ' - Sector');
-  if(ME.role==='volunteer'){
+  const scopeLabel = (ME.role==='admin'||ME.role==='sector_nurturer'||ME.center_id==='all') ? 'All Centers' : centerName(ME.center_id);
+  $('who-role').textContent = roleLabel(ME.role) + ' - ' + scopeLabel;
+  if(ME.role==='nurturer'){
     document.querySelectorAll('#nav [data-v="vols"],#nav [data-v="admin"]').forEach(b=>b.style.display='none');
   }
   go('today');
 }
-const roleLabel = r => ({volunteer:'Nurturer', coordinator:'Nurturing Coordinator', rco:'Central Coordinator'}[r]||r);
-const centerName = id => (CENTERS.find(c=>c.id===id)||{}).name || 'Unassigned';
-const isCoord = () => ME.role==='coordinator' || ME.role==='rco';
+const roleLabel = r => ({nurturer:'Nurturer', center_coordinator:'Center Co-ordinator', sector_nurturer:'Sector Nurturer', admin:'Admin'}[r]||r);
+const ROLES = ['nurturer','center_coordinator','sector_nurturer','admin'];
+const centerName = id => (CENTERS_ALL.find(c=>c.id===id)||{}).name || (id==='all'?'All Centers':'Unassigned');
+// coordinator+ = anyone who can see/allocate beyond their own assignments
+const isCoord = () => ['center_coordinator','sector_nurturer','admin'].includes(ME.role);
+const isAdmin = () => ME.role==='admin';
 // Center for a person: use the stored center if set, else derive it from the
 // pincode -> center map (Admin page). Lets us segregate by center even when
 // center_id hasn't been written yet.
@@ -136,7 +142,7 @@ async function fetchDueCalls(){
   let q = sb.from('calls')
     .select('id, call_no, due_date, journey_id, journeys!inner(id, type, program_name, program_date, center_id, assigned_to, status, people(id, full_name, phone, center_id))')
     .is('completed_at', null).lte('due_date', today()).eq('journeys.status','active').order('due_date');
-  if(ME.role==='volunteer') q = q.eq('journeys.assigned_to', ME.id);
+  if(ME.role==='nurturer') q = q.eq('journeys.assigned_to', ME.id);
   const {data, error} = await q;
   if(error){ toast(error.message); return []; }
   return data||[];
@@ -150,7 +156,7 @@ async function renderToday(){
     .select('id, call_no, due_date, journeys!inner(type, assigned_to, status, people(full_name))')
     .is('completed_at', null).gt('due_date', today()).eq('journeys.status','active')
     .order('due_date').limit(8);
-  if(ME.role==='volunteer') upQ = upQ.eq('journeys.assigned_to', ME.id);
+  if(ME.role==='nurturer') upQ = upQ.eq('journeys.assigned_to', ME.id);
   const {data:upcoming} = await upQ;
 
   let h = '';
@@ -346,7 +352,7 @@ async function renderNewMeditators(tabBar){
     let q = sb.from('journeys')
       .select('id, type, program_name, program_date, status, sadhana_status, assigned_to, center_id, people!inner(*), calls(id, call_no, due_date, completed_at)')
       .eq('type', 'new_meditator');
-    if(ME.role==='volunteer') q = q.eq('assigned_to', ME.id);
+    if(ME.role==='nurturer') q = q.eq('assigned_to', ME.id);
     if(f.center) q = q.eq('center_id', f.center);
     if(f.status) q = q.eq('status', f.status);
     return q;
@@ -704,7 +710,7 @@ async function renderVolunteerNurture(tabBar){
   let q = sb.from('journeys')
     .select('id, type, program_name, program_date, status, sadhana_status, assigned_to, center_id, people(id, full_name, phone, center_id), calls(id, call_no, due_date, completed_at)')
     .eq('type', 'volunteer_nurture').order('program_date', {ascending:false}).limit(300);
-  if(ME.role==='volunteer') q = q.eq('assigned_to', ME.id);
+  if(ME.role==='nurturer') q = q.eq('assigned_to', ME.id);
   if(f.center) q = q.eq('center_id', f.center);
 
   const {data:js} = await q;
@@ -917,7 +923,7 @@ async function renderVols(){
     let q = sb.from('journeys')
       .select('id, type, program_name, program_date, status, sadhana_status, assigned_to, center_id, people(id, full_name, phone, center_id), calls(id, call_no, due_date, completed_at)')
       .eq('type', 'volunteer_nurture').order('program_date', {ascending:false});
-    if(ME.role==='volunteer') q = q.eq('assigned_to', ME.id);
+    if(ME.role==='nurturer') q = q.eq('assigned_to', ME.id);
     return q;
   });
 
@@ -963,8 +969,7 @@ async function renderVols(){
     h += `<div class="card" style="padding:10px">
       <div class="choices" style="gap:6px;margin-bottom:8px">
         <select style="width:auto" onchange="VFILTER.center=this.value;renderVols()">
-          <option value="">All centers</option>${CENTERS.map(c=>`<option value="${c.id}" ${VFILTER.center===c.id?'selected':''}>${c.name}</option>`).join('')}
-          <option value="unassigned" ${VFILTER.center==='unassigned'?'selected':''}>Unassigned</option></select>
+          <option value="">All centers</option>${CENTERS.map(c=>`<option value="${c.id}" ${VFILTER.center===c.id?'selected':''}>${c.name}</option>`).join('')}</select>
       </div>
       <input placeholder="Search name/phone" style="width:100%" value="${esc(VFILTER.search||'')}"
         oninput="VFILTER.search=this.value" onkeydown="if(event.key==='Enter')renderVols()">
@@ -1012,8 +1017,7 @@ async function renderVols(){
   h += `<div class="card"><h2>🔍 Filter & match volunteers</h2>
     <div class="choices" style="flex-wrap:wrap;gap:6px">
       <select style="width:auto" onchange="VFILTER.center=this.value;renderVols()">
-        <option value="">All centers</option>${CENTERS.map(c=>`<option value="${c.id}" ${VFILTER.center===c.id?'selected':''}>${c.name}</option>`).join('')}
-        <option value="unassigned" ${VFILTER.center==='unassigned'?'selected':''}>Unassigned</option></select>
+        <option value="">All centers</option>${CENTERS.map(c=>`<option value="${c.id}" ${VFILTER.center===c.id?'selected':''}>${c.name}</option>`).join('')}</select>
       <select style="width:auto" onchange="VFILTER.interest=this.value;renderVols()">
         <option value="">Any activity</option>${INTERESTS.map(i=>`<option ${VFILTER.interest===i?'selected':''}>${i}</option>`).join('')}</select>
       <select style="width:auto" onchange="VFILTER.mode=this.value;renderVols()">
@@ -1248,19 +1252,20 @@ async function renderAdmin(){
     '</div>').join('') || '<div class="empty">No activities yet.</div>';
   h += '</div>';
 
+  const assignCenters = CENTERS.concat([{id:'all',name:'All Centers'}]);
   const roleOpts = (sel,id,pre)=>'<select id="'+(pre||'')+id+'" style="width:auto;font-size:.78rem;padding:6px">' +
-      ['volunteer','coordinator','rco'].map(r=>'<option value="'+r+'" '+(sel===r?'selected':'')+'>'+roleLabel(r)+'</option>').join('')+'</select>';
+      ROLES.map(r=>'<option value="'+r+'" '+(sel===r?'selected':'')+'>'+roleLabel(r)+'</option>').join('')+'</select>';
   const centerOptsSel = (sel,id,pre)=>'<select id="'+(pre||'')+id+'" style="width:auto;font-size:.78rem;padding:6px">' +
-      CENTERS.concat([{id:'unassigned',name:'Unassigned'}]).map(c=>'<option value="'+c.id+'" '+(sel===c.id?'selected':'')+'>'+c.name+'</option>').join('')+'</select>';
+      assignCenters.map(c=>'<option value="'+c.id+'" '+(sel===c.id?'selected':'')+'>'+c.name+'</option>').join('')+'</select>';
 
-  // Pending approvals (Central Coordinator only)
-  if(ME.role==='rco'){
+  // Pending approvals (Admin only)
+  if(isAdmin()){
     const pending = (profs||[]).filter(p=>p.active===false);
     h += '<div class="card"><h2>🕒 Pending approvals <span class="badge">'+pending.length+'</span></h2>';
     h += pending.length ? pending.map(p=>'<div class="row"><div class="grow">' +
         '<div class="name">'+esc(p.full_name||p.email)+'</div>' +
         '<div class="sub">'+esc(p.email||'')+(p.phone?' · '+esc(p.phone):'')+'</div>' +
-        '<div class="choices" style="gap:6px;margin-top:6px">'+roleOpts('volunteer',p.id,'pa-role-')+centerOptsSel(p.center_id||'unassigned',p.id,'pa-ctr-')+'</div></div>' +
+        '<div class="choices" style="gap:6px;margin-top:6px">'+roleOpts('nurturer',p.id,'pa-role-')+centerOptsSel(p.center_id||CENTERS[0]?.id,p.id,'pa-ctr-')+'</div></div>' +
       '<button class="btn small green" onclick="approveUser(\''+p.id+'\')">Approve</button></div>').join('')
       : '<div class="empty">No one waiting for approval.</div>';
     h += '</div>';
@@ -1270,18 +1275,18 @@ async function renderAdmin(){
   h += (profs||[]).filter(p=>p.active!==false).map(p=>'<div class="row"><div class="grow">' +
       '<div class="name">' + esc(p.full_name||p.email) + '</div>' +
       '<div class="sub">' + esc(p.email||'') + ' - ' + roleLabel(p.role) + ' - ' + centerName(p.center_id) + '</div></div>' +
-    (ME.role==='rco'?
+    (isAdmin()?
       '<select style="width:auto;font-size:.78rem;padding:6px" onchange="setRole(\'' + p.id + '\',\'role\',this.value)">' +
-        ['volunteer','coordinator','rco'].map(r=>'<option value="' + r + '" ' + (p.role===r?'selected':'') + '>' + roleLabel(r) + '</option>').join('') + '</select>' +
+        ROLES.map(r=>'<option value="' + r + '" ' + (p.role===r?'selected':'') + '>' + roleLabel(r) + '</option>').join('') + '</select>' +
       '<select style="width:auto;font-size:.78rem;padding:6px" onchange="setRole(\'' + p.id + '\',\'center_id\',this.value)">' +
-        CENTERS.concat([{id:'unassigned',name:'Unassigned'}]).map(c=>'<option value="' + c.id + '" ' + (p.center_id===c.id?'selected':'') + '>' + c.name + '</option>').join('') + '</select>' +
+        assignCenters.map(c=>'<option value="' + c.id + '" ' + (p.center_id===c.id?'selected':'') + '>' + c.name + '</option>').join('') + '</select>' +
       (p.id!==ME.id?'<button class="btn small gray" onclick="setActive(\''+p.id+'\',false)">Deactivate</button>':'')
       :'') +
     (p.phone?'<a class="iconbtn wa" href="https://wa.me/91' + p.phone + '?text=' + encodeURIComponent('Namaskaram - Gentle reminder: you have nurturing calls due on the dashboard. Please take a look when you can!') + '" target="_blank">WA</a>':'') +
     '</div>').join('');
   h += '</div>';
 
-  if(ME.role==='rco'){
+  if(isAdmin()){
     const pm = SETTINGS.pincode_map||{};
     h += '<div class="card"><h2>📍 Pincode -- Center Map</h2>' +
       '<table class="mini"><tr><th>Pincode</th><th>Center</th><th></th></tr>' +
@@ -1307,7 +1312,7 @@ async function setRole(id, field, val){
   toast(error?error.message:'Updated');
 }
 async function approveUser(id){
-  const role = ($('pa-role-'+id)||{}).value || 'volunteer';
+  const role = ($('pa-role-'+id)||{}).value || 'nurturer';
   const center = ($('pa-ctr-'+id)||{}).value || 'unassigned';
   const {error} = await sb.from('profiles').update({role, center_id:center, active:true}).eq('id', id);
   if(error) return toast(error.message);
