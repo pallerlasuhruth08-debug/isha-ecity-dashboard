@@ -2,6 +2,16 @@
    Isha E-City Nurturing Dashboard -- app logic (vanilla JS)
    ============================================================ */
 const sb = supabase.createClient(APP_CONFIG.SUPABASE_URL, APP_CONFIG.SUPABASE_ANON_KEY);
+// Any write invalidates the session read-cache so the next view pulls fresh data.
+(function wrapWrites(){
+  const _from = sb.from.bind(sb);
+  sb.from = (t)=>{ const qb=_from(t);
+    ['insert','update','upsert','delete'].forEach(m=>{ const o=qb[m];
+      if(typeof o==='function') qb[m]=(...a)=>{ try{cacheBust();}catch(e){} return o.apply(qb,a); }; });
+    return qb; };
+  const _rpc = sb.rpc.bind(sb);
+  sb.rpc = (...a)=>{ try{cacheBust();}catch(e){} return _rpc(...a); };
+})();
 let ME = null;
 let SETTINGS = {};
 let CENTERS = [];        // real centers only (for data filters)
@@ -28,6 +38,32 @@ async function fetchAll(makeQuery, pageSize=1000){
   }
   return all;
 }
+
+/* Lazy-load a CDN script once (keeps initial page load light). */
+const _scripts = {};
+function loadScript(src){
+  if(_scripts[src]) return _scripts[src];
+  _scripts[src] = new Promise((res,rej)=>{ const s=document.createElement('script');
+    s.src=src; s.onload=res; s.onerror=()=>rej(new Error('load failed '+src)); document.head.appendChild(s); });
+  return _scripts[src];
+}
+const CDN = {
+  chart:'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js',
+  xlsx:'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',
+  papa:'https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js',
+  qrcode:'https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js'
+};
+
+/* Session cache: load each dataset once, reuse on tab switches. cacheBust()
+   clears it (the Refresh button) so the next view pulls fresh data. */
+let CACHE = {};
+async function cached(key, loader){
+  if(CACHE[key] !== undefined) return CACHE[key];
+  CACHE[key] = await loader();
+  return CACHE[key];
+}
+function cacheBust(){ CACHE = {}; }
+async function refreshNow(){ cacheBust(); toast('Refreshing...'); await go(CURRENT_VIEW||'today'); toast('Up to date'); }
 
 /* ---------------- AUTH ---------------- */
 async function doLogin(){
@@ -113,9 +149,11 @@ function profileSummary(p){
 const personToProfile = p => ({n:p.full_name,ph:p.phone,email:p.email,occ:p.occupation,gender:p.gender,dob:p.date_of_birth,area:p.area,city:p.city,street:p.street,pin:p.pincode,ctr:derivedCenter(p),ie:p.ie_date,bsp:p.bsp_date,sh:p.shoonya_date,sam:p.samyama_date,gp:p.guru_puja_date,tags:p.tags||[]});
 
 /* ---------------- NAV ---------------- */
+let CURRENT_VIEW = 'today';
 function go(v){
+  CURRENT_VIEW = v;
   document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('active', b.dataset.v===v));
-  ({today:renderToday, people:renderPeople, vols:renderVols,
+  return ({today:renderToday, people:renderPeople, vols:renderVols,
     insights:renderInsights, admin:renderAdmin}[v])();
 }
 
@@ -150,14 +188,17 @@ async function fetchDueCalls(){
 
 async function renderToday(){
   view().innerHTML = '<div class="empty">Loading...</div>';
-  const calls = await fetchDueCalls();
+  const {calls, upcoming} = await cached('today', async()=>{
+    const calls = await fetchDueCalls();
+    let upQ = sb.from('calls')
+      .select('id, call_no, due_date, journeys!inner(type, assigned_to, status, people(full_name))')
+      .is('completed_at', null).gt('due_date', today()).eq('journeys.status','active')
+      .order('due_date').limit(8);
+    if(ME.role==='nurturer') upQ = upQ.eq('journeys.assigned_to', ME.id);
+    const {data:upcoming} = await upQ;
+    return {calls, upcoming: upcoming||[]};
+  });
   const overdue = calls.filter(c=>c.due_date < today());
-  let upQ = sb.from('calls')
-    .select('id, call_no, due_date, journeys!inner(type, assigned_to, status, people(full_name))')
-    .is('completed_at', null).gt('due_date', today()).eq('journeys.status','active')
-    .order('due_date').limit(8);
-  if(ME.role==='nurturer') upQ = upQ.eq('journeys.assigned_to', ME.id);
-  const {data:upcoming} = await upQ;
 
   let h = '';
   if(overdue.length) h += `<div class="alert">⚠️ ${overdue.length} overdue call${overdue.length>1?'s':''} -- please catch up today</div>`;
@@ -479,38 +520,43 @@ async function renderMeditatorsList(tabBar){
     </div>
   </div>`;
 
-  let rows = await fetchAll(() => {
-    let q = sb.from('people').select('*')
-      .eq('is_meditator', true).order('ie_date', {ascending:false});
-    if(f.center) q = q.eq('center_id', f.center);
-    if(f.tag) q = q.contains('tags', [f.tag]);
-    if(f.dateFrom) q = q.gte('ie_date', f.dateFrom);
-    if(f.dateTo) q = q.lte('ie_date', f.dateTo);
-    return q;
+  // Load the full meditator directory once (cached); filter client-side so
+  // changing center/tag/date/search is instant and doesn't re-hit the DB.
+  const all = await cached('people_all', () => fetchAll(() => sb.from('people').select('*')
+    .eq('is_meditator', true).order('ie_date', {ascending:false})));
+  MED_INDEX = {}; all.forEach(p=>MED_INDEX[p.id]=p);
+  const s = (f.search||'').toLowerCase();
+  let rows = all.filter(p=>{
+    if(f.center && p.center_id!==f.center) return false;
+    if(f.tag && !(p.tags||[]).includes(f.tag)) return false;
+    if(f.dateFrom && !(p.ie_date && p.ie_date>=f.dateFrom)) return false;
+    if(f.dateTo && !(p.ie_date && p.ie_date<=f.dateTo)) return false;
+    if(s && !(p.full_name?.toLowerCase().includes(s)||p.phone?.includes(s))) return false;
+    return true;
   });
-  if(f.search){
-    const s = f.search.toLowerCase();
-    rows = rows.filter(p=>p.full_name?.toLowerCase().includes(s)||p.phone?.includes(s));
-  }
 
   h += `<div class="card"><h2>🧘 Meditators <span class="badge">${rows.length}</span></h2>`;
-  h += rows.length ? rows.map(p=>meditatorDetailRow(p)).join('') : '<div class="empty">No meditators matching filters.</div>';
+  h += rows.length ? rows.map(meditatorDetailRow).join('') : '<div class="empty">No meditators matching filters.</div>';
   h += '</div>';
   view().innerHTML = h;
 }
 
+let MED_INDEX = {};
+const medProfile = p => ({id:p.id,n:p.full_name,ph:p.phone,email:p.email,occ:p.occupation,gender:p.gender,dob:p.date_of_birth,area:p.area,city:p.city,street:p.street,pin:p.pincode,ie:p.ie_date,bsp:p.bsp_date,sh:p.shoonya_date,sam:p.samyama_date,gp:p.guru_puja_date,tags:p.tags||[],ctr:p.center_id});
+function showMedById(id){ const p=MED_INDEX[id]; if(p) showMeditatorDetail(medProfile(p)); }
+function nurtureById(id){ const p=MED_INDEX[id]; if(p) startNurturing({pid:p.id,name:p.full_name}); }
 function meditatorDetailRow(p){
   const tags = (p.tags||[]).slice(0,4).map(t=>`<span class="badge gray" style="font-size:.68rem">${esc(t)}</span>`).join(' ');
   const adv = [p.bsp_date&&`BSP: ${fmtD(p.bsp_date)}`, p.shoonya_date&&`Shoonya:${fmtD(p.shoonya_date)}`, p.samyama_date&&`Samyama:${fmtD(p.samyama_date)}`, p.guru_puja_date&&`Guru Puja:${fmtD(p.guru_puja_date)}`].filter(Boolean).join(' - ');
-  const wa = p.phone ? `https://wa.me/91${p.phone}?text=${encodeURIComponent(WA_MSG.meditator(p.full_name.split(' ')[0]))}` : null;
+  const wa = p.phone ? `https://wa.me/91${p.phone}?text=${encodeURIComponent(WA_MSG.meditator((p.full_name||'').split(' ')[0]))}` : null;
   return `<div class="row">
-    <div class="grow" style="cursor:pointer" onclick="showMeditatorDetail(${JSON.stringify({id:p.id,n:p.full_name,ph:p.phone,email:p.email,occ:p.occupation,gender:p.gender,dob:p.date_of_birth,area:p.area,city:p.city,street:p.street,pin:p.pincode,ie:p.ie_date,bsp:p.bsp_date,sh:p.shoonya_date,sam:p.samyama_date,gp:p.guru_puja_date,tags:p.tags||[],ctr:p.center_id}).replace(/'/g,"&#39;").replace(/"/g,'&quot;')})">
+    <div class="grow" style="cursor:pointer" onclick="showMedById('${p.id}')">
       <div class="name">${esc(p.full_name)} ${tags}</div>
       <div class="sub">IE: ${fmtD(p.ie_date)} - ${centerName(p.center_id)}${adv?' - '+adv:''} <span class="muted" style="font-size:.7rem">· tap for profile</span></div>
     </div>
     ${p.phone?`<a class="iconbtn call" href="tel:+91${p.phone}">Call</a>`:''}
     ${wa?`<a class="iconbtn wa" href="${wa}" target="_blank">WA</a>`:''}
-    ${isCoord()?`<button class="btn small ghost" onclick='startNurturing(${JSON.stringify({pid:p.id,name:p.full_name}).replace(/'/g,"&#39;")})'>Nurture</button>`:''}
+    ${isCoord()?`<button class="btn small ghost" onclick="nurtureById('${p.id}')">Nurture</button>`:''}
   </div>`;
 }
 
@@ -845,8 +891,10 @@ async function runImport(){
   const kind = $('im-kind').value;
   let rows = [];
   if(/\.csv$/i.test(f.name)){
+    await loadScript(CDN.papa);
     rows = await new Promise(res => Papa.parse(f, {header:true, skipEmptyLines:true, complete:r=>res(r.data)}));
   } else {
+    await loadScript(CDN.xlsx);
     const buf = await f.arrayBuffer();
     const wb = XLSX.read(buf); const ws = wb.Sheets[wb.SheetNames[0]];
     rows = XLSX.utils.sheet_to_json(ws, {defval:''});
@@ -896,11 +944,11 @@ async function setIcvStatus(id, status){ const {error}=await sb.from('ie_complet
 
 async function renderVols(){
   view().innerHTML = '<div class="empty">Loading...</div>';
-  const vps = await fetchAll(() => sb.from('volunteer_profiles')
+  const vps = await cached('vols', () => fetchAll(() => sb.from('volunteer_profiles')
     .select('*, people!inner(id, full_name, phone, email, pincode, center_id, ie_date, bsp_date, shoonya_date, samyama_date, guru_puja_date, occupation, gender, date_of_birth, street, city, area, tags)')
-    .order('updated_at', {ascending:false}));
-  const hist = await fetchAll(() => sb.from('volunteer_history')
-    .select('person_id, activity, happened_on').order('happened_on',{ascending:false}));
+    .order('updated_at', {ascending:false})));
+  const hist = await cached('vol_hist', () => fetchAll(() => sb.from('volunteer_history')
+    .select('person_id, activity, happened_on').order('happened_on',{ascending:false})));
   const histBy = {};
   (hist||[]).forEach(r=>{ (histBy[r.person_id] ||= []).push(r); });
 
@@ -919,21 +967,20 @@ async function renderVols(){
   });
 
   // Ashram/SSB volunteering follow-up journeys (moved here from Meditators)
-  const ashram = await fetchAll(() => {
+  const ashram = await cached('vol_ashram', () => fetchAll(() => {
     let q = sb.from('journeys')
       .select('id, type, program_name, program_date, status, sadhana_status, assigned_to, center_id, people(id, full_name, phone, center_id), calls(id, call_no, due_date, completed_at)')
       .eq('type', 'volunteer_nurture').order('program_date', {ascending:false});
     if(ME.role==='nurturer') q = q.eq('assigned_to', ME.id);
     return q;
-  });
+  }));
 
-  // fetch recent activities for event management
-  const {data:acts} = await sb.from('activities').select('id, name, activity_type, activity_date, is_open, qr_token, center_id').order('activity_date',{ascending:false}).limit(10);
+  // recent activities for event management
+  const acts = await cached('vol_acts', async()=>(await sb.from('activities').select('id, name, activity_type, activity_date, is_open, qr_token, center_id').order('activity_date',{ascending:false}).limit(10)).data||[]);
 
-  // IE Completion volunteer-interest (from Ishangam ie.completion, volunteer=true). Guarded: table may not exist pre-migration.
-  let icvCount = 0;
-  const icvCntRes = await sb.from('ie_completion_volunteer').select('*', {count:'exact', head:true});
-  if(!icvCntRes.error) icvCount = icvCntRes.count || 0;
+  // IE Completion volunteer-interest list (cached once; count = list length, avoids a slow exact-count query).
+  const icvList = await cached('icv', () => fetchAll(()=>sb.from('ie_completion_volunteer').select('*').order('ie_date',{ascending:false,nullsFirst:false})));
+  const icvCount = icvList.length;
 
   let h = `<div style="display:flex;gap:8px;margin:6px 0;flex-wrap:wrap">
     <button class="btn small ghost" onclick="openPaperOCR()">📄 Paper Form (OCR)</button>
@@ -953,16 +1000,19 @@ async function renderVols(){
 
   // IE Completion volunteer-interest folder (sorted by IE date, newest first)
   if(VOL_TAB==='ie_completion'){
-    let rows = await fetchAll(() => sb.from('ie_completion_volunteer').select('*').order('ie_date',{ascending:false,nullsFirst:false}));
-    // back-annotate: match each row to a people profile by phone
-    const phones=[...new Set(rows.map(r=>r.phone).filter(Boolean))];
-    const profByPhone={};
-    for(let i=0;i<phones.length;i+=300){
-      const {data} = await sb.from('people')
-        .select('id, full_name, phone, email, pincode, center_id, ie_date, bsp_date, shoonya_date, samyama_date, guru_puja_date, occupation, gender, date_of_birth, street, city, area, tags')
-        .in('phone', phones.slice(i,i+300));
-      (data||[]).forEach(p=>profByPhone[p.phone]=p);
-    }
+    let rows = icvList.slice();
+    // back-annotate: match each row to a people profile by phone (cached)
+    const profByPhone = await cached('icv_prof', async()=>{
+      const phones=[...new Set(icvList.map(r=>r.phone).filter(Boolean))];
+      const map={};
+      for(let i=0;i<phones.length;i+=300){
+        const {data} = await sb.from('people')
+          .select('id, full_name, phone, email, pincode, center_id, ie_date, bsp_date, shoonya_date, samyama_date, guru_puja_date, occupation, gender, date_of_birth, street, city, area, tags')
+          .in('phone', phones.slice(i,i+300));
+        (data||[]).forEach(p=>map[p.phone]=p);
+      }
+      return map;
+    });
     if(VFILTER.search){ const s=VFILTER.search.toLowerCase(); rows = rows.filter(r=>r.full_name?.toLowerCase().includes(s)||r.phone?.includes(s)); }
     if(VFILTER.center){ rows = rows.filter(r=>derivedCenter(profByPhone[r.phone])===VFILTER.center); }
     const matched = rows.filter(r=>profByPhone[r.phone]).length;
@@ -1169,11 +1219,11 @@ function openGFormHelp(){
 async function renderInsights(){
   view().innerHTML = '<div class="empty">Loading...</div>';
   // Exclude 'dropped' journeys (e.g. cleared stale backlog) from all insights.
-  const [J, C, V] = await Promise.all([
+  const [J, C, V] = await cached('insights', ()=>Promise.all([
     fetchAll(()=> sb.from('journeys').select('id, type, status, sadhana_status, center_id, assigned_to').neq('status','dropped')),
     fetchAll(()=> sb.from('calls').select('id, due_date, completed_at, reachability, journey_id, journeys!inner(status)').neq('journeys.status','dropped')),
     fetchAll(()=> sb.from('volunteer_history').select('id, person_id, activity, center_id, happened_on'))
-  ]);
+  ]));
   const open = C.filter(c=>!c.completed_at), done = C.filter(c=>c.completed_at);
   const overdue = open.filter(c=>c.due_date < today());
   const answered = done.filter(c=>c.reachability==='answered');
@@ -1211,6 +1261,7 @@ async function renderInsights(){
     (Object.entries(dist).sort((a,b)=>b[1]-a[1]).map(([s,n])=>'<tr><td>' + esc(s) + '</td><td>' + n + '</td></tr>').join('')||'<tr><td colspan=2 class="muted">No logged statuses yet</td></tr>') +
     '</table></div>';
   view().innerHTML = h;
+  await loadScript(CDN.chart);
   if(Object.keys(dist).length){
     new Chart($('ch-dist'), {type:'doughnut',
       data:{labels:Object.keys(dist), datasets:[{data:Object.values(dist),
@@ -1236,9 +1287,12 @@ async function renderInsights(){
 async function renderAdmin(){
   if(!isCoord()){ view().innerHTML='<div class="empty">Coordinators only.</div>'; return; }
   view().innerHTML = '<div class="empty">Loading...</div>';
-  const [{data:profs},{data:acts}] = await Promise.all([
-    sb.from('profiles').select('*').order('created_at'),
-    sb.from('activities').select('*').order('activity_date',{ascending:false}).limit(30)]);
+  const {profs, acts} = await cached('admin', async()=>{
+    const [a,b] = await Promise.all([
+      sb.from('profiles').select('*').order('created_at'),
+      sb.from('activities').select('*').order('activity_date',{ascending:false}).limit(30)]);
+    return {profs:a.data||[], acts:b.data||[]};
+  });
 
   let h = '';
   h += '<div class="card"><h2>🎉 Activities & Attendance QR</h2>' +
@@ -1372,7 +1426,7 @@ async function toggleActivity(id, open){
   if(document.querySelector('#nav button.active')?.dataset.v === 'vols') renderVols();
   else renderAdmin();
 }
-function showQR(token, name){
+async function showQR(token, name){
   const base = location.href.replace(/[^/]*$/,'');
   const url = base + 'checkin.html?t=' + token;
   modal('<h3>' + esc(name) + '</h3>' +
@@ -1383,6 +1437,7 @@ function showQR(token, name){
       '<button class="btn ghost" onclick="navigator.clipboard.writeText(\'' + esc(url) + '\');toast(\'Link copied!\')">Copy link</button>' +
       '<a class="btn ghost" href="https://wa.me/?text=' + encodeURIComponent('Join us! Mark your attendance here: ' + url) + '" target="_blank">Share via WhatsApp</a>' +
     '</div>');
+  await loadScript(CDN.qrcode);
   new QRCode($('qr-box'), {text:url, width:200, height:200});
 }
 

@@ -6,11 +6,7 @@
 <title>Isha E-City Nurturing</title>
 <link rel="stylesheet" href="styles.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-<!-- Tesseract loaded lazily only when OCR is used (see app.js) -->
+<!-- Chart.js, xlsx, papaparse, qrcode and Tesseract are loaded on demand (see loadScript in app.js) -->
 <script src="config.js"></script>
 </head>
 <body>
@@ -33,7 +29,8 @@
   <header>
     <h1>🪷 E-City Nurturing</h1>
     <div class="who"><span id="who-name"></span><br><span id="who-role"></span>
-      &nbsp;&middot;&nbsp;<a href="#" onclick="doLogout();return false" style="color:var(--muted)">sign out</a></div>
+      &nbsp;&middot;&nbsp;<a href="#" onclick="refreshNow();return false">↻ refresh</a>
+      &nbsp;&middot;&nbsp;<a href="#" onclick="doLogout();return false">sign out</a></div>
   </header>
   <div id="view"></div>
 </div>
