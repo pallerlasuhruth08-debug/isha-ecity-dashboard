@@ -28,13 +28,23 @@ function toast(m){ const t=$('toast'); t.textContent=m; t.classList.add('show');
 /* Fetch EVERY matching row, paging past Supabase's 1000-row-per-request cap.
    makeQuery() must return a fresh query builder each call (so .range() can be re-applied). */
 async function fetchAll(makeQuery, pageSize=1000){
-  let from = 0, all = [];
+  // Page 1 tells us whether there's more; remaining pages are fetched in
+  // parallel waves so a 6,000-row table is ~2 round-trips instead of 6+.
+  const first = await makeQuery().range(0, pageSize-1);
+  if(first.error){ toast(first.error.message); return []; }
+  let all = first.data || [];
+  if(all.length < pageSize) return all;
+  let page = 1;
+  const WAVE = 6;
   for(;;){
-    const {data, error} = await makeQuery().range(from, from + pageSize - 1);
-    if(error){ toast(error.message); break; }
-    all = all.concat(data||[]);
-    if(!data || data.length < pageSize) break;
-    from += pageSize;
+    const reqs = [];
+    for(let k=0;k<WAVE;k++){ const from=(page+k)*pageSize; reqs.push(makeQuery().range(from, from+pageSize-1)); }
+    const res = await Promise.all(reqs);
+    let lastFull = false;
+    for(const r of res){ if(r.error) continue; const d=r.data||[]; all=all.concat(d); }
+    lastFull = (res[res.length-1].data||[]).length === pageSize;
+    page += WAVE;
+    if(!lastFull) break;
   }
   return all;
 }
@@ -522,7 +532,8 @@ async function renderMeditatorsList(tabBar){
 
   // Load the full meditator directory once (cached); filter client-side so
   // changing center/tag/date/search is instant and doesn't re-hit the DB.
-  const all = await cached('people_all', () => fetchAll(() => sb.from('people').select('*')
+  const all = await cached('people_all', () => fetchAll(() => sb.from('people')
+    .select('id,full_name,phone,email,occupation,gender,date_of_birth,area,city,street,pincode,center_id,ie_date,bsp_date,shoonya_date,samyama_date,guru_puja_date,tags')
     .eq('is_meditator', true).order('ie_date', {ascending:false})));
   MED_INDEX = {}; all.forEach(p=>MED_INDEX[p.id]=p);
   const s = (f.search||'').toLowerCase();
