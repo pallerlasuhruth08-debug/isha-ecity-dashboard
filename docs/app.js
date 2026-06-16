@@ -73,6 +73,29 @@ async function cached(key, loader){
   return CACHE[key];
 }
 function cacheBust(){ CACHE = {}; }
+
+/* Windowed list rendering: paint a small first batch instantly, then append
+   more as the user scrolls near the end. Keeps the DOM light even for 6,000+
+   rows so the first open is fast. items=array, rowFn(item)->html string. */
+let _io = null;
+function mountList(host, items, rowFn, batch=60){
+  if(_io){ _io.disconnect(); _io=null; }
+  let n = 0;
+  const sentinel = document.createElement('div');
+  sentinel.style.height = '1px';
+  host.appendChild(sentinel);
+  function more(){
+    if(n >= items.length){ if(_io){_io.disconnect();_io=null;} sentinel.remove(); return; }
+    const frag = document.createElement('template');
+    frag.innerHTML = items.slice(n, n+batch).map(rowFn).join('');
+    host.insertBefore(frag.content, sentinel);
+    n += batch;
+    if(n >= items.length){ if(_io){_io.disconnect();_io=null;} sentinel.remove(); }
+  }
+  _io = new IntersectionObserver(es=>{ if(es.some(e=>e.isIntersecting)) more(); }, {root:null, rootMargin:'800px'});
+  _io.observe(sentinel);
+  more(); // first batch (paints immediately)
+}
 async function refreshNow(){ cacheBust(); toast('Refreshing...'); await go(CURRENT_VIEW||'today'); toast('Up to date'); }
 
 /* ---------------- AUTH ---------------- */
@@ -548,10 +571,11 @@ async function renderMeditatorsList(tabBar){
     return true;
   });
 
-  h += `<div class="card"><h2>🧘 Meditators <span class="badge">${rows.length}</span></h2>`;
-  h += rows.length ? rows.map(meditatorDetailRow).join('') : '<div class="empty">No meditators matching filters.</div>';
-  h += '</div>';
+  h += `<div class="card"><h2>🧘 Meditators <span class="badge">${rows.length}</span></h2><div id="med-host"></div></div>`;
   view().innerHTML = h;
+  const host = $('med-host');
+  if(rows.length) mountList(host, rows, meditatorDetailRow);
+  else host.innerHTML = '<div class="empty">No meditators matching filters.</div>';
 }
 
 let MED_INDEX = {};
@@ -1043,10 +1067,11 @@ async function renderVols(){
         oninput="VFILTER.search=this.value" onkeydown="if(event.key==='Enter')renderVols()">
     </div>`;
     h += `<div class="card"><h2>🪷 IEO Completion Form — Volunteer Interest <span class="badge">${rows.length}</span></h2>
-      <p class="muted" style="font-size:.78rem;margin-bottom:6px">People who ticked "Volunteer" on an IE completion form in Ishangam (Electronic City), segregated by center (from pincode). ${matched}/${rows.length} shown have a synced profile. Newest IE first.</p>`;
-    h += rows.length ? rows.map(r=>icvRow(r, profByPhone[r.phone])).join('') : '<div class="empty">No records yet — run the IE-completion sync.</div>';
-    h += '</div>';
+      <p class="muted" style="font-size:.78rem;margin-bottom:6px">People who ticked "Volunteer" on an IE completion form in Ishangam (Electronic City), segregated by center (from pincode). ${matched}/${rows.length} shown have a synced profile. Newest IE first.</p><div id="icv-host"></div></div>`;
     view().innerHTML = h;
+    const ih = $('icv-host');
+    if(rows.length) mountList(ih, rows, r=>icvRow(r, profByPhone[r.phone]));
+    else ih.innerHTML = '<div class="empty">No records yet — run the IE-completion sync.</div>';
     return;
   }
 
@@ -1095,10 +1120,11 @@ async function renderVols(){
         <option value="weekday_evening">Weekday PM</option><option value="weekend">Weekends</option></select>
       <button class="${VFILTER.space?'sel':''}" onclick="VFILTER.space=!VFILTER.space;renderVols()">Can offer space</button>
     </div></div>
-  <div class="card"><h2>${VOL_TAB==='new'?'New volunteer interest':'All existing volunteers'} <span class="badge">${list.length}</span></h2>`;
-  h += list.length ? list.map(v=>volRow(v, histBy[v.person_id]||[])).join('') : '<div class="empty">No matches.</div>';
-  h += '</div>';
+  <div class="card"><h2>${VOL_TAB==='new'?'New volunteer interest':'All existing volunteers'} <span class="badge">${list.length}</span></h2><div id="vol-host"></div></div>`;
   view().innerHTML = h;
+  const vh = $('vol-host');
+  if(list.length) mountList(vh, list, v=>volRow(v, histBy[v.person_id]||[]));
+  else vh.innerHTML = '<div class="empty">No matches.</div>';
 }
 
 async function viewAttendees(actId, actName){
