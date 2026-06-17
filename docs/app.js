@@ -159,6 +159,7 @@ const centerName = id => (CENTERS_ALL.find(c=>c.id===id)||{}).name || (id==='all
 // coordinator+ = anyone who can see/allocate beyond their own assignments
 const isCoord = () => ['center_coordinator','sector_nurturer','admin'].includes(ME.role);
 const isAdmin = () => ME.role==='admin';
+const isSector = () => ['sector_nurturer','admin'].includes(ME.role);   // can_all() roles
 // Center for a person: use the stored center if set, else derive it from the
 // pincode -> center map (Admin page). Lets us segregate by center even when
 // center_id hasn't been written yet.
@@ -576,9 +577,16 @@ async function renderMeditatorsList(tabBar){
   const tagOpts = `<option value="">All Tags</option>${COMMON_TAGS.map(t=>`<option value="${t}" ${f.tag===t?'selected':''}>${esc(t)}</option>`).join('')}`;
 
   let h = tabBar;
-  if(isCoord()) h += `<div style="display:flex;gap:8px;margin:6px 0;flex-wrap:wrap">
-    <button class="btn small ghost" onclick="openImport()">📥 Import</button>
-    <button class="btn small ghost" onclick="openAddPerson()">➕ Add person</button>
+  h += `<div style="display:flex;gap:8px;margin:6px 0;flex-wrap:wrap">
+    <button class="btn small green" onclick="medMessageAll('meditator')">✉️ Message all</button>
+    <button class="btn small ghost" onclick="medMessageAll('satsang')">🙏 Satsang invite</button>
+    <button class="btn small ghost" onclick="openTemplates('meditator')">📝 Templates</button>
+    ${isCoord()?`<button class="btn small ghost" onclick="openImport()">📥 Import</button>
+    <button class="btn small ghost" onclick="openAddPerson()">➕ Add person</button>`:''}
+  </div>
+  <div class="tabs">
+    <button class="${MED_SCOPE==='all'?'active':''}" onclick="MED_SCOPE='all';renderPeople()">All meditators</button>
+    <button class="${MED_SCOPE==='mine'?'active':''}" onclick="MED_SCOPE='mine';renderPeople()">🙋 My meditators</button>
   </div>`;
 
   h += `<div class="card" style="padding:10px">
@@ -605,18 +613,27 @@ async function renderMeditatorsList(tabBar){
     .eq('is_meditator', true).order('ie_date', {ascending:false})));
   MED_INDEX = {}; all.forEach(p=>MED_INDEX[p.id]=p);
   MED_ALL = all;
+  // nurturer assignments (who nurtures whom)
+  const nurturers = await cached('nurturers', ()=>fetchAll(()=>sb.from('nurturers').select('id,full_name,phone,profile_id')));
+  const assigns   = await cached('med_assign', ()=>fetchAll(()=>sb.from('nurturer_assignments').select('meditator_id,nurturer_id')));
+  const nById={}; nurturers.forEach(n=>nById[n.id]=n);
+  const myNurIds = new Set(nurturers.filter(n=>n.profile_id===ME.id).map(n=>n.id));
+  MED_ASSIGN={}; MY_MED_IDS=new Set();
+  assigns.forEach(a=>{ (MED_ASSIGN[a.meditator_id] ||= []).push(nById[a.nurturer_id]?.full_name||'?');
+    if(myNurIds.has(a.nurturer_id)) MY_MED_IDS.add(a.meditator_id); });
   const rows = medFilter();
 
-  h += `<div class="card"><h2>🧘 Meditators <span class="badge" id="med-count">${rows.length}</span></h2><div id="med-host"></div></div>`;
+  h += `<div class="card"><h2>${MED_SCOPE==='mine'?'🙋 My meditators':'🧘 Meditators'} <span class="badge" id="med-count">${rows.length}</span></h2><div id="med-host"></div></div>`;
   view().innerHTML = h;
   const host = $('med-host');
   if(rows.length) mountList(host, rows, meditatorDetailRow);
   else host.innerHTML = '<div class="empty">No meditators matching filters.</div>';
 }
-let MED_ALL = [];
+let MED_ALL = [], MED_SCOPE='all', MED_ASSIGN={}, MY_MED_IDS=new Set();
 function medFilter(){
   const f = PF.meditator, s = (f.search||'').toLowerCase().trim(), sd = s.replace(/\D/g,'');
   return MED_ALL.filter(p=>{
+    if(MED_SCOPE==='mine' && !MY_MED_IDS.has(p.id)) return false;
     if(f.center && p.center_id!==f.center) return false;
     if(f.tag && !(p.tags||[]).includes(f.tag)) return false;
     if(f.dateFrom && !(p.ie_date && p.ie_date>=f.dateFrom)) return false;
@@ -624,6 +641,12 @@ function medFilter(){
     if(s && !((p.full_name||'').toLowerCase().includes(s) || (sd && (p.phone||'').includes(sd)))) return false;
     return true;
   });
+}
+// message all currently-shown meditators with a meditator/satsang template
+function medMessageAll(aud){
+  const people = medFilter().map(p=>({full_name:p.full_name, phone:p.phone})).filter(p=>p.phone);
+  if(!people.length) return toast('No one with a phone in this list');
+  openMsgAll(aud, people, aud==='satsang'?'Satsang invite':'Message meditators');
 }
 // live search: re-filter + re-mount only the list, so the search box keeps focus
 function medSearchLive(){
@@ -647,11 +670,12 @@ function meditatorDetailRow(p){
   const tags = (p.tags||[]).slice(0,4).map(t=>`<span class="badge gray" style="font-size:.68rem">${esc(t)}</span>`).join(' ');
   const adv = [p.bsp_date&&`BSP: ${fmtD(p.bsp_date)}`, p.shoonya_date&&`Shoonya:${fmtD(p.shoonya_date)}`, p.samyama_date&&`Samyama:${fmtD(p.samyama_date)}`, p.guru_puja_date&&`Guru Puja:${fmtD(p.guru_puja_date)}`].filter(Boolean).join(' - ');
   const wa = p.phone ? `https://wa.me/91${p.phone}?text=${encodeURIComponent(WA_MSG.meditator((p.full_name||'').split(' ')[0]))}` : null;
+  const nur = (MED_ASSIGN[p.id]||[]);
   return `<div class="row">
     ${p.photo_url?`<img class="av" src="${esc(p.photo_url)}" loading="lazy" alt="" onclick="showMedById('${p.id}')" onerror="this.style.display='none'">`:''}
     <div class="grow" style="cursor:pointer" onclick="showMedById('${p.id}')">
       <div class="name">${esc(p.full_name)} ${tags}</div>
-      <div class="sub">IE: ${fmtD(p.ie_date)} - ${centerName(p.center_id)}${adv?' - '+adv:''} <span class="muted" style="font-size:.7rem">· tap for profile</span></div>
+      <div class="sub">IE: ${fmtD(p.ie_date)} - ${centerName(p.center_id)}${adv?' - '+adv:''}${nur.length?` · 👤 ${esc(nur.join(', '))}`:''} <span class="muted" style="font-size:.7rem">· tap for profile</span></div>
     </div>
     ${p.phone?`<a class="iconbtn call" href="tel:+91${p.phone}">Call</a>`:''}
     ${wa?`<a class="iconbtn wa" href="${wa}" target="_blank">WA</a>`:''}
@@ -691,7 +715,7 @@ function openPhoto(src){
 /* ---------------- WhatsApp message templates ---------------- */
 let MSG_TPL=null, MSG_PEOPLE=[], MSG_TS=[], MSG_AUD='nurture', MSG_TITLE='Message all';
 let DEFAULT_NURTURE_TPL=null;   // first nurturing template body, used by per-call WA buttons
-const AUD_LABEL = {nurture:'Nurturing', adv_completed:'Advanced · Completed', adv_interested:'Advanced · Interested'};
+const AUD_LABEL = {nurture:'Nurturing', adv_completed:'Advanced · Completed', adv_interested:'Advanced · Interested', meditator:'Meditator', satsang:'Satsang invite'};
 const loadTemplates = () => cached('templates', async()=>(await sb.from('message_templates').select('*').order('created_at')).data||[]);
 const tplsFor = async(aud)=> (await loadTemplates()).filter(t=>(t.audience||'nurture')===aud);
 // Adds the Isha touch to every outgoing WhatsApp message: a 🙏 right after the
@@ -766,6 +790,7 @@ async function openMsgAll(aud, people, title){
   MSG_TS = ts; MSG_AUD = aud; MSG_TITLE = title || 'Message all';
   if(!MSG_TPL || !ts.find(t=>t.id===MSG_TPL)) MSG_TPL = ts[0].id;   // reset if template not in this audience
   MSG_PEOPLE = (people||[]).filter(p=>p && p.phone);
+  if(MSG_PEOPLE.length>500){ MSG_PEOPLE = MSG_PEOPLE.slice(0,500); toast('Large list — showing first 500. Filter/search to narrow.'); }
   renderMessageAll();
 }
 function renderMessageAll(){
@@ -787,10 +812,78 @@ function renderMessageAll(){
   h += '</div>';
   modal(h);
 }
-function showMeditatorDetail(d){
+async function showMeditatorDetail(d){
+  const {data:assigned} = await sb.from('nurturer_assignments').select('id, nurturers(full_name)').eq('meditator_id', d.id);
+  const a = assigned||[];
+  let nurHtml = `<div style="margin-top:12px"><div class="muted" style="font-size:.8rem">🙏 Nurturers</div><div style="margin-top:4px">`;
+  nurHtml += a.length ? a.map(x=>`<span class="badge gray" style="margin:3px 5px 0 0">${esc(x.nurturers?.full_name||'?')}${isCoord()?` <a href="#" onclick="unassignNurturer('${x.id}','${d.id}');return false" style="color:var(--warn);text-decoration:none">✕</a>`:''}</span>`).join('')
+    : '<span class="muted" style="font-size:.82rem">none yet</span>';
+  nurHtml += '</div></div>';
   modal(`<h3>${esc(d.n)}</h3>${profileBody(d)}
-    ${isCoord()?`<button class="btn block" style="margin-top:14px" onclick='closeModal();startNurturing(${JSON.stringify({pid:d.id,name:d.n}).replace(/'/g,"&#39;")})'>Add to nurturing calls</button>`:''}
-  `);
+    ${nurHtml}
+    <div class="choices" style="gap:6px;margin-top:14px">
+      ${isCoord()?`<button class="btn small green" onclick="openAssignNurturer('${d.id}','${esc(d.n)}')">👤 Assign nurturer</button>`:''}
+      ${isCoord()?`<button class="btn small ghost" onclick='closeModal();startNurturing(${JSON.stringify({pid:d.id,name:d.n}).replace(/'/g,"&#39;")})'>📞 Add to calls</button>`:''}
+    </div>`);
+}
+async function openAssignNurturer(medId, medName){
+  const profs = (await sb.from('profiles').select('id,full_name,email,phone,role').eq('active',true).order('full_name')).data||[];
+  const nurturers = await cached('nurturers', ()=>fetchAll(()=>sb.from('nurturers').select('id,full_name,phone,profile_id')));
+  const cur = (await sb.from('nurturer_assignments').select('nurturer_id').eq('meditator_id',medId)).data||[];
+  const assignedSet = new Set(cur.map(x=>x.nurturer_id));
+  let h = `<h3>Assign nurturer</h3><p class="muted" style="font-size:.82rem">${esc(medName)}</p>
+    <input id="an-q" placeholder="🔍 filter by name" oninput="anFilter()" style="margin-bottom:8px">
+    <div id="an-list" style="max-height:46vh;overflow:auto">`;
+  h += `<div class="muted" style="font-size:.74rem;margin:4px 0">App users (they get a "My Meditators" view)</div>`;
+  h += profs.map(p=>`<div class="row anrow" data-t="${esc((p.full_name||p.email||'').toLowerCase())}"><div class="grow"><div class="name">${esc(p.full_name||p.email)}</div><div class="sub">${roleLabel(p.role)}</div></div>
+      <button class="btn small green" onclick="assignProfile('${medId}','${p.id}',this)">Assign</button></div>`).join('');
+  const nl = nurturers.filter(n=>!n.profile_id);
+  if(nl.length){
+    h += `<div class="muted" style="font-size:.74rem;margin:10px 0 4px">Other nurturers (no login)</div>`;
+    h += nl.map(n=>`<div class="row anrow" data-t="${esc((n.full_name||'').toLowerCase())}"><div class="grow"><div class="name">${esc(n.full_name)}</div><div class="sub">${esc(n.phone||'')}</div></div>
+      <button class="btn small ${assignedSet.has(n.id)?'gray':'green'}" ${assignedSet.has(n.id)?'disabled':''} onclick="assignNurturer('${medId}','${n.id}',this)">${assignedSet.has(n.id)?'Assigned':'Assign'}</button></div>`).join('');
+  }
+  h += `</div>
+    <div style="margin-top:10px;border-top:1px solid var(--line);padding-top:10px">
+      <div class="muted" style="font-size:.74rem">➕ New nurturer (no login yet)</div>
+      <input id="an-name" placeholder="Name" style="margin-top:4px">
+      <input id="an-phone" placeholder="Phone (optional)" inputmode="numeric" style="margin-top:6px">
+      <button class="btn block" style="margin-top:8px" onclick="createNurturerAssign('${medId}')">Create &amp; assign</button>
+    </div>`;
+  modal(h);
+}
+function anFilter(){ const q=($('an-q').value||'').toLowerCase(); document.querySelectorAll('#an-list .anrow').forEach(r=>{ r.style.display = r.dataset.t.includes(q)?'':'none'; }); }
+async function assignProfile(medId, profileId, btn){
+  let nid;
+  const ex = (await sb.from('nurturers').select('id').eq('profile_id',profileId).limit(1)).data;
+  if(ex && ex[0]) nid = ex[0].id;
+  else {
+    const p = (await sb.from('profiles').select('full_name,email,phone').eq('id',profileId).single()).data;
+    const ins = await sb.from('nurturers').insert({full_name:p.full_name||p.email, phone:p.phone||null, profile_id:profileId, source:'login'}).select('id').single();
+    if(ins.error) return toast(ins.error.message); nid = ins.data.id;
+  }
+  return assignNurturer(medId, nid, btn);
+}
+async function assignNurturer(medId, nurturerId, btn){
+  const {error} = await sb.from('nurturer_assignments').upsert({meditator_id:medId, nurturer_id:nurturerId, assigned_by:ME.id},{onConflict:'meditator_id,nurturer_id',ignoreDuplicates:true});
+  if(error) return toast(error.message);
+  if(btn){ btn.textContent='Assigned'; btn.disabled=true; btn.classList.remove('green'); btn.classList.add('gray'); }
+  cacheBust(); toast('Assigned');
+}
+async function createNurturerAssign(medId){
+  const name = ($('an-name').value||'').trim(); if(!name) return toast('Name required');
+  const phone = (($('an-phone').value||'').replace(/\D/g,'').slice(-10)) || null;
+  let profileId = null;
+  if(phone){ const pr=(await sb.from('profiles').select('id').eq('phone',phone).limit(1)).data; if(pr&&pr[0]) profileId=pr[0].id; }
+  const ins = await sb.from('nurturers').insert({full_name:name, phone, profile_id:profileId, source:'manual'}).select('id').single();
+  if(ins.error) return toast(ins.error.message);
+  await assignNurturer(medId, ins.data.id, null);
+  closeModal(); toast('Created & assigned');
+}
+async function unassignNurturer(assignId, medId){
+  const {error} = await sb.from('nurturer_assignments').delete().eq('id', assignId);
+  if(error) return toast(error.message);
+  cacheBust(); toast('Removed'); showMedById(medId);
 }
 
 async function startNurturing(d){
@@ -827,34 +920,31 @@ async function renderAdvancedList(tabBar){
   const centerOpts = `<option value="">All Centers</option>${CENTERS.map(c=>`<option value="${c.id}" ${f.center===c.id?'selected':''}>${c.name}</option>`).join('')}`;
 
   let h = tabBar;
-  // program picker
   const progEmoji = {bsp:'🌀', shoonya:'🕉️', samyama:'🧘', guru_puja:'🙏'};
-  h += `<div class="tabs">${ADV_PROGS.map(([v,l])=>
-    `<button class="${f.program===v?'active':''}" onclick="PF.advanced.program='${v}';renderPeople()">${progEmoji[v]||''} ${l}</button>`).join('')}</div>`;
-  // completed vs interested
-  h += `<div class="choices" style="margin:8px 0;gap:6px">
-    <button class="${f.view==='completed'?'sel':''}" onclick="PF.advanced.view='completed';renderPeople()">✅ Completed</button>
-    <button class="${f.view==='interested'?'sel':''}" onclick="PF.advanced.view='interested';renderPeople()">✋ Interested</button>
-  </div>`;
-  // common filters
-  h += `<div class="card" style="padding:10px">
+  // single clean toolbar of dropdowns
+  h += `<div class="card" style="padding:12px">
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <select style="width:auto" onchange="PF.advanced.program=this.value;renderPeople()">
+        ${ADV_PROGS.map(([v,l])=>`<option value="${v}" ${f.program===v?'selected':''}>${progEmoji[v]||''} ${l}</option>`).join('')}</select>
+      <select style="width:auto" onchange="PF.advanced.view=this.value;renderPeople()">
+        <option value="completed" ${f.view==='completed'?'selected':''}>✅ Completed</option>
+        <option value="interested" ${f.view==='interested'?'selected':''}>✋ Interested</option></select>
+      ${f.view==='completed'?`<select style="width:auto" onchange="PF.advanced.window=this.value;renderPeople()">
+        <option value="week" ${f.window==='week'?'selected':''}>New this week</option>
+        <option value="all" ${f.window==='all'?'selected':''}>All completers</option></select>`:''}
       <select style="width:auto" onchange="PF.advanced.center=this.value;renderPeople()">${centerOpts}</select>
-      <input placeholder="Search name/phone" style="flex:1;min-width:140px" value="${esc(f.search)}"
+      <input placeholder="🔍 name/phone" style="flex:1;min-width:140px" value="${esc(f.search)}"
         oninput="PF.advanced.search=this.value" onkeydown="if(event.key==='Enter')renderPeople()">
-      <button class="btn small ghost" onclick="renderPeople()">Search</button>
+      ${isCoord()?`<select style="width:auto" onchange="advImport(this.value,'${f.program}');this.selectedIndex=0">
+        <option value="">📥 Import…</option>
+        <option value="excel">From Excel / Sheet</option>
+        <option value="paper">From paper form</option></select>`:''}
     </div>
   </div>`;
 
   if(f.view === 'completed'){
-    h += `<div class="card" style="padding:10px">
-      <div class="choices" style="gap:6px">
-        <button class="${f.window==='week'?'sel':''}" onclick="PF.advanced.window='week';renderPeople()">New this week</button>
-        <button class="${f.window==='all'?'sel':''}" onclick="PF.advanced.window='all';renderPeople()">All completers</button>
-      </div>
-      <p class="muted" style="font-size:.78rem;margin-top:8px">Completed ${esc(label)} from Ishangam. Last synced: <b>${fmtD(sync.last_sync_date)}</b>.
-        ${isCoord()?`<button class="btn small ghost" onclick="markSynced()" style="margin-left:6px">🔄 I synced today</button>`:''}</p>
-    </div>`;
+    h += `<p class="muted" style="font-size:.78rem;margin:6px 2px">Completed ${esc(label)} from Ishangam · last synced <b>${fmtD(sync.last_sync_date)}</b>.
+      ${isCoord()?`<button class="btn small ghost" onclick="markSynced()" style="margin-left:6px">🔄 I synced today</button>`:''}</p>`;
     const winStart = f.window==='week' ? sync.prev_sync_date : null;   // 'all' = every completer, any date
     let rows = await fetchAll(() => {
       let q = sb.from('people').select(`id, full_name, phone, center_id, tags, photo_url, ${col}`)
@@ -873,7 +963,6 @@ async function renderAdvancedList(tabBar){
       : `<div class="empty">No ${esc(label)} completions in this window.<br>Run the weekly Ishangam scrape, then press "I synced today".</div>`;
     h += '</div>';
   } else {
-    if(isCoord()) h += `<div style="margin:6px 0"><button class="btn small green" onclick="openAddInterest('${f.program}')">✋ Add interested (from paper)</button></div>`;
     let rows = await fetchAll(() => sb.from('advanced_interest')
       .select('id, program, interest_date, status, notes, people!inner(id, full_name, phone, center_id, tags, photo_url)')
       .eq('program', f.program).order('interest_date',{ascending:false}));
@@ -949,6 +1038,32 @@ async function saveAddInterest(program){
 async function setInterestStatus(id, status){
   const {error} = await sb.from('advanced_interest').update({status}).eq('id', id);
   toast(error?error.message:'Updated');
+}
+function advImport(kind, program){
+  if(kind==='paper') return openAddInterest(program);
+  if(kind==='excel') return advImportExcel(program);
+}
+function advImportExcel(program){
+  const label=(ADV_PROGS.find(p=>p[0]===program)||[])[1]||program;
+  modal(`<h3>Import interested — ${esc(label)}</h3>
+    <p class="muted" style="font-size:.8rem">Paste one per line as <b>Name, Phone</b> (from Excel or a Google Sheet). Each becomes an "interested in ${esc(label)}" entry, matched to existing meditators by phone.</p>
+    <textarea id="advimp" style="min-height:170px" placeholder="Ramesh Kumar, 9876543210
+Lakshmi, 9123456789"></textarea>
+    <button class="btn block" onclick="advImportRun('${program}')">Import</button>`);
+}
+async function advImportRun(program){
+  const lines=($('advimp').value||'').split('\n').map(s=>s.trim()).filter(Boolean);
+  if(!lines.length) return toast('Paste some rows first');
+  let ok=0, fail=0;
+  for(const l of lines){
+    const parts=l.split(/[,\t;]+/).map(s=>s.trim()).filter(Boolean);
+    let name=null, phone=null;
+    parts.forEach(p=>{ const d=p.replace(/\D/g,''); if(d.length>=10&&!phone)phone=d.slice(-10); else if(!name&&/[A-Za-z]/.test(p))name=p; });
+    if(!name&&!phone){ fail++; continue; }
+    const {data,error}=await sb.rpc('add_advanced_interest',{p_name:name||'',p_phone:phone||'',p_program:program,p_notes:'imported',p_pincode:null});
+    if(error||data?.error) fail++; else ok++;
+  }
+  cacheBust(); closeModal(); toast('Imported '+ok+(fail?(' · '+fail+' skipped'):'')); renderPeople();
 }
 async function markSynced(){
   const {data, error} = await sb.rpc('mark_advanced_sync');
@@ -1420,7 +1535,6 @@ async function renderVols(){
   }));
 
   // recent activities for event management
-  const acts = await cached('vol_acts', async()=>(await sb.from('activities').select('id, name, activity_type, activity_date, is_open, qr_token, center_id').order('activity_date',{ascending:false}).limit(10)).data||[]);
 
   // IE Completion volunteer-interest list (cached once; count = list length, avoids a slow exact-count query).
   const icvList = await cached('icv', () => fetchAll(()=>sb.from('ie_completion_volunteer').select('*').order('ie_date',{ascending:false,nullsFirst:false})));
@@ -1430,7 +1544,6 @@ async function renderVols(){
     <button class="btn small ghost" onclick="openPaperOCR()">📄 Paper Form (OCR)</button>
     <button class="btn small ghost" onclick="openVolForm()">➕ Add interest</button>
     <button class="btn small ghost" onclick="openGFormHelp()">📝 Google Form</button>
-    <button class="btn small green" onclick="openNewActivity()">🎉 Create Event</button>
     ${SHORTLIST.length?`<button class="btn small green" onclick="shareShortlist()">📤 Share shortlist (${SHORTLIST.length})</button>`:''}
   </div>`;
 
@@ -1485,21 +1598,7 @@ async function renderVols(){
     return;
   }
 
-  // Recent events (compact)
-  if(acts?.length){
-    h += `<div class="card"><h2>📅 Recent Events</h2>`;
-    h += acts.map(a=>`<div class="row"><div class="grow">
-      <div class="name">${esc(a.name)} ${a.is_open?'<span class="badge green">open</span>':'<span class="badge gray">closed</span>'}
-        ${a.activity_type&&a.activity_type!=='general'?`<span class="badge">${esc(a.activity_type)}</span>`:''}</div>
-      <div class="sub">${centerName(a.center_id)} - ${fmtD(a.activity_date)}</div></div>
-      <button class="btn small ghost" onclick="showQR('${a.qr_token}','${esc(a.name)}')">QR</button>
-      <button class="btn small ghost" onclick="viewAttendees('${a.id}','${esc(a.name)}')">Attendees</button>
-      <button class="btn small ghost" onclick="openEditActivity('${a.id}')">Edit</button>
-      <button class="btn small gray" onclick="toggleActivity('${a.id}',${!a.is_open})">${a.is_open?'Close':'Open'}</button>
-      <button class="btn small gray" onclick="deleteActivity('${a.id}')">Delete</button>
-    </div>`).join('');
-    h += `</div>`;
-  }
+  // (Recent Events moved to the Admin tab — managed there by Sector Nurturers / Admin.)
 
   h += `<div class="card"><h2>🔍 Filter & match volunteers</h2>
     <div class="choices" style="flex-wrap:wrap;gap:6px">
@@ -1743,17 +1842,21 @@ async function renderAdmin(){
   });
 
   let h = '';
-  h += '<div class="card"><h2>🎉 Activities & Attendance QR</h2>' +
-    '<button class="btn small ghost" onclick="openNewActivity()">➕ New activity</button>';
-  h += (acts||[]).map(a=>'<div class="row"><div class="grow">' +
-      '<div class="name">' + esc(a.name) + ' ' + (a.is_open?'<span class="badge green">open</span>':'<span class="badge gray">closed</span>') + '</div>' +
-      '<div class="sub">' + centerName(a.center_id) + ' - ' + fmtD(a.activity_date) + (a.activity_type&&a.activity_type!=='general'?' - '+esc(a.activity_type):'') + '</div></div>' +
-    '<button class="btn small ghost" onclick="showQR(\'' + a.qr_token + '\',\'' + esc(a.name) + '\')">QR</button>' +
-    '<button class="btn small ghost" onclick="viewAttendees(\'' + a.id + '\',\'' + esc(a.name) + '\')">Attendees</button>' +
-    '<button class="btn small ghost" onclick="openEditActivity(\'' + a.id + '\')">Edit</button>' +
-    '<button class="btn small gray" onclick="toggleActivity(\'' + a.id + '\',' + (!a.is_open) + ')">' + (a.is_open?'Close':'Reopen') + '</button>' +
-    '</div>').join('') || '<div class="empty">No activities yet.</div>';
-  h += '</div>';
+  // Events live here in Admin, and only Sector Nurturers / Admins manage them.
+  if(isSector()){
+    h += '<div class="card"><h2>🎉 Activities & Attendance QR</h2>' +
+      '<button class="btn small ghost" onclick="openNewActivity()">➕ New activity</button>';
+    h += (acts||[]).map(a=>'<div class="row"><div class="grow">' +
+        '<div class="name">' + esc(a.name) + ' ' + (a.is_open?'<span class="badge green">open</span>':'<span class="badge gray">closed</span>') + '</div>' +
+        '<div class="sub">' + centerName(a.center_id) + ' - ' + fmtD(a.activity_date) + (a.activity_type&&a.activity_type!=='general'?' - '+esc(a.activity_type):'') + '</div></div>' +
+      '<button class="btn small ghost" onclick="showQR(\'' + a.qr_token + '\',\'' + esc(a.name) + '\')">QR</button>' +
+      '<button class="btn small ghost" onclick="viewAttendees(\'' + a.id + '\',\'' + esc(a.name) + '\')">Attendees</button>' +
+      '<button class="btn small ghost" onclick="openEditActivity(\'' + a.id + '\')">Edit</button>' +
+      '<button class="btn small gray" onclick="toggleActivity(\'' + a.id + '\',' + (!a.is_open) + ')">' + (a.is_open?'Close':'Reopen') + '</button>' +
+      '<button class="btn small gray" onclick="deleteActivity(\'' + a.id + '\')">Delete</button>' +
+      '</div>').join('') || '<div class="empty">No activities yet.</div>';
+    h += '</div>';
+  }
 
   const assignCenters = CENTERS.concat([{id:'all',name:'All Centers'},{id:'unassigned',name:'Unassigned'}]);
   const roleOpts = (sel,id,pre)=>'<select id="'+(pre||'')+id+'" style="width:auto;font-size:.78rem;padding:6px">' +
