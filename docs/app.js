@@ -243,6 +243,8 @@ async function renderToday(){
     return {calls, upcoming: upcoming||[]};
   });
   const overdue = calls.filter(c=>c.due_date < today());
+  // load the user's first nurturing template so each call's WA button uses it
+  DEFAULT_NURTURE_TPL = (await tplsFor('nurture'))[0]?.body || null;
 
   let h = '';
   h += `<div style="display:flex;gap:8px;margin:6px 0;flex-wrap:wrap">
@@ -270,7 +272,10 @@ function callRow(c){
   const day = dayInJourney(j);
   const od = c.due_date < today();
   const first0 = p.full_name.split(' ')[0];
-  const wa = p.phone ? `https://wa.me/91${p.phone}?text=${encodeURIComponent(decorateMsg((WA_MSG[j.type]||WA_MSG.meditator)(first0), first0))}` : null;
+  // Use the user's first nurturing template if they have one; else the built-in context message.
+  const msg = DEFAULT_NURTURE_TPL ? applyTpl(DEFAULT_NURTURE_TPL, p.full_name)
+                                  : decorateMsg((WA_MSG[j.type]||WA_MSG.meditator)(first0), first0);
+  const wa = p.phone ? `https://wa.me/91${p.phone}?text=${encodeURIComponent(msg)}` : null;
   return `<div class="row">
     <div class="grow">
       <div class="name">${esc(p.full_name)} ${od?'<span class="badge red">overdue</span>':''}</div>
@@ -685,6 +690,7 @@ function openPhoto(src){
 
 /* ---------------- WhatsApp message templates ---------------- */
 let MSG_TPL=null, MSG_PEOPLE=[], MSG_TS=[], MSG_AUD='nurture', MSG_TITLE='Message all';
+let DEFAULT_NURTURE_TPL=null;   // first nurturing template body, used by per-call WA buttons
 const AUD_LABEL = {nurture:'Nurturing', adv_completed:'Advanced · Completed', adv_interested:'Advanced · Interested'};
 const loadTemplates = () => cached('templates', async()=>(await sb.from('message_templates').select('*').order('created_at')).data||[]);
 const tplsFor = async(aud)=> (await loadTemplates()).filter(t=>(t.audience||'nurture')===aud);
