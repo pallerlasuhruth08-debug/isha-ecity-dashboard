@@ -928,45 +928,72 @@ async function quickAssignSave(medId, medName){
    cfg = { rowFn, idOf, personOf, aud, assignable, pageSize }
    ============================================================ */
 const BL = {};
+const BL_MAXR = 500;   // safety cap on how many rows render at once
 function bulkMount(ctx, host, items, cfg){
   const prev = BL[ctx];
-  BL[ctx] = { items, host, page:0, pageSize:(prev&&prev.pageSize)||cfg.pageSize||30,
+  BL[ctx] = { items, host, from:(prev?prev.from:null), to:(prev?prev.to:null),
     sel:(prev&&prev.sel)||new Set(), rowFn:cfg.rowFn, idOf:cfg.idOf, personOf:cfg.personOf,
     aud:cfg.aud||'nurture', assignable:!!cfg.assignable };
   blRender(ctx);
 }
+// compute the visible slice (a From–To window, or everything capped at BL_MAXR)
+function blSlice(ctx){
+  const s=BL[ctx]; const total=s.items.length;
+  const ranged = s.from!=null && s.to!=null;
+  let start = ranged ? Math.max(0, s.from-1) : 0;
+  let end   = ranged ? Math.min(total, s.to) : total;
+  if(end<start) end=start;
+  let shown = s.items.slice(start, end); let capped=false;
+  if(shown.length>BL_MAXR){ shown=shown.slice(0,BL_MAXR); end=start+BL_MAXR; capped=true; }
+  return {start,end,shown,capped,total,ranged};
+}
 function blRender(ctx){
   const s = BL[ctx]; if(!s) return;
-  const total = s.items.length, pages = Math.max(1, Math.ceil(total/s.pageSize));
-  if(s.page >= pages) s.page = pages-1; if(s.page<0) s.page=0;
-  const start = s.page*s.pageSize, end = Math.min(total, start+s.pageSize);
-  const pageItems = s.items.slice(start, end);
-  const pageIds = pageItems.map(s.idOf);
-  const allPageSel = pageIds.length && pageIds.every(id=>s.sel.has(id));
+  const {start,end,shown,capped,total,ranged} = blSlice(ctx);
+  const shownIds = shown.map(s.idOf);
+  const allSel = shownIds.length && shownIds.every(id=>s.sel.has(id));
   let h = `<div class="bulkbar">
-    <label class="selall"><input type="checkbox" ${allPageSel?'checked':''} onclick="blSelectPage('${ctx}',this.checked)"> Select page</label>
+    <label class="selall"><input type="checkbox" ${allSel?'checked':''} onclick="blSelectPage('${ctx}',this.checked)"> Select shown</label>
     <span class="muted" style="font-size:.82rem"><b>${s.sel.size}</b> selected</span>
     ${s.sel.size?`<button class="btn small green" onclick="blMessage('${ctx}')">✉️ Message</button>`:''}
     ${s.sel.size&&s.assignable?`<button class="btn small ghost" onclick="blAssign('${ctx}')">👤 Assign nurturer</button>`:''}
     ${s.sel.size?`<button class="btn small gray" onclick="blClear('${ctx}')">Clear</button>`:''}
-    ${total>s.pageSize?`<button class="btn small ghost" onclick="blSelectAll('${ctx}')">Select all ${total}</button>`:''}
+    ${total>shown.length?`<button class="btn small ghost" onclick="blSelectAll('${ctx}')">Select all ${total}</button>`:''}
+  </div>
+  <div class="pager">
+    <span class="muted">Show</span>
+    <input id="bl-from" type="number" min="1" placeholder="from" value="${ranged?s.from:''}" style="width:72px">
+    <span class="muted">to</span>
+    <input id="bl-to" type="number" min="1" placeholder="to" value="${ranged?s.to:''}" style="width:72px">
+    <button class="btn small ghost" onclick="blRange('${ctx}')">Go</button>
+    <button class="btn small ghost" onclick="blQuick('${ctx}',50)">1–50</button>
+    <button class="btn small ghost" onclick="blQuick('${ctx}',100)">1–100</button>
+    ${ranged?`<button class="btn small gray" onclick="blShowAll('${ctx}')">Show all</button>`:''}
   </div>`;
-  h += pageItems.map(it=>{ const id=s.idOf(it);
+  h += shown.map(it=>{ const id=s.idOf(it);
     return `<div class="selrow"><input type="checkbox" class="selcb" ${s.sel.has(id)?'checked':''} onclick="blToggle('${ctx}','${esc(id)}',this.checked)">${s.rowFn(it)}</div>`;
   }).join('') || '<div class="empty">No records.</div>';
   h += `<div class="pager">
-    ${pages>1?`<button class="btn small ghost" ${s.page<=0?'disabled':''} onclick="blPage('${ctx}',-1)">‹ Prev</button>`:''}
-    <span>${total?`${start+1}–${end} of ${total}`:'0'}</span>
-    ${pages>1?`<button class="btn small ghost" ${s.page>=pages-1?'disabled':''} onclick="blPage('${ctx}',1)">Next ›</button>`:''}
-    <label class="muted">Per page <select onchange="blPageSize('${ctx}',this.value)">${[30,50,100].map(n=>`<option ${s.pageSize===n?'selected':''}>${n}</option>`).join('')}</select></label>
+    ${ranged?`<button class="btn small ghost" ${start<=0?'disabled':''} onclick="blStep('${ctx}',-1)">‹ Prev</button>`:''}
+    <span>${total? (start+1)+'–'+end+' of '+total : '0'}${capped?` · capped at ${BL_MAXR}, narrow the range`:''}</span>
+    ${ranged?`<button class="btn small ghost" ${end>=total?'disabled':''} onclick="blStep('${ctx}',1)">Next ›</button>`:''}
   </div>`;
   s.host.innerHTML = h;
 }
-function blPage(ctx,d){ BL[ctx].page+=d; blRender(ctx); }
-function blPageSize(ctx,v){ const s=BL[ctx]; s.pageSize=+v; s.page=0; blRender(ctx); }
+function blRange(ctx){
+  const s=BL[ctx];
+  let f=parseInt(($('bl-from')||{}).value,10), t=parseInt(($('bl-to')||{}).value,10);
+  if(isNaN(f)&&isNaN(t)) return blShowAll(ctx);
+  if(isNaN(f)) f=1; if(isNaN(t)) t=f+49;
+  if(f<1) f=1; if(t<f) t=f;
+  s.from=f; s.to=t; blRender(ctx);
+}
+function blQuick(ctx,n){ const s=BL[ctx]; s.from=1; s.to=n; blRender(ctx); }
+function blShowAll(ctx){ const s=BL[ctx]; s.from=null; s.to=null; blRender(ctx); }
+function blStep(ctx,dir){ const s=BL[ctx]; const size=Math.max(1,s.to-s.from+1); s.from+=dir*size; s.to+=dir*size; if(s.from<1){ s.from=1; s.to=size; } blRender(ctx); }
 function blToggle(ctx,id,on){ const s=BL[ctx]; on?s.sel.add(id):s.sel.delete(id); blRender(ctx); }
-function blSelectPage(ctx,on){ const s=BL[ctx]; const start=s.page*s.pageSize;
-  s.items.slice(start,start+s.pageSize).map(s.idOf).forEach(id=>on?s.sel.add(id):s.sel.delete(id)); blRender(ctx); }
+function blSelectPage(ctx,on){ const s=BL[ctx]; const {shown}=blSlice(ctx);
+  shown.map(s.idOf).forEach(id=>on?s.sel.add(id):s.sel.delete(id)); blRender(ctx); }
 function blSelectAll(ctx){ const s=BL[ctx]; s.items.forEach(it=>s.sel.add(s.idOf(it))); blRender(ctx); }
 function blClear(ctx){ BL[ctx].sel.clear(); blRender(ctx); }
 function blMessage(ctx){ const s=BL[ctx];
