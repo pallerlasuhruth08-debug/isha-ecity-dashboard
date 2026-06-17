@@ -67,6 +67,19 @@ nav button.active .ico{transform:translateY(-2px) scale(1.18)}
 .iconbtn:active{transform:scale(.9)}
 .iconbtn.call{background:#e6f0fb;color:#1d6fd0}
 .iconbtn.wa{background:#e3f7e9;color:#1faa55}
+/* SSB/IYC nested browser */
+.crumb{font-size:.88rem;margin-bottom:14px;color:var(--muted);line-height:1.7}
+.crumb a{color:var(--accent);text-decoration:none;font-weight:700}
+.crumb a:hover{text-decoration:underline}
+.navrow{display:flex;align-items:center;gap:13px;padding:15px 14px;margin:9px 0;border:1px solid var(--line);
+  border-radius:14px;background:#fff;cursor:pointer;box-shadow:var(--shadow);
+  transition:transform .12s,box-shadow .12s,border-color .12s}
+.navrow:hover{transform:translateY(-1px);box-shadow:var(--shadow-lg);border-color:var(--accent-2)}
+.navrow:active{transform:scale(.99)}
+.navrow .ic{font-size:1.55rem;width:38px;text-align:center;flex-shrink:0}
+.navrow .grow{flex:1;min-width:0}
+.navrow .name{font-weight:700;font-size:1.04rem}
+.navrow .chev{color:var(--accent);font-size:1.4rem;font-weight:700;flex-shrink:0}
 /* profile photos */
 .av{width:38px;height:38px;border-radius:50%;object-fit:cover;flex-shrink:0;background:var(--accent-soft)}
 .pfp{width:84px;height:84px;border-radius:50%;object-fit:cover;display:block;margin:0 auto 10px;background:var(--accent-soft);box-shadow:var(--shadow);cursor:zoom-in}
