@@ -67,6 +67,11 @@ nav button.active .ico{transform:translateY(-2px) scale(1.18)}
 .iconbtn:active{transform:scale(.9)}
 .iconbtn.call{background:#e6f0fb;color:#1d6fd0}
 .iconbtn.wa{background:#e3f7e9;color:#1faa55}
+/* collapsible filters */
+details.vfilters summary{cursor:pointer;font-weight:700;font-size:1.05rem;list-style:none;display:flex;align-items:center;gap:8px}
+details.vfilters summary::-webkit-details-marker{display:none}
+details.vfilters summary::before{content:'▸';color:var(--accent);font-size:.9rem;transition:transform .15s}
+details.vfilters[open] summary::before{transform:rotate(90deg)}
 /* SSB/IYC nested browser */
 .crumb{font-size:.88rem;margin-bottom:14px;color:var(--muted);line-height:1.7}
 .crumb a{color:var(--accent);text-decoration:none;font-weight:700}

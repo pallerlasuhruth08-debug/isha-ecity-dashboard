@@ -431,9 +431,11 @@ async function renderNewMeditators(tabBar){
     <option value="" ${f.status===''?'selected':''}>All</option>`;
 
   let h = tabBar;
-  if(isCoord()) h += `<div style="display:flex;gap:8px;margin:6px 0;flex-wrap:wrap">
-    <button class="btn small ghost" onclick="openImport()">📥 Import</button>
-    <button class="btn small ghost" onclick="openAddPerson()">➕ Add person</button>
+  h += `<div style="display:flex;gap:8px;margin:6px 0;flex-wrap:wrap">
+    <button class="btn small green" onclick="newMedMessageAll()">✉️ Message all</button>
+    <button class="btn small ghost" onclick="openTemplates('new_meditator')">📝 Templates</button>
+    ${isCoord()?`<button class="btn small ghost" onclick="openImport()">📥 Import</button>
+    <button class="btn small ghost" onclick="openAddPerson()">➕ Add person</button>`:''}
   </div>`;
   h += `<div class="card" style="padding:10px">
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
@@ -485,6 +487,7 @@ async function renderNewMeditators(tabBar){
   }
   // newest IE first
   rows.sort((a,b)=> ieOf(b).localeCompare(ieOf(a)));
+  NEWMED_PEOPLE = rows.map(j=>({full_name:j.people?.full_name, phone:j.people?.phone})).filter(p=>p.phone);
 
   let vols = [];
   if(isCoord()){
@@ -511,6 +514,8 @@ async function renderNewMeditators(tabBar){
   view().innerHTML = h;
 }
 
+let NEWMED_PEOPLE=[];
+function newMedMessageAll(){ if(!NEWMED_PEOPLE.length) return toast('Load a date range first, then Message all'); openMsgAll('new_meditator', NEWMED_PEOPLE, 'Message new meditators'); }
 function nmToggle(id,on){ on?NM_SEL.add(id):NM_SEL.delete(id); const c=$('nm-count'); if(c)c.textContent=NM_SEL.size; }
 function nmSelectAllShown(){
   document.querySelectorAll('#view input.nm-cb').forEach(cb=>{ cb.checked=true; NM_SEL.add(cb.dataset.jid); });
@@ -679,7 +684,7 @@ function meditatorDetailRow(p){
     </div>
     ${p.phone?`<a class="iconbtn call" href="tel:+91${p.phone}">Call</a>`:''}
     ${wa?`<a class="iconbtn wa" href="${wa}" target="_blank">WA</a>`:''}
-    ${isCoord()?`<button class="btn small ghost" onclick="nurtureById('${p.id}')">Nurture</button>`:''}
+    ${isCoord()?`<button class="btn small ghost" onclick="quickAssign('${p.id}','${esc(p.full_name)}')">Nurture</button>`:''}
   </div>`;
 }
 
@@ -715,7 +720,7 @@ function openPhoto(src){
 /* ---------------- WhatsApp message templates ---------------- */
 let MSG_TPL=null, MSG_PEOPLE=[], MSG_TS=[], MSG_AUD='nurture', MSG_TITLE='Message all';
 let DEFAULT_NURTURE_TPL=null;   // first nurturing template body, used by per-call WA buttons
-const AUD_LABEL = {nurture:'Nurturing', adv_completed:'Advanced · Completed', adv_interested:'Advanced · Interested', meditator:'Meditator', satsang:'Satsang invite'};
+const AUD_LABEL = {nurture:'Nurturing', adv_completed:'Advanced · Completed', adv_interested:'Advanced · Interested', meditator:'Meditator', satsang:'Satsang invite', new_meditator:'New Meditator', volunteer:'Volunteer'};
 const loadTemplates = () => cached('templates', async()=>(await sb.from('message_templates').select('*').order('created_at')).data||[]);
 const tplsFor = async(aud)=> (await loadTemplates()).filter(t=>(t.audience||'nurture')===aud);
 // Adds the Isha touch to every outgoing WhatsApp message: a 🙏 right after the
@@ -884,6 +889,40 @@ async function unassignNurturer(assignId, medId){
   const {error} = await sb.from('nurturer_assignments').delete().eq('id', assignId);
   if(error) return toast(error.message);
   cacheBust(); toast('Removed'); showMedById(medId);
+}
+// Quick "Nurture" -> a single dropdown of all nurturers (sector nurturers, nurturers,
+// and anyone already entered as a nurturer) to assign this meditator to.
+async function quickAssign(medId, medName){
+  const nurturers = await cached('nurturers', ()=>fetchAll(()=>sb.from('nurturers').select('id,full_name,phone,profile_id')));
+  const profs = (await sb.from('profiles').select('id,full_name,email,role').eq('active',true)
+    .in('role',['nurturer','sector_nurturer','center_coordinator','admin'])).data||[];
+  const linked = new Set(nurturers.filter(n=>n.profile_id).map(n=>n.profile_id));
+  const opts = [];
+  nurturers.slice().sort((a,b)=>(a.full_name||'').localeCompare(b.full_name||''))
+    .forEach(n=>opts.push({v:'n:'+n.id, label:n.full_name + (n.profile_id?' · app user':'')}));
+  profs.filter(p=>!linked.has(p.id)).sort((a,b)=>(a.full_name||a.email||'').localeCompare(b.full_name||b.email||''))
+    .forEach(p=>opts.push({v:'p:'+p.id, label:(p.full_name||p.email)+' · '+roleLabel(p.role)}));
+  if(!opts.length) return toast('No nurturers yet — add users or nurturers first');
+  modal(`<h3>Assign nurturer</h3><p class="muted" style="font-size:.82rem">${esc(medName)}</p>
+    <label>Nurturer</label>
+    <select id="qa-sel">${opts.map(o=>`<option value="${o.v}">${esc(o.label)}</option>`).join('')}</select>
+    <button class="btn block" style="margin-top:12px" onclick="quickAssignSave('${medId}','${esc(medName)}')">Assign</button>
+    <p class="muted" style="font-size:.78rem;margin-top:8px">Need to add a brand-new nurturer or remove one? <a href="#" onclick="openAssignNurturer('${medId}','${esc(medName)}');return false">Open full manager</a></p>`);
+}
+async function quickAssignSave(medId, medName){
+  const v = ($('qa-sel')||{}).value || ''; if(!v) return;
+  const [t,id] = v.split(':');
+  let nid;
+  if(t==='n') nid = id;
+  else {
+    const ex = (await sb.from('nurturers').select('id').eq('profile_id',id).limit(1)).data;
+    if(ex && ex[0]) nid = ex[0].id;
+    else { const p=(await sb.from('profiles').select('full_name,email,phone').eq('id',id).single()).data;
+      const ins=await sb.from('nurturers').insert({full_name:p.full_name||p.email, phone:p.phone||null, profile_id:id, source:'login'}).select('id').single();
+      if(ins.error) return toast(ins.error.message); nid=ins.data.id; }
+  }
+  await assignNurturer(medId, nid, null);
+  closeModal(); toast('Assigned'); if(CURRENT_VIEW==='people') renderPeople();
 }
 
 async function startNurturing(d){
@@ -1252,6 +1291,8 @@ async function runImport(){
    ============================================================ */
 const INTERESTS = ['Online Calling','Online Operations','Offline Programs','Sadhguru Sannidhi','E-Media','Promotions','Devi Seva','Event Setup','Cooking/Annadanam','Transport'];
 let VFILTER = {center:'', interest:'', mode:'', timing:'', space:false, activity:'', event:''};
+let VOL_SHOWN = [];   // people currently shown in the active volunteer tab (for Message all)
+function volMessageAll(){ if(!VOL_SHOWN.length) return toast('No one with a phone in this list'); openMsgAll('volunteer', VOL_SHOWN, 'Message volunteers'); }
 const ssbEventNames = () => { const c=ssbCatalog(); return [...new Set([...(c.SSB?.event||[]), ...(c.IYC?.event||[])])]; };
 let SHORTLIST = [];
 let VOL_TAB = 'new';   // 'new' = new volunteer interest | 'all' = all existing volunteers
@@ -1540,7 +1581,11 @@ async function renderVols(){
   const icvList = await cached('icv', () => fetchAll(()=>sb.from('ie_completion_volunteer').select('*').order('ie_date',{ascending:false,nullsFirst:false})));
   const icvCount = icvList.length;
 
+  VOL_SHOWN = list.map(v=>({full_name:v.people?.full_name, phone:v.people?.phone})).filter(p=>p.phone);
+
   let h = `<div style="display:flex;gap:8px;margin:6px 0;flex-wrap:wrap">
+    <button class="btn small green" onclick="volMessageAll()">✉️ Message all</button>
+    <button class="btn small ghost" onclick="openTemplates('volunteer')">📝 Templates</button>
     <button class="btn small ghost" onclick="openPaperOCR()">📄 Paper Form (OCR)</button>
     <button class="btn small ghost" onclick="openVolForm()">➕ Add interest</button>
     <button class="btn small ghost" onclick="openGFormHelp()">📝 Google Form</button>
@@ -1583,6 +1628,7 @@ async function renderVols(){
     </div>`;
     h += `<div class="card"><h2>🪷 IEO Completion Form — Volunteer Interest <span class="badge">${rows.length}</span></h2>
       <p class="muted" style="font-size:.78rem;margin-bottom:6px">People who ticked "Volunteer" on an IE completion form in Ishangam (Electronic City), segregated by center (from pincode). ${matched}/${rows.length} shown have a synced profile. Newest IE first.</p><div id="icv-host"></div></div>`;
+    VOL_SHOWN = rows.map(r=>({full_name:r.full_name, phone:r.phone})).filter(p=>p.phone);
     view().innerHTML = h;
     const ih = $('icv-host');
     if(rows.length) mountList(ih, rows, r=>icvRow(r, profByPhone[r.phone]));
@@ -1592,6 +1638,7 @@ async function renderVols(){
 
   // SSB / IYC: Org -> Type -> Name -> Year -> people (built on activities + attendance)
   if(VOL_TAB==='ssbiyc'){
+    VOL_SHOWN = [];
     const {acts, counts} = await ssbData();
     h += renderSSBIYCBody(acts, counts);
     view().innerHTML = h;
@@ -1600,8 +1647,10 @@ async function renderVols(){
 
   // (Recent Events moved to the Admin tab — managed there by Sector Nurturers / Admin.)
 
-  h += `<div class="card"><h2>🔍 Filter & match volunteers</h2>
-    <div class="choices" style="flex-wrap:wrap;gap:6px">
+  const activeF = [VFILTER.center,VFILTER.activity,VFILTER.interest,VFILTER.mode,VFILTER.timing,VFILTER.space?'s':''].filter(Boolean).length;
+  h += `<details class="card vfilters" ${activeF?'open':''}>
+    <summary>🔍 Filters${activeF?` <span class="badge">${activeF}</span>`:''}</summary>
+    <div class="choices" style="flex-wrap:wrap;gap:6px;margin-top:10px">
       <select style="width:auto" onchange="VFILTER.center=this.value;renderVols()">
         <option value="">All centers</option>${CENTERS.map(c=>`<option value="${c.id}" ${VFILTER.center===c.id?'selected':''}>${c.name}</option>`).join('')}</select>
       <select style="width:auto" onchange="VFILTER.activity=this.value;VFILTER.event='';renderVols()">
@@ -1619,7 +1668,8 @@ async function renderVols(){
         <option value="">Any timing</option><option value="weekday_morning">Weekday AM</option>
         <option value="weekday_evening">Weekday PM</option><option value="weekend">Weekends</option></select>
       <button class="${VFILTER.space?'sel':''}" onclick="VFILTER.space=!VFILTER.space;renderVols()">Can offer space</button>
-    </div></div>
+      ${activeF?`<button class="btn small gray" onclick="VFILTER={center:'',interest:'',mode:'',timing:'',space:false,activity:'',event:''};renderVols()">Clear all</button>`:''}
+    </div></details>
   <div class="card"><h2>${VOL_TAB==='new'?'New volunteer interest':'All existing volunteers'} <span class="badge">${list.length}</span></h2><div id="vol-host"></div></div>`;
   view().innerHTML = h;
   const vh = $('vol-host');
