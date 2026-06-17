@@ -630,9 +630,7 @@ async function renderMeditatorsList(tabBar){
 
   h += `<div class="card"><h2>${MED_SCOPE==='mine'?'🙋 My meditators':'🧘 Meditators'} <span class="badge" id="med-count">${rows.length}</span></h2><div id="med-host"></div></div>`;
   view().innerHTML = h;
-  const host = $('med-host');
-  if(rows.length) mountList(host, rows, meditatorDetailRow);
-  else host.innerHTML = '<div class="empty">No meditators matching filters.</div>';
+  bulkMount('med', $('med-host'), rows, {pageSize:30, rowFn:meditatorDetailRow, idOf:p=>p.id, personOf:p=>({full_name:p.full_name,phone:p.phone}), aud:'meditator', assignable:true});
 }
 let MED_ALL = [], MED_SCOPE='all', MED_ASSIGN={}, MY_MED_IDS=new Set();
 function medFilter(){
@@ -658,8 +656,7 @@ function medSearchLive(){
   const host = $('med-host'); if(!host) return;
   const rows = medFilter();
   const cnt = $('med-count'); if(cnt) cnt.textContent = rows.length;
-  if(rows.length) mountList(host, rows, meditatorDetailRow);
-  else host.innerHTML = '<div class="empty">No meditators matching filters.</div>';
+  bulkMount('med', host, rows, {pageSize:30, rowFn:meditatorDetailRow, idOf:p=>p.id, personOf:p=>({full_name:p.full_name,phone:p.phone}), aud:'meditator', assignable:true});
 }
 
 let MED_INDEX = {};
@@ -925,6 +922,87 @@ async function quickAssignSave(medId, medName){
   closeModal(); toast('Assigned'); if(CURRENT_VIEW==='people') renderPeople();
 }
 
+/* ============================================================
+   Reusable selectable list: checkboxes + pagination + bulk actions
+   (Message selected · Assign nurturer to selected)
+   cfg = { rowFn, idOf, personOf, aud, assignable, pageSize }
+   ============================================================ */
+const BL = {};
+function bulkMount(ctx, host, items, cfg){
+  const prev = BL[ctx];
+  BL[ctx] = { items, host, page:0, pageSize:(prev&&prev.pageSize)||cfg.pageSize||30,
+    sel:(prev&&prev.sel)||new Set(), rowFn:cfg.rowFn, idOf:cfg.idOf, personOf:cfg.personOf,
+    aud:cfg.aud||'nurture', assignable:!!cfg.assignable };
+  blRender(ctx);
+}
+function blRender(ctx){
+  const s = BL[ctx]; if(!s) return;
+  const total = s.items.length, pages = Math.max(1, Math.ceil(total/s.pageSize));
+  if(s.page >= pages) s.page = pages-1; if(s.page<0) s.page=0;
+  const start = s.page*s.pageSize, end = Math.min(total, start+s.pageSize);
+  const pageItems = s.items.slice(start, end);
+  const pageIds = pageItems.map(s.idOf);
+  const allPageSel = pageIds.length && pageIds.every(id=>s.sel.has(id));
+  let h = `<div class="bulkbar">
+    <label class="selall"><input type="checkbox" ${allPageSel?'checked':''} onclick="blSelectPage('${ctx}',this.checked)"> Select page</label>
+    <span class="muted" style="font-size:.82rem"><b>${s.sel.size}</b> selected</span>
+    ${s.sel.size?`<button class="btn small green" onclick="blMessage('${ctx}')">✉️ Message</button>`:''}
+    ${s.sel.size&&s.assignable?`<button class="btn small ghost" onclick="blAssign('${ctx}')">👤 Assign nurturer</button>`:''}
+    ${s.sel.size?`<button class="btn small gray" onclick="blClear('${ctx}')">Clear</button>`:''}
+    ${total>s.pageSize?`<button class="btn small ghost" onclick="blSelectAll('${ctx}')">Select all ${total}</button>`:''}
+  </div>`;
+  h += pageItems.map(it=>{ const id=s.idOf(it);
+    return `<div class="selrow"><input type="checkbox" class="selcb" ${s.sel.has(id)?'checked':''} onclick="blToggle('${ctx}','${esc(id)}',this.checked)">${s.rowFn(it)}</div>`;
+  }).join('') || '<div class="empty">No records.</div>';
+  h += `<div class="pager">
+    ${pages>1?`<button class="btn small ghost" ${s.page<=0?'disabled':''} onclick="blPage('${ctx}',-1)">‹ Prev</button>`:''}
+    <span>${total?`${start+1}–${end} of ${total}`:'0'}</span>
+    ${pages>1?`<button class="btn small ghost" ${s.page>=pages-1?'disabled':''} onclick="blPage('${ctx}',1)">Next ›</button>`:''}
+    <label class="muted">Per page <select onchange="blPageSize('${ctx}',this.value)">${[30,50,100].map(n=>`<option ${s.pageSize===n?'selected':''}>${n}</option>`).join('')}</select></label>
+  </div>`;
+  s.host.innerHTML = h;
+}
+function blPage(ctx,d){ BL[ctx].page+=d; blRender(ctx); }
+function blPageSize(ctx,v){ const s=BL[ctx]; s.pageSize=+v; s.page=0; blRender(ctx); }
+function blToggle(ctx,id,on){ const s=BL[ctx]; on?s.sel.add(id):s.sel.delete(id); blRender(ctx); }
+function blSelectPage(ctx,on){ const s=BL[ctx]; const start=s.page*s.pageSize;
+  s.items.slice(start,start+s.pageSize).map(s.idOf).forEach(id=>on?s.sel.add(id):s.sel.delete(id)); blRender(ctx); }
+function blSelectAll(ctx){ const s=BL[ctx]; s.items.forEach(it=>s.sel.add(s.idOf(it))); blRender(ctx); }
+function blClear(ctx){ BL[ctx].sel.clear(); blRender(ctx); }
+function blMessage(ctx){ const s=BL[ctx];
+  const people=s.items.filter(it=>s.sel.has(s.idOf(it))).map(s.personOf).filter(p=>p&&p.phone);
+  if(!people.length) return toast('No phone numbers in selection');
+  openMsgAll(s.aud, people, 'Message selected ('+people.length+')'); }
+async function blAssign(ctx){
+  const s=BL[ctx]; const ids=[...s.sel]; if(!ids.length) return;
+  const nurturers = await cached('nurturers', ()=>fetchAll(()=>sb.from('nurturers').select('id,full_name,phone,profile_id')));
+  const profs = (await sb.from('profiles').select('id,full_name,email,role').eq('active',true).in('role',['nurturer','sector_nurturer','center_coordinator','admin'])).data||[];
+  const linked=new Set(nurturers.filter(n=>n.profile_id).map(n=>n.profile_id));
+  const opts=[];
+  nurturers.slice().sort((a,b)=>(a.full_name||'').localeCompare(b.full_name||'')).forEach(n=>opts.push({v:'n:'+n.id,label:n.full_name+(n.profile_id?' · app user':'')}));
+  profs.filter(p=>!linked.has(p.id)).forEach(p=>opts.push({v:'p:'+p.id,label:(p.full_name||p.email)+' · '+roleLabel(p.role)}));
+  if(!opts.length) return toast('No nurturers available');
+  modal(`<h3>Assign nurturer to ${ids.length} selected</h3>
+    <label>Nurturer</label><select id="ba-sel">${opts.map(o=>`<option value="${o.v}">${esc(o.label)}</option>`).join('')}</select>
+    <button class="btn block" style="margin-top:12px" onclick="blAssignSave('${ctx}')">Assign to ${ids.length} people</button>`);
+}
+async function blAssignSave(ctx){
+  const s=BL[ctx]; const ids=[...s.sel]; const v=($('ba-sel')||{}).value||''; if(!v) return;
+  const [t,id]=v.split(':'); let nid;
+  if(t==='n') nid=id;
+  else { const ex=(await sb.from('nurturers').select('id').eq('profile_id',id).limit(1)).data;
+    if(ex&&ex[0]) nid=ex[0].id;
+    else { const p=(await sb.from('profiles').select('full_name,email,phone').eq('id',id).single()).data;
+      const ins=await sb.from('nurturers').insert({full_name:p.full_name||p.email,phone:p.phone||null,profile_id:id,source:'login'}).select('id').single();
+      if(ins.error) return toast(ins.error.message); nid=ins.data.id; } }
+  const rows=ids.map(mid=>({meditator_id:mid,nurturer_id:nid,assigned_by:ME.id}));
+  const chunk=(a,n)=>{const o=[];for(let i=0;i<a.length;i+=n)o.push(a.slice(i,i+n));return o;};
+  let ok=0;
+  for(const b of chunk(rows,200)){ const r=await sb.from('nurturer_assignments').upsert(b,{onConflict:'meditator_id,nurturer_id',ignoreDuplicates:true}).select('id'); if(r.error) return toast(r.error.message); ok+=(r.data?r.data.length:0); }
+  cacheBust(); closeModal(); toast('Assigned '+ids.length+' people'); BL[ctx].sel.clear();
+  if(CURRENT_VIEW) go(CURRENT_VIEW);
+}
+
 async function startNurturing(d){
   modal(`<h3>Add to nurturing calls</h3>
     <p>${esc(d.name)}</p>
@@ -957,6 +1035,7 @@ async function renderAdvancedList(tabBar){
   const col = meta[2], label = meta[1];
   const sync = advSync();
   const centerOpts = `<option value="">All Centers</option>${CENTERS.map(c=>`<option value="${c.id}" ${f.center===c.id?'selected':''}>${c.name}</option>`).join('')}`;
+  let advMountCfg = null;
 
   let h = tabBar;
   const progEmoji = {bsp:'🌀', shoonya:'🕉️', samyama:'🧘', guru_puja:'🙏'};
@@ -997,10 +1076,8 @@ async function renderAdvancedList(tabBar){
     h += `<div style="display:flex;gap:8px;margin:6px 0;flex-wrap:wrap">
       <button class="btn small green" onclick="openMsgAll(ADV_MSG.aud,ADV_MSG.people,ADV_MSG.title)">✉️ Message all</button>
       <button class="btn small ghost" onclick="openTemplates('adv_completed')">📝 Completed templates</button></div>`;
-    h += `<div class="card"><h2>✅ Completed ${esc(label)} <span class="badge">${rows.length}</span></h2>`;
-    h += rows.length ? rows.map(p=>advCompletedRow(p,col,label)).join('')
-      : `<div class="empty">No ${esc(label)} completions in this window.<br>Run the weekly Ishangam scrape, then press "I synced today".</div>`;
-    h += '</div>';
+    h += `<div class="card"><h2>✅ Completed ${esc(label)} <span class="badge">${rows.length}</span></h2><div id="adv-host"></div></div>`;
+    advMountCfg = {ctx:'adv_completed', items:rows, cfg:{pageSize:30, rowFn:p=>advCompletedRow(p,col,label), idOf:p=>p.id, personOf:p=>({full_name:p.full_name,phone:p.phone}), aud:'adv_completed', assignable:true}};
   } else {
     let rows = await fetchAll(() => sb.from('advanced_interest')
       .select('id, program, interest_date, status, notes, people!inner(id, full_name, phone, center_id, tags, photo_url)')
@@ -1012,12 +1089,11 @@ async function renderAdvancedList(tabBar){
       <button class="btn small green" onclick="openMsgAll(ADV_MSG.aud,ADV_MSG.people,ADV_MSG.title)">✉️ Message all</button>
       <button class="btn small ghost" onclick="openTemplates('adv_interested')">📝 Interested templates</button></div>`;
     h += `<div class="card"><h2>✋ Interested in ${esc(label)} <span class="badge">${rows.length}</span></h2>
-      <p class="muted" style="font-size:.78rem;margin-bottom:6px">People interested in ${esc(label)} — from Ishangam willingness + paper sign-ups. Reach out and help them register.</p>`;
-    h += rows.length ? rows.map(r=>advInterestRow(r,label)).join('')
-      : `<div class="empty">No interest entries yet. Use "+ Add interested" to enter your paper list.</div>`;
-    h += '</div>';
+      <p class="muted" style="font-size:.78rem;margin-bottom:6px">People interested in ${esc(label)} — from Ishangam willingness + paper sign-ups. Reach out and help them register.</p><div id="adv-host"></div></div>`;
+    advMountCfg = {ctx:'adv_interested', items:rows, cfg:{pageSize:30, rowFn:r=>advInterestRow(r,label), idOf:r=>r.people?.id||r.id, personOf:r=>({full_name:r.people?.full_name,phone:r.people?.phone}), aud:'adv_interested', assignable:true}};
   }
   view().innerHTML = h;
+  if(advMountCfg) bulkMount(advMountCfg.ctx, $('adv-host'), advMountCfg.items, advMountCfg.cfg);
 }
 
 function advCompletedRow(p, col, label){
@@ -1630,9 +1706,7 @@ async function renderVols(){
       <p class="muted" style="font-size:.78rem;margin-bottom:6px">People who ticked "Volunteer" on an IE completion form in Ishangam (Electronic City), segregated by center (from pincode). ${matched}/${rows.length} shown have a synced profile. Newest IE first.</p><div id="icv-host"></div></div>`;
     VOL_SHOWN = rows.map(r=>({full_name:r.full_name, phone:r.phone})).filter(p=>p.phone);
     view().innerHTML = h;
-    const ih = $('icv-host');
-    if(rows.length) mountList(ih, rows, r=>icvRow(r, profByPhone[r.phone]));
-    else ih.innerHTML = '<div class="empty">No records yet — run the IE-completion sync.</div>';
+    bulkMount('icv', $('icv-host'), rows, {pageSize:30, rowFn:r=>icvRow(r, profByPhone[r.phone]), idOf:r=>r.phone, personOf:r=>({full_name:r.full_name,phone:r.phone}), aud:'volunteer', assignable:false});
     return;
   }
 
@@ -1672,9 +1746,7 @@ async function renderVols(){
     </div></details>
   <div class="card"><h2>${VOL_TAB==='new'?'New volunteer interest':'All existing volunteers'} <span class="badge">${list.length}</span></h2><div id="vol-host"></div></div>`;
   view().innerHTML = h;
-  const vh = $('vol-host');
-  if(list.length) mountList(vh, list, v=>volRow(v, histBy[v.person_id]||[]));
-  else vh.innerHTML = '<div class="empty">No matches.</div>';
+  bulkMount('vol', $('vol-host'), list, {pageSize:30, rowFn:v=>volRow(v, histBy[v.person_id]||[]), idOf:v=>v.person_id, personOf:v=>({full_name:v.people?.full_name,phone:v.people?.phone}), aud:'volunteer', assignable:true});
 }
 
 async function viewAttendees(actId, actName){

@@ -67,6 +67,16 @@ nav button.active .ico{transform:translateY(-2px) scale(1.18)}
 .iconbtn:active{transform:scale(.9)}
 .iconbtn.call{background:#e6f0fb;color:#1d6fd0}
 .iconbtn.wa{background:#e3f7e9;color:#1faa55}
+/* bulk select + pagination */
+.selrow{display:flex;align-items:center;gap:8px}
+.selrow > .row{flex:1;min-width:0}
+.selcb{width:20px;height:20px;flex-shrink:0;accent-color:var(--accent);cursor:pointer}
+.bulkbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 6px;margin-bottom:4px;
+  position:sticky;top:0;z-index:6;background:var(--card);border:1px solid var(--line);border-radius:12px}
+.bulkbar .selall{display:flex;align-items:center;gap:6px;font-size:.85rem;font-weight:700;cursor:pointer}
+.bulkbar .selall input{width:18px;height:18px;accent-color:var(--accent)}
+.pager{display:flex;align-items:center;justify-content:center;gap:14px;padding:10px 4px;color:var(--muted);font-size:.85rem;flex-wrap:wrap}
+.pager select{width:auto;padding:4px 8px}
 /* collapsible filters */
 details.vfilters summary{cursor:pointer;font-weight:700;font-size:1.05rem;list-style:none;display:flex;align-items:center;gap:8px}
 details.vfilters summary::-webkit-details-marker{display:none}
