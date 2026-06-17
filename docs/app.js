@@ -1082,6 +1082,11 @@ const INTERESTS = ['Online Calling','Online Operations','Offline Programs','Sadh
 let VFILTER = {center:'', interest:'', mode:'', timing:'', space:false};
 let SHORTLIST = [];
 let VOL_TAB = 'new';   // 'new' = new volunteer interest | 'all' = all existing volunteers
+// SSB/IYC nested browser state: Org -> Type -> Name -> Year -> people
+let SSB_NAV = {org:'', type:'', name:'', year:null};
+const SSB_VTYPES = [['weekend','🚌 Weekend volunteering'],['program','🧘 Program volunteering'],['event','🎉 Event volunteering']];
+const ssbTypeLabel = t => ({weekend:'Weekend volunteering', program:'Program volunteering', event:'Event volunteering'}[t]||t);
+const ssbCatalog = () => SETTINGS.ssb_catalog || {SSB:{event:[],program:[]}, IYC:{event:[],program:[]}};
 // "New interest" = only fresh submissions (added via form / photo OCR / CSV), marked status 'new'.
 const isNewInterest = v => v.status==='new';
 
@@ -1105,6 +1110,209 @@ function icvRow(r, prof){
   </div>`;
 }
 async function setIcvStatus(id, status){ const {error}=await sb.from('ie_completion_volunteer').update({status}).eq('id', id); toast(error?error.message:'Updated'); }
+
+/* ============================================================
+   SSB / IYC volunteering browser  (Org -> Type -> Name -> Year -> people)
+   ============================================================ */
+async function ssbData(){
+  return cached('ssbiyc', async()=>{
+    const acts = await fetchAll(()=> sb.from('activities')
+      .select('id,name,activity_date,is_open,qr_token,center_id,org,vol_type,event_name,event_year')
+      .not('org','is',null).order('event_year',{ascending:false}));
+    const ids = acts.map(a=>a.id); const counts = {};
+    for(let i=0;i<ids.length;i+=200){
+      const {data} = await sb.from('attendance').select('activity_id').in('activity_id', ids.slice(i,i+200));
+      (data||[]).forEach(r=> counts[r.activity_id] = (counts[r.activity_id]||0)+1);
+    }
+    return {acts, counts};
+  });
+}
+function ssbSet(o){ SSB_NAV = {...SSB_NAV, ...o}; renderVols(); }
+const ssbSum = (arr,counts)=> arr.reduce((s,a)=>s+(counts[a.id]||0),0);
+
+function renderSSBIYCBody(acts, counts){
+  const N = SSB_NAV, cat = ssbCatalog();
+  // breadcrumb
+  let h = '<div class="card" style="padding:14px">';
+  h += '<div class="muted" style="font-size:.86rem;margin-bottom:12px">';
+  h += `<a href="#" onclick="ssbSet({org:'',type:'',name:'',year:null});return false">SSB / IYC</a>`;
+  if(N.org)  h += ` › <a href="#" onclick="ssbSet({org:'${N.org}',type:'',name:'',year:null});return false">${N.org}</a>`;
+  if(N.type) h += ` › <a href="#" onclick="ssbSet({org:'${N.org}',type:'${N.type}',name:'',year:null});return false">${ssbTypeLabel(N.type)}</a>`;
+  if(N.name) h += ` › <a href="#" onclick="ssbSet({org:'${N.org}',type:'${N.type}',name:'${esc(N.name)}',year:null});return false">${esc(N.name)}</a>`;
+  if(N.year) h += ` › ${N.year}`;
+  h += '</div>';
+  const card = (title, sub, onclick, badge)=>`<div class="row" style="cursor:pointer" onclick="${onclick}">
+      <div class="grow"><div class="name">${title}</div>${sub?`<div class="sub">${sub}</div>`:''}</div>
+      ${badge!=null?`<span class="badge">${badge}</span>`:''}<span class="muted">›</span></div>`;
+
+  // L0 — pick org
+  if(!N.org){
+    h += '<h2 style="margin-bottom:8px">Choose organisation</h2>';
+    ['SSB','IYC'].forEach(o=>{
+      const a = acts.filter(x=>x.org===o);
+      h += card(o==='SSB'?'🛕 SSB (Sadhguru Sannidhi)':'🏞️ IYC (Isha Yoga Center)',
+        a.length+' occurrence'+(a.length===1?'':'s')+' · '+ssbSum(a,counts)+' attendees',
+        `ssbSet({org:'${o}',type:'',name:'',year:null})`);
+    });
+    return h+'</div>';
+  }
+  // L1 — pick type
+  if(!N.type){
+    h += `<h2 style="margin-bottom:8px">${N.org} — choose type</h2>`;
+    SSB_VTYPES.forEach(([t,label])=>{
+      const a = acts.filter(x=>x.org===N.org && x.vol_type===t);
+      h += card(label, a.length+' occurrence'+(a.length===1?'':'s')+' · '+ssbSum(a,counts)+' attendees',
+        `ssbSet({org:'${N.org}',type:'${t}',name:'',year:null})`);
+    });
+    return h+'</div>';
+  }
+  // WEEKEND: skip name, go straight to years
+  if(N.type==='weekend'){
+    if(!N.year){
+      const ys = [...new Set(acts.filter(x=>x.org===N.org&&x.vol_type==='weekend').map(x=>x.event_year))].sort((a,b)=>b-a);
+      h += `<h2 style="margin-bottom:8px">${N.org} · Weekend volunteering — by year</h2>`;
+      h += `<button class="btn small ghost" style="margin-bottom:8px" onclick="ssbAddWeekendTrip('${N.org}')">➕ Add weekend trip</button>`;
+      ys.forEach(y=>{ const a=acts.filter(x=>x.org===N.org&&x.vol_type==='weekend'&&x.event_year===y);
+        h += card(y, a.length+' trip'+(a.length===1?'':'s')+' · '+ssbSum(a,counts)+' attendees', `ssbSet({year:${y}})`); });
+      if(!ys.length) h += '<div class="empty">No weekend trips yet.</div>';
+      return h+'</div>';
+    }
+    const trips = acts.filter(x=>x.org===N.org&&x.vol_type==='weekend'&&x.event_year===N.year)
+                      .sort((a,b)=>(a.activity_date<b.activity_date?1:-1));
+    h += `<h2 style="margin-bottom:8px">${N.org} · Weekend trips ${N.year}</h2>`;
+    h += trips.map(a=>ssbOccRow(a,counts)).join('') || '<div class="empty">No trips.</div>';
+    return h+'</div>';
+  }
+  // PROGRAM / EVENT: pick name
+  if(!N.name){
+    const present = [...new Set(acts.filter(x=>x.org===N.org&&x.vol_type===N.type).map(x=>x.event_name).filter(Boolean))];
+    const names = [...new Set([...((cat[N.org]||{})[N.type]||[]), ...present])];
+    h += `<h2 style="margin-bottom:8px">${N.org} · ${ssbTypeLabel(N.type)}</h2>`;
+    h += `<button class="btn small ghost" style="margin-bottom:8px" onclick="ssbAddName('${N.org}','${N.type}')">➕ Add ${N.type} name</button>`;
+    names.forEach(nm=>{ const a=acts.filter(x=>x.org===N.org&&x.vol_type===N.type&&x.event_name===nm);
+      h += card(esc(nm), a.length+' year'+(a.length===1?'':'s')+' · '+ssbSum(a,counts)+' attendees',
+        `ssbSet({name:'${esc(nm)}',year:null})`); });
+    if(!names.length) h += '<div class="empty">No names yet — add one.</div>';
+    return h+'</div>';
+  }
+  // PROGRAM / EVENT: pick year
+  if(!N.year){
+    const ys = [...new Set(acts.filter(x=>x.org===N.org&&x.vol_type===N.type&&x.event_name===N.name).map(x=>x.event_year))].sort((a,b)=>b-a);
+    h += `<h2 style="margin-bottom:8px">${esc(N.name)} — by year</h2>`;
+    h += `<button class="btn small ghost" style="margin-bottom:8px" onclick="ssbAddYear('${N.org}','${N.type}','${esc(N.name)}')">➕ Add year</button>`;
+    ys.forEach(y=>{ const a=acts.filter(x=>x.org===N.org&&x.vol_type===N.type&&x.event_name===N.name&&x.event_year===y);
+      h += card(y, ssbSum(a,counts)+' attendees', `ssbSet({year:${y}})`); });
+    if(!ys.length) h += '<div class="empty">No years yet — add one.</div>';
+    return h+'</div>';
+  }
+  // LEAF: occurrence(s) for this org/type/name/year
+  const matches = acts.filter(x=>x.org===N.org&&x.vol_type===N.type&&x.event_name===N.name&&x.event_year===N.year);
+  h += `<h2 style="margin-bottom:8px">${esc(N.name)} ${N.year}</h2>`;
+  if(!matches.length){
+    h += `<div class="empty">No occurrence yet for ${N.year}.</div>
+      <button class="btn block" onclick="ssbCreateOccurrence('${N.org}','${N.type}','${esc(N.name)}',${N.year})">➕ Create ${esc(N.name)} ${N.year}</button>`;
+    return h+'</div>';
+  }
+  h += matches.map(a=>ssbOccRow(a,counts)).join('');
+  return h+'</div>';
+}
+// one occurrence row with its action buttons
+function ssbOccRow(a, counts){
+  const n = counts[a.id]||0;
+  const t = a.qr_token;
+  return `<div class="card" style="padding:12px;margin:8px 0">
+    <div class="name">${esc(a.name)} ${a.is_open?'<span class="badge green">open</span>':'<span class="badge gray">closed</span>'}</div>
+    <div class="sub" style="margin:2px 0 8px">${fmtD(a.activity_date)} · <b>${n}</b> attendee${n===1?'':'s'}</div>
+    <div class="choices" style="gap:6px">
+      <button class="btn small ghost" onclick="viewAttendees('${a.id}','${esc(a.name)}')">👥 Attendees</button>
+      <button class="btn small ghost" onclick="ssbAddPerson('${a.id}')">➕ Add person</button>
+      <button class="btn small ghost" onclick="ssbImport('${a.id}','${esc(a.name)}')">📥 Import list</button>
+      ${t?`<button class="btn small ghost" onclick="showQR('${t}','${esc(a.name)}')">📲 QR</button>`:''}
+      <button class="btn small gray" onclick="toggleActivity('${a.id}',${!a.is_open})">${a.is_open?'Close':'Reopen'}</button>
+    </div></div>`;
+}
+async function ssbAddName(org, type){
+  const name = (prompt('New '+type+' name under '+org+':')||'').trim(); if(!name) return;
+  const cat = JSON.parse(JSON.stringify(ssbCatalog()));
+  cat[org] = cat[org]||{}; cat[org][type] = cat[org][type]||[];
+  if(!cat[org][type].includes(name)) cat[org][type].push(name);
+  const {error} = await sb.from('settings').upsert({key:'ssb_catalog', value:cat},{onConflict:'key'});
+  if(error) return toast(error.message);
+  SETTINGS.ssb_catalog = cat; toast('Added'); ssbSet({name});
+}
+async function ssbAddYear(org, type, name){
+  const y = (prompt('Year (e.g. 2025):')||'').trim(); const year = parseInt(y,10);
+  if(!year || year<2000 || year>2100) return toast('Enter a valid year');
+  await ssbCreateOccurrence(org, type, name, year);
+}
+async function ssbAddWeekendTrip(org){
+  const d = (prompt('Trip date (YYYY-MM-DD):', today())||'').trim();
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(d)) return toast('Use YYYY-MM-DD');
+  const year = +d.slice(0,4);
+  const {error} = await sb.from('activities').insert({name:'Weekend Trip — '+fmtD(d), center_id:'ecity',
+    activity_type:'ashram_visit', org, vol_type:'weekend', event_name:'Weekend Trip', event_year:year,
+    is_open:true, created_by:ME.id, activity_date:d, description:'SSB weekend trip'});
+  if(error) return toast(error.message);
+  cacheBust(); toast('Created'); ssbSet({year});
+}
+async function ssbCreateOccurrence(org, type, name, year){
+  const adate = year+'-01-01';
+  const {error} = await sb.from('activities').insert({name:name+' '+year+' ('+org+')', center_id:'ecity',
+    activity_type:type, org, vol_type:type, event_name:name, event_year:year,
+    is_open:true, created_by:ME.id, activity_date:adate, description:'SSB/IYC '+type+' — '+name+' '+year});
+  if(error) return toast(error.message);
+  cacheBust(); toast('Created'); SSB_NAV={org,type,name,year}; renderVols();
+}
+function ssbImport(actId, actName){
+  modal(`<h3>Import attendees</h3><p class="muted" style="font-size:.82rem">${esc(actName)}</p>
+    <p class="muted" style="font-size:.8rem">Paste one person per line as <b>Name, Phone</b> (or just the phone number). New people are created automatically and added as attendees.</p>
+    <textarea id="ssb-imp" style="min-height:170px" placeholder="Ramesh Kumar, 9876543210
+Lakshmi, 9123456789"></textarea>
+    <button class="btn block" onclick="ssbImportRun('${actId}')">Import</button>`);
+}
+async function ssbImportRun(actId){
+  const lines = ($('ssb-imp').value||'').split('\n').map(s=>s.trim()).filter(Boolean);
+  const recs = []; const seen=new Set();
+  lines.forEach(l=>{
+    const parts = l.split(/[,\t;]+/).map(s=>s.trim()).filter(Boolean);
+    let name=null, phone=null;
+    parts.forEach(p=>{ const d=p.replace(/\D/g,''); if(d.length>=10 && !phone) phone=d.slice(-10); else if(!name && /[A-Za-z]/.test(p)) name=p; });
+    if(phone && !seen.has(phone)){ seen.add(phone); recs.push({name:name||'(no name)', phone}); }
+  });
+  if(!recs.length) return toast('No valid phone numbers found');
+  const chunk=(a,n)=>{const o=[];for(let i=0;i<a.length;i+=n)o.push(a.slice(i,i+n));return o;};
+  for(const b of chunk(recs,150)){
+    const {error}=await sb.from('people').upsert(b.map(r=>({full_name:r.name,phone:r.phone,center_id:'ecity',is_volunteer:true,source:'csv'})),{onConflict:'phone',ignoreDuplicates:true});
+    if(error) return toast(error.message);
+  }
+  const idByPhone={}; const phones=recs.map(r=>r.phone);
+  for(const b of chunk(phones,200)){ const {data}=await sb.from('people').select('id,phone').in('phone',b); (data||[]).forEach(p=>idByPhone[p.phone]=p.id); }
+  const att = recs.filter(r=>idByPhone[r.phone]).map(r=>({activity_id:actId, person_id:idByPhone[r.phone]}));
+  let added=0;
+  for(const b of chunk(att,150)){ const {data,error}=await sb.from('attendance').upsert(b,{onConflict:'activity_id,person_id',ignoreDuplicates:true}).select('id'); if(error) return toast(error.message); added+=(data?data.length:0); }
+  cacheBust(); closeModal(); toast('Imported '+recs.length+' ('+added+' new)'); renderVols();
+}
+function ssbAddPerson(actId){
+  modal(`<h3>Add attendee</h3>
+    <input id="ssb-q" placeholder="Search name or phone (3+ chars)" oninput="ssbAddSearch('${actId}')" autofocus>
+    <div id="ssb-res" style="margin-top:8px"><div class="muted">Type to search existing people…</div></div>`);
+}
+async function ssbAddSearch(actId){
+  const q=($('ssb-q').value||'').trim(); const res=$('ssb-res'); if(!res) return;
+  if(q.length<3){ res.innerHTML='<div class="muted">Type 3+ characters…</div>'; return; }
+  const d=q.replace(/\D/g,'');
+  let qb = sb.from('people').select('id,full_name,phone').limit(20);
+  qb = d.length>=4 ? qb.ilike('phone','%'+d+'%') : qb.ilike('full_name','%'+q+'%');
+  const {data} = await qb;
+  res.innerHTML = (data||[]).map(p=>`<div class="row"><div class="grow"><div class="name">${esc(p.full_name||'?')}</div><div class="sub">${esc(p.phone||'')}</div></div>
+    <button class="btn small green" onclick="ssbAttach('${actId}','${p.id}',this)">Add</button></div>`).join('') || '<div class="empty">No match</div>';
+}
+async function ssbAttach(actId, pid, btn){
+  const {error}=await sb.from('attendance').upsert({activity_id:actId, person_id:pid},{onConflict:'activity_id,person_id',ignoreDuplicates:true});
+  if(error) return toast(error.message);
+  if(btn){ btn.textContent='Added ✓'; btn.disabled=true; btn.classList.remove('green'); btn.classList.add('gray'); }
+  cacheBust();
+}
 
 async function renderVols(){
   view().innerHTML = '<div class="empty">Loading...</div>';
@@ -1158,7 +1366,7 @@ async function renderVols(){
   h += `<div class="tabs" style="flex-wrap:wrap;overflow:visible">
     <button class="${VOL_TAB==='new'?'active':''}" onclick="VOL_TAB='new';renderVols()">✨ New interest <span class="badge">${newCount}</span></button>
     <button class="${VOL_TAB==='all'?'active':''}" onclick="VOL_TAB='all';renderVols()">🙌 All volunteers <span class="badge">${allCount}</span></button>
-    <button class="${VOL_TAB==='ashram'?'active':''}" onclick="VOL_TAB='ashram';renderVols()">🙏 Ashram/SSB <span class="badge">${ashram.length}</span></button>
+    <button class="${VOL_TAB==='ssbiyc'?'active':''}" onclick="SSB_NAV={org:'',type:'',name:'',year:null};VOL_TAB='ssbiyc';renderVols()">🙏 SSB / IYC</button>
     <button class="${VOL_TAB==='ie_completion'?'active':''}" onclick="VOL_TAB='ie_completion';renderVols()">🪷 IEO Completion Form <span class="badge">${icvCount}</span></button>
   </div>`;
 
@@ -1197,20 +1405,10 @@ async function renderVols(){
     return;
   }
 
-  // Ashram/SSB folder: post Ashram/IYC/SSB volunteering follow-up calls
-  if(VOL_TAB==='ashram'){
-    let vols = [];
-    if(isCoord()){ const {data:v} = await sb.from('profiles').select('id, full_name, email, role, center_id').eq('active', true); vols = v||[]; }
-    let rows = ashram;
-    if(VFILTER.center) rows = rows.filter(j=>(j.people?.center_id||j.center_id)===VFILTER.center);
-    h += `<div class="card" style="padding:10px">
-      <select style="width:auto" onchange="VFILTER.center=this.value;renderVols()">
-        <option value="">All centers</option>${CENTERS.map(c=>`<option value="${c.id}" ${VFILTER.center===c.id?'selected':''}>${c.name}</option>`).join('')}</select>
-    </div>`;
-    h += `<div class="card"><h2>🙏 Ashram / SSB / IYC volunteers <span class="badge">${rows.length}</span></h2>
-      <p class="muted" style="font-size:.78rem;margin-bottom:6px">Follow-up calls for people who volunteered at the Ashram, SSB, or IYC.</p>`;
-    h += rows.length ? rows.map(j=>journeyRow(j, vols)).join('') : '<div class="empty">No Ashram/SSB volunteering follow-ups yet.</div>';
-    h += '</div>';
+  // SSB / IYC: Org -> Type -> Name -> Year -> people (built on activities + attendance)
+  if(VOL_TAB==='ssbiyc'){
+    const {acts, counts} = await ssbData();
+    h += renderSSBIYCBody(acts, counts);
     view().innerHTML = h;
     return;
   }
