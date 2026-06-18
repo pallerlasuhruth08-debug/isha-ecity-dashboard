@@ -290,17 +290,10 @@ function callRow(c){
   // Use the user's first nurturing template if they have one; else the built-in context message.
   const msg = DEFAULT_NURTURE_TPL ? applyTpl(DEFAULT_NURTURE_TPL, p.full_name)
                                   : decorateMsg((WA_MSG[j.type]||WA_MSG.meditator)(first0), first0);
-  const wa = p.phone ? `https://wa.me/91${p.phone}?text=${encodeURIComponent(msg)}` : null;
-  return `<div class="row">
-    <div class="grow">
-      <div class="name">${esc(p.full_name)} ${od?'<span class="badge red">overdue</span>':''}</div>
-      <div class="sub">${JT[j.type]}${j.program_name?' - '+esc(j.program_name):''}
-        - Call ${c.call_no}${j.type==='new_meditator'?'/3':''}${day?` - Day ${day}`:''}  - due ${fmtD(c.due_date)}</div>
-    </div>
-    ${p.phone?`<a class="iconbtn call" href="tel:+91${p.phone}">Call</a>`:''}
-    ${wa?`<a class="iconbtn wa" href="${wa}" target="_blank">WA</a>`:''}
-    <button class="btn small ghost" onclick='openLog(${JSON.stringify({id:c.id,call_no:c.call_no,jtype:j.type,name:p.full_name,jid:j.id,pid:p.id}).replace(/'/g,"&#39;")})'>Log</button>
-  </div>`;
+  const sub = `${JT[j.type]}${j.program_name?' · '+esc(j.program_name):''} · Call ${c.call_no}${j.type==='new_meditator'?'/3':''}${day?` · Day ${day}`:''} · due ${fmtD(c.due_date)}`;
+  const badge = od ? '<span class="badge red">overdue</span>' : '';
+  const log = `<button class="actbtn log" onclick='openLog(${JSON.stringify({id:c.id,call_no:c.call_no,jtype:j.type,name:p.full_name,jid:j.id,pid:p.id}).replace(/"/g,'&quot;').replace(/'/g,"&#39;")})'>Log</button>`;
+  return simpleRow({name:p.full_name, phone:p.phone, msg, sub, badge, extra:log});
 }
 
 /* ---- call logging ---- */
@@ -601,10 +594,10 @@ async function renderMeditatorsList(tabBar){
         <button class="btn small ghost" onclick="openImport()">📥 Import</button>
         <button class="btn small ghost" onclick="openAddPerson()">➕ Add person</button>
       </div></details>`:''}
-  </div>
-  <div class="tabs">
-    <button class="${MED_SCOPE==='all'?'active':''}" onclick="MED_SCOPE='all';renderPeople()">All meditators</button>
-    <button class="${MED_SCOPE==='mine'?'active':''}" onclick="MED_SCOPE='mine';renderPeople()">🙋 My meditators</button>
+    <select class="viewsel" onchange="MED_SCOPE=this.value;MED_SCOPE_SET=true;renderPeople()">
+      <option value="mine" ${MED_SCOPE==='mine'?'selected':''}>🙋 My meditators</option>
+      <option value="all" ${MED_SCOPE==='all'?'selected':''}>🧘 All meditators</option>
+    </select>
   </div>`;
 
   h += `<details class="card vfilters" ${activeF?'open':''}>
@@ -693,15 +686,20 @@ function nurtureById(id){ const p=MED_INDEX[id]; if(p) startNurturing({pid:p.id,
 // onclick is the raw JS to open the profile; it's escaped here for a double-quoted attribute.
 function simpleRow(o){
   const oc = (o.onclick||'').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  const clickAttr = oc ? `onclick="${oc}"` : '';
+  const cur = oc ? 'cursor:pointer' : '';
   const initial = esc((o.name||'?').trim().charAt(0).toUpperCase() || '?');
   const wa = o.phone ? `https://wa.me/91${o.phone}?text=${encodeURIComponent(o.msg||'')}` : null;
   const avatar = o.photo
-    ? `<img class="av" src="${esc(o.photo)}" loading="lazy" alt="" onclick="${oc}" onerror="this.style.visibility='hidden'">`
-    : `<div class="av avph" onclick="${oc}">${initial}</div>`;
+    ? `<img class="av" src="${esc(o.photo)}" loading="lazy" alt="" ${clickAttr} onerror="this.style.visibility='hidden'">`
+    : `<div class="av avph" ${clickAttr}>${initial}</div>`;
   return `<div class="row simple">
     ${o.cb||''}
     ${avatar}
-    <div class="grow" style="cursor:pointer" onclick="${oc}"><div class="name">${esc(o.name||'?')}${o.badge?' '+o.badge:''}</div></div>
+    <div class="grow" style="${cur};min-width:0" ${clickAttr}>
+      <div class="name">${esc(o.name||'?')}${o.badge?' '+o.badge:''}</div>
+      ${o.sub?`<div class="sub">${o.sub}</div>`:''}
+    </div>
     <div class="acts">
       ${o.phone?`<a class="actbtn call" href="tel:+91${o.phone}">Call</a>`:''}
       ${wa?`<a class="actbtn msg" href="${wa}" target="_blank">Msg</a>`:''}
@@ -1863,22 +1861,10 @@ async function viewAttendees(actId, actName){
 
 function volRow(v, hist){
   const p = v.people;
-  const wa = p.phone ? `https://wa.me/91${p.phone}?text=${encodeURIComponent(`Namaskaram ${p.full_name.split(' ')[0]} -- There's a volunteering opportunity at Isha ${centerName(derivedCenter(p))} that matches your interest${v.interests?.length?' in '+v.interests[0]:''}. Would you like to join?`)}` : null;
-  const inSL = SHORTLIST.some(s=>s.id===p.id);
-  const interests = (v.interests||[]).join(', ');
-  const meta = [v.mode, v.can_offer_space?'space avail.':null, hist.length?(hist.length+' activit'+(hist.length===1?'y':'ies')):null].filter(Boolean).join(' · ');
-  const onclk = `showVolProfile(${JSON.stringify({p:personToProfile(p),id:p.id,interests:v.interests||[],mode:v.mode,space:v.can_offer_space,screened:v.screened,h:hist.slice(0,15)}).replace(/'/g,"&#39;")})`;
-  return `<div class="row">
-    ${p.photo_url?`<img class="av" src="${esc(p.photo_url)}" loading="lazy" alt="" onclick='${onclk}' onerror="this.style.display='none'">`:''}
-    <div class="grow" style="cursor:pointer" onclick='${onclk}'>
-      <div class="name">${esc(p.full_name)} ${v.screened?'<span class="badge green">screened</span>':'<span class="badge gray">new</span>'}</div>
-      <div class="sub">${profileSummary(p)} <span class="muted" style="font-size:.7rem">· tap for profile</span></div>
-      <div class="sub">${interests||'<span class="muted">no interests yet</span>'}${meta?' — '+meta:''}</div>
-    </div>
-    ${p.phone?`<a class="iconbtn call" href="tel:+91${p.phone}">Call</a>`:''}
-    ${wa?`<a class="iconbtn wa" href="${wa}" target="_blank">WA</a>`:''}
-    <button class="btn small ${inSL?'green':'gray'}" onclick='toggleShortlist(${JSON.stringify({id:p.id,name:p.full_name,phone:p.phone}).replace(/'/g,"&#39;")})'>${inSL?'Added':'+'}</button>
-  </div>`;
+  const msg = `Namaskaram ${(p.full_name||'').split(' ')[0]} -- There's a volunteering opportunity at Isha ${centerName(derivedCenter(p))} that matches your interest${v.interests?.length?' in '+v.interests[0]:''}. Would you like to join?`;
+  const onclk = `showVolProfile(${JSON.stringify({p:personToProfile(p),id:p.id,interests:v.interests||[],mode:v.mode,space:v.can_offer_space,screened:v.screened,h:hist.slice(0,15)})})`;
+  const extra = isCoord() ? `<button class="actbtn assign" onclick="quickAssign('${p.id}','${esc(p.full_name)}')">Assign</button>` : '';
+  return simpleRow({photo:p.photo_url, name:p.full_name, onclick:onclk, phone:p.phone, msg, extra});
 }
 function showVolProfile(d){
   const interests = (d.interests||[]).length ? `<p>🤝 Interests: ${(d.interests).map(esc).join(', ')}</p>` : '';

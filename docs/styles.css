@@ -89,6 +89,10 @@ nav button.active .ico{transform:translateY(-2px) scale(1.18)}
 .actbtn.call{background:#e6f0fb;color:#1d6fd0}
 .actbtn.msg{background:#e3f7e9;color:#1faa55}
 .actbtn.assign{background:var(--accent-soft);color:var(--accent)}
+.actbtn.log{background:#efece6;color:var(--ink)}
+/* compact View ▾ scope dropdown, sits inline with Message/Add menus */
+.viewsel{font-weight:700;font-size:.92rem;padding:9px 12px;border-radius:11px;border:1px solid var(--line);
+  background:var(--accent-soft);color:var(--accent);min-height:40px;cursor:pointer}
 .actbtn-sel{font-size:.8rem;padding:7px 8px;border-radius:10px;border:1px solid var(--line);
   background:var(--card);color:var(--ink);max-width:120px}
 @media(max-width:430px){
