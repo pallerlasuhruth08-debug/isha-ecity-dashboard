@@ -98,7 +98,9 @@ function mountList(host, items, rowFn, batch=80){
   let guard = 0;
   while(n < items.length && document.body.offsetHeight <= window.innerHeight + 1200 && guard++ < 80) chunk();
 }
-async function refreshNow(){ cacheBust(); toast('Refreshing...'); await go(CURRENT_VIEW||'today'); toast('Up to date'); }
+async function refreshNow(){ const a=document.querySelector('.avatar'); if(a) a.open=false; const y=window.scrollY; cacheBust(); toast('Refreshing...'); await go(CURRENT_VIEW||'today'); window.scrollTo(0,y); toast('Up to date'); }
+// shrink the header once the user scrolls a little
+window.addEventListener('scroll', ()=>{ const hb=document.getElementById('topbar'); if(hb) hb.classList.toggle('slim', window.scrollY>40); }, {passive:true});
 
 /* ---------------- AUTH ---------------- */
 async function doLogin(){
@@ -243,7 +245,10 @@ async function renderToday(){
     const {data:upcoming} = await upQ;
     return {calls, upcoming: upcoming||[]};
   });
-  const overdue = calls.filter(c=>c.due_date < today());
+  const td = today();
+  // overdue first (most-late at the top), then today's calls
+  const overdue = calls.filter(c=>c.due_date < td).sort((a,b)=>a.due_date.localeCompare(b.due_date));
+  const dueToday = calls.filter(c=>c.due_date >= td);
   // load the user's first nurturing template so each call's WA button uses it
   DEFAULT_NURTURE_TPL = (await tplsFor('nurture'))[0]?.body || null;
 
@@ -252,16 +257,25 @@ async function renderToday(){
     <button class="btn small green" onclick="openMessageAll()">✉️ Message all</button>
     <button class="btn small ghost" onclick="openTemplates()">📝 Templates</button>
   </div>`;
-  if(overdue.length) h += `<div class="alert">⚠️ ${overdue.length} overdue call${overdue.length>1?'s':''} -- please catch up today</div>`;
-  h += `<div class="card"><h2>📞 Calls due today ${calls.length?`<span class="badge">${calls.length}</span>`:''}</h2>`;
-  h += calls.length ? calls.map(callRow).join('') : '<div class="empty">🎉 All caught up -- no calls due.</div>';
-  h += '</div>';
+  if(!calls.length){
+    h += `<div class="card"><div class="empty">🎉 All caught up — no calls due.</div></div>`;
+  } else {
+    if(overdue.length){
+      h += `<details class="acc" open><summary>⚠️ Overdue <span class="badge red">${overdue.length}</span></summary>
+        <div class="acc-body"><div id="today-od-host"></div></div></details>`;
+    }
+    h += `<details class="acc" ${overdue.length?'':'open'}><summary>📞 Due today <span class="badge">${dueToday.length}</span></summary>
+      <div class="acc-body">${dueToday.length?'<div id="today-due-host"></div>':'<div class="empty">Nothing else due today.</div>'}</div></details>`;
+  }
   if(upcoming?.length){
-    h += `<div class="card"><h2>⏭️ Coming up</h2>` + upcoming.map(c=>
+    h += `<details class="acc"><summary>⏭️ Coming up <span class="badge">${upcoming.length}</span></summary><div class="acc-body">` + upcoming.map(c=>
       `<div class="row"><div class="grow"><div class="name">${esc(c.journeys.people.full_name)}</div>
-       <div class="sub">${JT[c.journeys.type]} - Call ${c.call_no} - due ${fmtD(c.due_date)}</div></div></div>`).join('') + '</div>';
+       <div class="sub">${JT[c.journeys.type]} - Call ${c.call_no} - due ${fmtD(c.due_date)}</div></div></div>`).join('') + '</div></details>';
   }
   view().innerHTML = h;
+  const callCfg = { rowFn:callRow, idOf:c=>c.id, personOf:c=>({full_name:c.journeys.people.full_name, phone:c.journeys.people.phone}), aud:'nurture', assignable:false };
+  if(overdue.length)  bulkMount('today_od',  $('today-od-host'),  overdue,  callCfg);
+  if(dueToday.length) bulkMount('today_due', $('today-due-host'), dueToday, callCfg);
 }
 
 function dayInJourney(j){
@@ -430,21 +444,29 @@ async function renderNewMeditators(tabBar){
     <option value="completed" ${f.status==='completed'?'selected':''}>Calls done</option>
     <option value="" ${f.status===''?'selected':''}>All</option>`;
 
+  const activeF = [f.center,(f.status!=='pending'?f.status:''),f.dateFrom,f.dateTo,f.search].filter(Boolean).length;
   let h = tabBar;
-  h += `<div style="display:flex;gap:8px;margin:6px 0;flex-wrap:wrap">
-    <button class="btn small green" onclick="newMedMessageAll()">✉️ Message all</button>
-    <button class="btn small ghost" onclick="openTemplates('new_meditator')">📝 Templates</button>
-    ${isCoord()?`<button class="btn small ghost" onclick="openImport()">📥 Import</button>
-    <button class="btn small ghost" onclick="openAddPerson()">➕ Add person</button>`:''}
+  h += `<div style="display:flex;gap:8px;margin:6px 0;flex-wrap:wrap;align-items:center">
+    <details class="menu"><summary class="btn small green">✉️ Message ▾</summary>
+      <div class="menu-pop">
+        <button class="btn small green" onclick="newMedMessageAll()">✉️ Message all shown</button>
+        <button class="btn small ghost" onclick="openTemplates('new_meditator')">📝 Templates</button>
+      </div></details>
+    ${isCoord()?`<details class="menu"><summary class="btn small ghost">＋ Add ▾</summary>
+      <div class="menu-pop">
+        <button class="btn small ghost" onclick="openImport()">📥 Import</button>
+        <button class="btn small ghost" onclick="openAddPerson()">➕ Add person</button>
+      </div></details>`:''}
   </div>`;
-  h += `<div class="card" style="padding:10px">
-    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+  h += `<details class="card vfilters" open>
+    <summary>🔍 Filters &amp; date range${activeF?` <span class="badge">${activeF}</span>`:''}</summary>
+    <input placeholder="🔍 Search name/phone" style="width:100%;margin-top:10px" value="${esc(f.search)}"
+      oninput="PF.new_meditator.search=this.value" onkeydown="if(event.key==='Enter')renderPeople()">
+    <div class="choices" style="flex-wrap:wrap;gap:6px;margin-top:8px;align-items:center">
       <select style="width:auto" onchange="PF.new_meditator.center=this.value;renderPeople()">
         ${centerOpts}</select>
       <select style="width:auto" title="Calling status" onchange="PF.new_meditator.status=this.value;renderPeople()">
         ${statusOpts}</select>
-      <input placeholder="Search name/phone" style="flex:1;min-width:140px" value="${esc(f.search)}"
-        oninput="PF.new_meditator.search=this.value" onkeydown="if(event.key==='Enter')renderPeople()">
       <input type="date" title="IE date from (or single date)" value="${f.dateFrom}"
         onchange="PF.new_meditator.dateFrom=this.value;renderPeople()" style="width:130px">
       <input type="date" title="IE date to (leave blank for a single date)" value="${f.dateTo}"
@@ -453,7 +475,7 @@ async function renderNewMeditators(tabBar){
       ${(f.dateFrom||f.dateTo||f.search)?`<button class="btn small gray" onclick="PF.new_meditator.dateFrom='';PF.new_meditator.dateTo='';PF.new_meditator.search='';renderPeople()">Clear</button>`:''}
     </div>
     <p class="muted" style="font-size:.76rem;margin-top:6px">Pick an IE date (or a from–to range) to load new meditators for that period.</p>
-  </div>`;
+  </details>`;
 
   // Date-gate: don't dump the whole base. Require a date (or a search).
   const effFrom = f.dateFrom || f.dateTo;   // single date if only one box is filled
@@ -576,26 +598,39 @@ function newMeditatorRow(j, vols){
 }
 
 /* ---- Meditators (ALL is_meditator=true people) ---- */
+let MED_SCOPE_SET=false;
 async function renderMeditatorsList(tabBar){
+  // nurturers land on "My meditators" by default; coordinators see everyone
+  if(!MED_SCOPE_SET){ MED_SCOPE = (ME.role==='nurturer') ? 'mine' : 'all'; MED_SCOPE_SET=true; }
   const f = PF.meditator;
   const centerOpts = `<option value="">All Centers</option>${CENTERS.map(c=>`<option value="${c.id}" ${f.center===c.id?'selected':''}>${c.name}</option>`).join('')}`;
   const tagOpts = `<option value="">All Tags</option>${COMMON_TAGS.map(t=>`<option value="${t}" ${f.tag===t?'selected':''}>${esc(t)}</option>`).join('')}`;
 
+  const activeF = [f.center,f.tag,f.dateFrom,f.dateTo,f.search].filter(Boolean).length;
   let h = tabBar;
-  h += `<div style="display:flex;gap:8px;margin:6px 0;flex-wrap:wrap">
-    <button class="btn small green" onclick="medMessageAll('meditator')">✉️ Message all</button>
-    <button class="btn small ghost" onclick="medMessageAll('satsang')">🙏 Satsang invite</button>
-    <button class="btn small ghost" onclick="openTemplates('meditator')">📝 Templates</button>
-    ${isCoord()?`<button class="btn small ghost" onclick="openImport()">📥 Import</button>
-    <button class="btn small ghost" onclick="openAddPerson()">➕ Add person</button>`:''}
+  h += `<div style="display:flex;gap:8px;margin:6px 0;flex-wrap:wrap;align-items:center">
+    <details class="menu"><summary class="btn small green">✉️ Message ▾</summary>
+      <div class="menu-pop">
+        <button class="btn small green" onclick="medMessageAll('meditator')">✉️ Message all shown</button>
+        <button class="btn small ghost" onclick="medMessageAll('satsang')">🙏 Satsang invite</button>
+        <button class="btn small ghost" onclick="openTemplates('meditator')">📝 Templates</button>
+      </div></details>
+    ${isCoord()?`<details class="menu"><summary class="btn small ghost">＋ Add ▾</summary>
+      <div class="menu-pop">
+        <button class="btn small ghost" onclick="openImport()">📥 Import</button>
+        <button class="btn small ghost" onclick="openAddPerson()">➕ Add person</button>
+      </div></details>`:''}
   </div>
   <div class="tabs">
     <button class="${MED_SCOPE==='all'?'active':''}" onclick="MED_SCOPE='all';renderPeople()">All meditators</button>
     <button class="${MED_SCOPE==='mine'?'active':''}" onclick="MED_SCOPE='mine';renderPeople()">🙋 My meditators</button>
   </div>`;
 
-  h += `<div class="card" style="padding:10px">
-    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+  h += `<details class="card vfilters" ${activeF?'open':''}>
+    <summary>🔍 Filters &amp; range${activeF?` <span class="badge">${activeF}</span>`:''}</summary>
+    <input id="med-search" placeholder="🔍 Search by name or phone" style="width:100%;margin-top:10px" value="${esc(f.search)}"
+      oninput="PF.meditator.search=this.value;medSearchLive()">
+    <div class="choices" style="flex-wrap:wrap;gap:6px;margin-top:8px">
       <select style="width:auto" onchange="PF.meditator.center=this.value;renderPeople()">
         ${centerOpts}</select>
       <select style="width:auto" onchange="PF.meditator.tag=this.value;renderPeople()">
@@ -604,10 +639,10 @@ async function renderMeditatorsList(tabBar){
         onchange="PF.meditator.dateFrom=this.value;renderPeople()" style="width:130px">
       <input type="date" title="IE date to" value="${f.dateTo}"
         onchange="PF.meditator.dateTo=this.value;renderPeople()" style="width:130px">
-      <input id="med-search" placeholder="🔍 Search by name or phone" style="flex:1;min-width:160px" value="${esc(f.search)}"
-        oninput="PF.meditator.search=this.value;medSearchLive()">
+      ${activeF?`<button class="btn small gray" onclick="PF.meditator={center:'',tag:'',dateFrom:'',dateTo:'',search:''};renderPeople()">Clear filters</button>`:''}
     </div>
-  </div>`;
+    ${rangeBlock('med','med-from','med-to')}
+  </details>`;
 
   // Load the full meditator directory once (cached); filter client-side so
   // changing center/tag/date/search is instant and doesn't re-hit the DB.
@@ -630,7 +665,7 @@ async function renderMeditatorsList(tabBar){
 
   h += `<div class="card"><h2>${MED_SCOPE==='mine'?'🙋 My meditators':'🧘 Meditators'} <span class="badge" id="med-count">${rows.length}</span></h2><div id="med-host"></div></div>`;
   view().innerHTML = h;
-  bulkMount('med', $('med-host'), rows, {pageSize:30, rowFn:meditatorDetailRow, idOf:p=>p.id, personOf:p=>({full_name:p.full_name,phone:p.phone}), aud:'meditator', assignable:true});
+  bulkMount('med', $('med-host'), rows, {externalRange:true, rowFn:meditatorDetailRow, idOf:p=>p.id, personOf:p=>({full_name:p.full_name,phone:p.phone}), aud:'meditator', assignable:true});
 }
 let MED_ALL = [], MED_SCOPE='all', MED_ASSIGN={}, MY_MED_IDS=new Set();
 function medFilter(){
@@ -652,11 +687,15 @@ function medMessageAll(aud){
   openMsgAll(aud, people, aud==='satsang'?'Satsang invite':'Message meditators');
 }
 // live search: re-filter + re-mount only the list, so the search box keeps focus
+let MED_SEARCH_T=null;
 function medSearchLive(){
-  const host = $('med-host'); if(!host) return;
-  const rows = medFilter();
-  const cnt = $('med-count'); if(cnt) cnt.textContent = rows.length;
-  bulkMount('med', host, rows, {pageSize:30, rowFn:meditatorDetailRow, idOf:p=>p.id, personOf:p=>({full_name:p.full_name,phone:p.phone}), aud:'meditator', assignable:true});
+  clearTimeout(MED_SEARCH_T);
+  MED_SEARCH_T = setTimeout(()=>{
+    const host = $('med-host'); if(!host) return;
+    const rows = medFilter();
+    const cnt = $('med-count'); if(cnt) cnt.textContent = rows.length;
+    bulkMount('med', host, rows, {externalRange:true, rowFn:meditatorDetailRow, idOf:p=>p.id, personOf:p=>({full_name:p.full_name,phone:p.phone}), aud:'meditator', assignable:true});
+  }, 180);
 }
 
 let MED_INDEX = {};
@@ -681,7 +720,7 @@ function meditatorDetailRow(p){
     </div>
     ${p.phone?`<a class="iconbtn call" href="tel:+91${p.phone}">Call</a>`:''}
     ${wa?`<a class="iconbtn wa" href="${wa}" target="_blank">WA</a>`:''}
-    ${isCoord()?`<button class="btn small ghost" onclick="quickAssign('${p.id}','${esc(p.full_name)}')">Nurture</button>`:''}
+    ${isCoord()?`<button class="btn small ghost" onclick="quickAssign('${p.id}','${esc(p.full_name)}')">Assign</button>`:''}
   </div>`;
 }
 
@@ -1064,11 +1103,13 @@ async function renderAdvancedList(tabBar){
   const centerOpts = `<option value="">All Centers</option>${CENTERS.map(c=>`<option value="${c.id}" ${f.center===c.id?'selected':''}>${c.name}</option>`).join('')}`;
   let advMountCfg = null;
 
+  const ctx = f.view==='completed' ? 'adv_completed' : 'adv_interested';
+  const tplAud = ctx;
+  const activeF = [f.center,f.search].filter(Boolean).length;
   let h = tabBar;
   const progEmoji = {bsp:'🌀', shoonya:'🕉️', samyama:'🧘', guru_puja:'🙏'};
-  // single clean toolbar of dropdowns
-  h += `<div class="card" style="padding:12px">
-    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+  // primary nav: program + view (+ window), then Message▾ / Import▾ menus
+  h += `<div style="display:flex;gap:8px;margin:6px 0;flex-wrap:wrap;align-items:center">
       <select style="width:auto" onchange="PF.advanced.program=this.value;renderPeople()">
         ${ADV_PROGS.map(([v,l])=>`<option value="${v}" ${f.program===v?'selected':''}>${progEmoji[v]||''} ${l}</option>`).join('')}</select>
       <select style="width:auto" onchange="PF.advanced.view=this.value;renderPeople()">
@@ -1077,15 +1118,27 @@ async function renderAdvancedList(tabBar){
       ${f.view==='completed'?`<select style="width:auto" onchange="PF.advanced.window=this.value;renderPeople()">
         <option value="week" ${f.window==='week'?'selected':''}>New this week</option>
         <option value="all" ${f.window==='all'?'selected':''}>All completers</option></select>`:''}
-      <select style="width:auto" onchange="PF.advanced.center=this.value;renderPeople()">${centerOpts}</select>
-      <input placeholder="🔍 name/phone" style="flex:1;min-width:140px" value="${esc(f.search)}"
-        oninput="PF.advanced.search=this.value" onkeydown="if(event.key==='Enter')renderPeople()">
-      ${isCoord()?`<select style="width:auto" onchange="advImport(this.value,'${f.program}');this.selectedIndex=0">
-        <option value="">📥 Import…</option>
-        <option value="excel">From Excel / Sheet</option>
-        <option value="paper">From paper form</option></select>`:''}
-    </div>
+      <details class="menu"><summary class="btn small green">✉️ Message ▾</summary>
+        <div class="menu-pop">
+          <button class="btn small green" onclick="openMsgAll(ADV_MSG.aud,ADV_MSG.people,ADV_MSG.title)">✉️ Message all shown</button>
+          <button class="btn small ghost" onclick="openTemplates('${tplAud}')">📝 Templates</button>
+        </div></details>
+      ${isCoord()?`<details class="menu"><summary class="btn small ghost">📥 Import ▾</summary>
+        <div class="menu-pop">
+          <button class="btn small ghost" onclick="advImport('excel','${f.program}')">From Excel / Sheet</button>
+          <button class="btn small ghost" onclick="advImport('paper','${f.program}')">From paper form</button>
+        </div></details>`:''}
   </div>`;
+  h += `<details class="card vfilters" ${activeF?'open':''}>
+    <summary>🔍 Filters &amp; range${activeF?` <span class="badge">${activeF}</span>`:''}</summary>
+    <input placeholder="🔍 Search name/phone" style="width:100%;margin-top:10px" value="${esc(f.search)}"
+      oninput="PF.advanced.search=this.value" onkeydown="if(event.key==='Enter')renderPeople()">
+    <div class="choices" style="flex-wrap:wrap;gap:6px;margin-top:8px;align-items:center">
+      <select style="width:auto" onchange="PF.advanced.center=this.value;renderPeople()">${centerOpts}</select>
+      ${activeF?`<button class="btn small gray" onclick="PF.advanced.center='';PF.advanced.search='';renderPeople()">Clear filters</button>`:''}
+    </div>
+    ${rangeBlock(ctx,'adv-from','adv-to')}
+  </details>`;
 
   if(f.view === 'completed'){
     h += `<p class="muted" style="font-size:.78rem;margin:6px 2px">Completed ${esc(label)} from Ishangam · last synced <b>${fmtD(sync.last_sync_date)}</b>.
@@ -1100,11 +1153,8 @@ async function renderAdvancedList(tabBar){
     });
     if(f.search){ const s=f.search.toLowerCase(); rows = rows.filter(p=>p.full_name?.toLowerCase().includes(s)||p.phone?.includes(s)); }
     ADV_MSG = {aud:'adv_completed', people:rows.map(p=>({full_name:p.full_name,phone:p.phone})), title:'Message all — Completed '+label};
-    h += `<div style="display:flex;gap:8px;margin:6px 0;flex-wrap:wrap">
-      <button class="btn small green" onclick="openMsgAll(ADV_MSG.aud,ADV_MSG.people,ADV_MSG.title)">✉️ Message all</button>
-      <button class="btn small ghost" onclick="openTemplates('adv_completed')">📝 Completed templates</button></div>`;
     h += `<div class="card"><h2>✅ Completed ${esc(label)} <span class="badge">${rows.length}</span></h2><div id="adv-host"></div></div>`;
-    advMountCfg = {ctx:'adv_completed', items:rows, cfg:{pageSize:30, rowFn:p=>advCompletedRow(p,col,label), idOf:p=>p.id, personOf:p=>({full_name:p.full_name,phone:p.phone}), aud:'adv_completed', assignable:true}};
+    advMountCfg = {ctx:'adv_completed', items:rows, cfg:{externalRange:true, rowFn:p=>advCompletedRow(p,col,label), idOf:p=>p.id, personOf:p=>({full_name:p.full_name,phone:p.phone}), aud:'adv_completed', assignable:true}};
   } else {
     let rows = await fetchAll(() => sb.from('advanced_interest')
       .select('id, program, interest_date, status, notes, people!inner(id, full_name, phone, center_id, tags, photo_url)')
@@ -1112,12 +1162,9 @@ async function renderAdvancedList(tabBar){
     if(f.center) rows = rows.filter(r=>r.people?.center_id===f.center);
     if(f.search){ const s=f.search.toLowerCase(); rows = rows.filter(r=>r.people?.full_name?.toLowerCase().includes(s)||r.people?.phone?.includes(s)); }
     ADV_MSG = {aud:'adv_interested', people:rows.map(r=>({full_name:r.people?.full_name,phone:r.people?.phone})), title:'Message all — Interested '+label};
-    h += `<div style="display:flex;gap:8px;margin:6px 0;flex-wrap:wrap">
-      <button class="btn small green" onclick="openMsgAll(ADV_MSG.aud,ADV_MSG.people,ADV_MSG.title)">✉️ Message all</button>
-      <button class="btn small ghost" onclick="openTemplates('adv_interested')">📝 Interested templates</button></div>`;
     h += `<div class="card"><h2>✋ Interested in ${esc(label)} <span class="badge">${rows.length}</span></h2>
       <p class="muted" style="font-size:.78rem;margin-bottom:6px">People interested in ${esc(label)} — from Ishangam willingness + paper sign-ups. Reach out and help them register.</p><div id="adv-host"></div></div>`;
-    advMountCfg = {ctx:'adv_interested', items:rows, cfg:{pageSize:30, rowFn:r=>advInterestRow(r,label), idOf:r=>r.people?.id||r.id, personOf:r=>({full_name:r.people?.full_name,phone:r.people?.phone}), aud:'adv_interested', assignable:true}};
+    advMountCfg = {ctx:'adv_interested', items:rows, cfg:{externalRange:true, rowFn:r=>advInterestRow(r,label), idOf:r=>r.people?.id||r.id, personOf:r=>({full_name:r.people?.full_name,phone:r.people?.phone}), aud:'adv_interested', assignable:true}};
   }
   view().innerHTML = h;
   if(advMountCfg) bulkMount(advMountCfg.ctx, $('adv-host'), advMountCfg.items, advMountCfg.cfg);
@@ -1134,7 +1181,7 @@ function advCompletedRow(p, col, label){
     </div>
     ${p.phone?`<a class="iconbtn call" href="tel:+91${p.phone}">Call</a>`:''}
     ${wa?`<a class="iconbtn wa" href="${wa}" target="_blank">WA</a>`:''}
-    ${isCoord()?`<button class="btn small ghost" onclick='startNurturing(${JSON.stringify({pid:p.id,name:p.full_name}).replace(/'/g,"&#39;")})'>Nurture</button>`:''}
+    ${isCoord()?`<button class="btn small ghost" onclick='startNurturing(${JSON.stringify({pid:p.id,name:p.full_name}).replace(/'/g,"&#39;")})'>Assign</button>`:''}
   </div>`;
 }
 
@@ -1793,13 +1840,27 @@ async function renderVols(){
   bulkMount('vol', $('vol-host'), list, {externalRange:true, rowFn:v=>volRow(v, histBy[v.person_id]||[]), idOf:v=>v.person_id, personOf:v=>({full_name:v.people?.full_name,phone:v.people?.phone}), aud:'volunteer', assignable:true});
 }
 function volSection(v){ if(v==='ssbiyc') SSB_NAV={org:'',type:'',name:'',year:null}; VOL_TAB=v; renderVols(); }
-function volApplyRange(clear){
-  if(!BL.vol) return;
-  if(clear){ BL.vol.from=null; BL.vol.to=null; blRender('vol'); return; }
-  let f=parseInt(($('vf-from')||{}).value,10), t=parseInt(($('vf-to')||{}).value,10);
-  if(isNaN(f)&&isNaN(t)){ BL.vol.from=null; BL.vol.to=null; }
-  else { f=isNaN(f)?1:Math.max(1,f); t=isNaN(t)?f+49:Math.max(f,t); BL.vol.from=f; BL.vol.to=t; }
-  blRender('vol');
+// generic external From–To applier (reused by Meditators / Advanced / Volunteers filter panels)
+function blApplyRange(ctx, fromId, toId, clear){
+  if(!BL[ctx]) return;
+  if(clear){ BL[ctx].from=null; BL[ctx].to=null; blRender(ctx); return; }
+  let f=parseInt(($(fromId)||{}).value,10), t=parseInt(($(toId)||{}).value,10);
+  if(isNaN(f)&&isNaN(t)){ BL[ctx].from=null; BL[ctx].to=null; }
+  else { f=isNaN(f)?1:Math.max(1,f); t=isNaN(t)?f+49:Math.max(f,t); BL[ctx].from=f; BL[ctx].to=t; }
+  blRender(ctx);
+}
+function volApplyRange(clear){ blApplyRange('vol','vf-from','vf-to',clear); }
+// small From–To range block for a unified filters panel
+function rangeBlock(ctx, fromId, toId){
+  const s=BL[ctx]||{}; const from=(s.from!=null)?s.from:'', to=(s.to!=null)?s.to:'';
+  return `<div class="choices" style="gap:6px;margin-top:10px;align-items:center">
+    <span class="muted" style="font-size:.82rem">Show</span>
+    <input id="${fromId}" type="number" min="1" placeholder="from" value="${from}" style="width:74px">
+    <span class="muted">to</span>
+    <input id="${toId}" type="number" min="1" placeholder="to" value="${to}" style="width:74px">
+    <button class="btn small ghost" onclick="blApplyRange('${ctx}','${fromId}','${toId}')">Apply</button>
+    ${from!==''?`<button class="btn small gray" onclick="blApplyRange('${ctx}','${fromId}','${toId}',true)">Show all</button>`:''}
+  </div>`;
 }
 
 async function viewAttendees(actId, actName){
@@ -1977,30 +2038,35 @@ async function renderInsights(){
     '</div>';
   if(suggestions.length)
     h += '<div class="card"><h2>💡 Planning Suggestions</h2>' + suggestions.map(s=>'<div class="row"><div class="grow">' + s + '</div></div>').join('') + '</div>';
-  h += '<div class="card"><h2>🧘 Sadhana status distribution</h2><canvas id="ch-dist" height="220"></canvas></div>';
-  if(isCoord()) h += '<div class="card"><h2>📊 Call completion by center</h2><canvas id="ch-center" height="200"></canvas></div>';
-  h += '<div class="card"><h2>📋 Per-status counts</h2><table class="mini"><tr><th>Status</th><th>People</th></tr>' +
+  const hasDist = Object.keys(dist).length;
+  h += '<details class="acc" id="acc-dist" ' + (hasDist?'open':'') + '><summary>🧘 Sadhana status distribution</summary><div class="acc-body">' +
+    (hasDist ? '<canvas id="ch-dist" height="220"></canvas>'
+             : '<div class="empty">No sadhana statuses logged yet — as calls get logged, this chart will fill in.</div>') +
+    '</div></details>';
+  if(isCoord()) h += '<details class="acc" id="acc-center"><summary>📊 Call completion by center</summary><div class="acc-body"><canvas id="ch-center" height="200"></canvas></div></details>';
+  h += '<details class="acc"><summary>📋 Per-status counts</summary><div class="acc-body"><table class="mini"><tr><th>Status</th><th>People</th></tr>' +
     (Object.entries(dist).sort((a,b)=>b[1]-a[1]).map(([s,n])=>'<tr><td>' + esc(s) + '</td><td>' + n + '</td></tr>').join('')||'<tr><td colspan=2 class="muted">No logged statuses yet</td></tr>') +
-    '</table></div>';
+    '</table></div></details>';
   view().innerHTML = h;
   await loadScript(CDN.chart);
-  if(Object.keys(dist).length){
+  // lazy-build charts only when their accordion is open (avoids 0-width canvases)
+  let distBuilt=false, centerBuilt=false;
+  const buildDist = ()=>{ if(distBuilt||!hasDist||!$('ch-dist')) return; distBuilt=true;
     new Chart($('ch-dist'), {type:'doughnut',
       data:{labels:Object.keys(dist), datasets:[{data:Object.values(dist),
         backgroundColor:['#c4622d','#3d8a5f','#d8a13a','#7a6bb5','#c92f2f','#4f8fc4','#8a8378','#5fae9c']}]},
-      options:{plugins:{legend:{position:'bottom',labels:{boxWidth:12,font:{size:11}}}}}});
-  }
-  if(isCoord()){
-    const byC = {};
-    const jById = Object.fromEntries(J.map(j=>[j.id,j]));
+      options:{plugins:{legend:{position:'bottom',labels:{boxWidth:12,font:{size:11}}}}}}); };
+  const buildCenter = ()=>{ if(centerBuilt||!$('ch-center')) return; centerBuilt=true;
+    const byC = {}; const jById = Object.fromEntries(J.map(j=>[j.id,j]));
     C.forEach(c=>{ const j=jById[c.journey_id]; if(!j) return;
       const b = (byC[j.center_id] ||= {done:0,open:0}); c.completed_at?b.done++:b.open++; });
     new Chart($('ch-center'), {type:'bar',
       data:{labels:Object.keys(byC).map(centerName), datasets:[
         {label:'Completed', data:Object.values(byC).map(b=>b.done), backgroundColor:'#3d8a5f'},
         {label:'Open', data:Object.values(byC).map(b=>b.open), backgroundColor:'#e0d6c8'}]},
-      options:{scales:{x:{stacked:true},y:{stacked:true}},plugins:{legend:{position:'bottom'}}}});
-  }
+      options:{scales:{x:{stacked:true},y:{stacked:true}},plugins:{legend:{position:'bottom'}}}}); };
+  const accD=$('acc-dist'); if(accD){ accD.addEventListener('toggle',()=>{ if(accD.open) buildDist(); }); if(accD.open) buildDist(); }
+  const accC=$('acc-center'); if(accC){ accC.addEventListener('toggle',()=>{ if(accC.open) buildCenter(); }); }
 }
 
 /* ============================================================
