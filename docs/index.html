@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Isha E-City Nurturing</title>
-<link rel="stylesheet" href="styles.css?v=32">
+<link rel="stylesheet" href="styles.css?v=33">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <!-- Chart.js, xlsx, papaparse, qrcode and Tesseract are loaded on demand (see loadScript in app.js) -->
 <script src="config.js"></script>
@@ -32,11 +32,13 @@
       <summary class="who-chip"><span id="who-name"></span> ▾</summary>
       <div class="menu-pop right">
         <div class="muted" id="who-role" style="padding:2px 4px 6px;font-size:.8rem"></div>
+        <button class="btn small ghost" onclick="go('profile')">👤 My profile</button>
         <button class="btn small ghost" onclick="refreshNow()">↻ Refresh data</button>
         <button class="btn small gray" onclick="doLogout()">Sign out</button>
       </div>
     </details>
   </header>
+  <div id="quotebar" class="hidden" onclick="showQuote(false)"></div>
   <div id="view"></div>
 </div>
 
@@ -51,6 +53,6 @@
 <div id="modal-root"></div>
 <div id="toast"></div>
 
-<script src="app.js?v=32" charset="utf-8"></script>
+<script src="app.js?v=33" charset="utf-8"></script>
 </body>
 </html>

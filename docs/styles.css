@@ -250,6 +250,31 @@ html{scroll-behavior:smooth}
   #view,.stat{animation:none}
 }
 
+/* Sadhguru quote splash overlay */
+.quoteov{position:fixed;inset:0;z-index:300;display:flex;align-items:center;justify-content:center;
+  background:#4a3526;opacity:0;transition:opacity .4s ease;cursor:pointer;padding:16px}
+.quoteov.show{opacity:1}
+.quote-card{max-width:520px;width:100%;text-align:center;animation:qrise .5s ease both}
+@keyframes qrise{from{opacity:0;transform:translateY(10px) scale(.98)}to{opacity:1;transform:none}}
+.quote-img{width:100%;max-height:80vh;object-fit:contain;border-radius:18px;box-shadow:0 10px 40px rgba(0,0,0,.4)}
+.quote-fallback{display:none;flex-direction:column;align-items:center;gap:14px;color:#fdf6ee;padding:30px 18px}
+.quote-fallback .ql{font-size:2.6rem}
+.quote-fallback blockquote{font-size:1.5rem;line-height:1.5;font-weight:600;font-style:italic;margin:0;max-width:24ch}
+.quote-fallback .qby{font-size:1rem;opacity:.85;letter-spacing:.5px}
+.quote-hint{margin-top:18px;color:rgba(255,255,255,.8);font-size:.85rem;letter-spacing:.4px;animation:pulse 1.8s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:.5}50%{opacity:1}}
+/* slim quote banner under the header (every page); tap to expand */
+#quotebar{display:flex;align-items:center;gap:8px;cursor:pointer;margin:6px 0 2px;padding:9px 14px;
+  border-radius:12px;background:linear-gradient(135deg,#5a4030,#7a5840);color:#fdf6ee;font-size:.86rem;
+  box-shadow:var(--shadow);transition:filter .15s,transform .12s}
+#quotebar:active{transform:scale(.99)}
+#quotebar .qtext{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-style:italic}
+#quotebar .qexp{opacity:.8;font-size:.78rem;white-space:nowrap}
+/* profile */
+.profile-card .pf-head{display:flex;flex-direction:column;align-items:center;gap:10px;margin-bottom:8px}
+.pf-photo{width:96px;height:96px;border-radius:50%;object-fit:cover;background:var(--accent-soft)}
+.pf-photo.pf-ph{display:flex;align-items:center;justify-content:center;font-size:2.2rem;font-weight:800;color:var(--accent)}
+
 /* wider screens: roomier */
 @media(min-width:700px){
   body{font-size:19px}

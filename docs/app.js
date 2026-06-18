@@ -150,10 +150,138 @@ async function boot(){
   $('who-name').textContent = ME.full_name || ME.email;
   const scopeLabel = (ME.role==='admin'||ME.role==='sector_nurturer'||ME.center_id==='all') ? 'All Centers' : centerName(ME.center_id);
   $('who-role').textContent = roleLabel(ME.role) + ' - ' + scopeLabel;
-  if(ME.role==='nurturer'){
-    document.querySelectorAll('#nav [data-v="vols"],#nav [data-v="admin"]').forEach(b=>b.style.display='none');
+  // Non-coordinators ("others") get a Profile tab in place of Admin; coordinators keep Admin
+  // and reach their profile from the avatar menu.
+  const adminBtn = document.querySelector('#nav [data-v="admin"]');
+  if(!isCoord()){
+    const volBtn = document.querySelector('#nav [data-v="vols"]'); if(volBtn) volBtn.style.display='none';
+    if(adminBtn){ adminBtn.dataset.v='profile'; adminBtn.setAttribute('onclick',"go('profile')");
+      adminBtn.innerHTML='<span class="ico">🙏</span><span>Profile</span>'; }
   }
-  go('today');
+  $('quotebar').classList.remove('hidden');
+  $('quotebar').innerHTML = `🪷 <span class="qtext">“${esc(VOL_QUOTE)}”</span> <span class="qexp">tap ›</span>`;
+  go('profile');           // land on Profile after the opening quote
+  showQuote(true);         // opening Sadhguru photo + volunteering quote
+}
+/* ============================================================
+   Sadhguru volunteering quote — splash + expandable banner
+   (drop the photo into docs/sadhguru-quote.jpg to show it; a styled
+    text version is shown if the image isn't present)
+   ============================================================ */
+const VOL_QUOTE = 'How deep you touch another life is how rich your life is.';
+const VOL_QUOTE_BY = '— Sadhguru';
+const SPLASH_IMG = 'sadhguru-quote.jpg';
+let QUOTE_T = null;
+function quoteOverlayHTML(splash){
+  return `<div class="quote-card">
+    <img src="${SPLASH_IMG}" alt="Sadhguru on volunteering" class="quote-img"
+      onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+    <div class="quote-fallback" style="display:none">
+      <div class="ql">🪷</div>
+      <blockquote>“${esc(VOL_QUOTE)}”</blockquote>
+      <div class="qby">${esc(VOL_QUOTE_BY)}</div>
+    </div>
+    <div class="quote-hint">${splash?'tap to enter ›':'tap anywhere to close'}</div>
+  </div>`;
+}
+function showQuote(splash){
+  let ov=document.getElementById('quoteov');
+  if(!ov){ ov=document.createElement('div'); ov.id='quoteov'; document.body.appendChild(ov); }
+  ov.className='quoteov'; ov.innerHTML=quoteOverlayHTML(splash);
+  ov.onclick=()=>dismissQuote();
+  requestAnimationFrame(()=>ov.classList.add('show'));
+  clearTimeout(QUOTE_T);
+  if(splash) QUOTE_T=setTimeout(dismissQuote, 4500);   // auto-enter after a few seconds
+}
+function dismissQuote(){
+  clearTimeout(QUOTE_T);
+  const ov=document.getElementById('quoteov'); if(!ov) return;
+  ov.classList.remove('show');
+  setTimeout(()=>{ if(ov&&ov.parentNode) ov.remove(); }, 350);
+}
+
+/* ============================================================
+   PROFILE (self) — view + edit name / email / phone / photo + volunteering history
+   ============================================================ */
+function nameParts(full){ const p=(full||'').trim().split(/\s+/); return {first:p[0]||'', last:p.slice(1).join(' ')}; }
+async function renderProfile(){
+  view().innerHTML = '<div class="empty">Loading…</div>';
+  // link to a people record (for volunteering history) by email then phone
+  let person=null;
+  if(ME.email){ const {data}=await sb.from('people').select('id,full_name,phone,photo_url').ilike('email', ME.email).limit(1); if(data&&data[0]) person=data[0]; }
+  if(!person && ME.phone){ const ph=(ME.phone||'').replace(/\D/g,'').slice(-10);
+    if(ph){ const {data}=await sb.from('people').select('id,full_name,phone,photo_url').eq('phone', ph).limit(1); if(data&&data[0]) person=data[0]; } }
+  PF_PERSON = person;
+  const photo = ME.photo_url || person?.photo_url || '';
+  const {first,last} = nameParts(ME.full_name);
+  const initial = esc((ME.full_name||ME.email||'?').trim().charAt(0).toUpperCase());
+  let h = `<div class="card profile-card">
+    <div class="pf-head">
+      ${photo?`<img class="pf-photo" src="${esc(photo)}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+        <div class="pf-photo pf-ph" style="display:none">${initial}</div>`
+       :`<div class="pf-photo pf-ph">${initial}</div>`}
+      <button class="btn small ghost" onclick="pickPhoto()">📷 Change photo</button>
+    </div>
+    <label>First name</label><input id="pf-first" value="${esc(first)}">
+    <label>Last name</label><input id="pf-last" value="${esc(last)}">
+    <label>Email</label><input id="pf-email" type="email" value="${esc(ME.email||'')}">
+    <label>Phone</label><input id="pf-phone" inputmode="numeric" value="${esc(ME.phone||'')}">
+    <p class="muted" style="font-size:.74rem;margin-top:6px">Changing your email updates your sign-in address — you'll get a confirmation link at the new address.</p>
+    <button class="btn block" style="margin-top:12px" onclick="saveProfile()">Save changes</button>
+    <p class="muted" style="font-size:.78rem;margin-top:10px">${roleLabel(ME.role)} · ${ME.center_id==='all'||ME.role==='admin'||ME.role==='sector_nurturer'?'All Centers':centerName(ME.center_id)}</p>
+  </div>
+  <details class="acc" id="pf-histacc"><summary>🙌 My volunteering history</summary>
+    <div class="acc-body" id="pf-hist"><div class="empty">Tap to load…</div></div></details>`;
+  view().innerHTML = h;
+  const acc=$('pf-histacc');
+  if(acc){ acc.addEventListener('toggle', ()=>{ if(acc.open) pfHistory(); }); }
+}
+let PF_PERSON=null;
+async function pfHistory(){
+  const host=$('pf-hist'); if(!host) return; if(host.dataset.loaded) return;
+  if(!PF_PERSON){ host.innerHTML='<div class="empty">No volunteering record is linked to your account yet.</div>'; return; }
+  host.innerHTML='<div class="empty">Loading…</div>';
+  const [{data:vh},{data:att}] = await Promise.all([
+    sb.from('volunteer_history').select('activity,center_id,happened_on').eq('person_id',PF_PERSON.id).order('happened_on',{ascending:false}),
+    sb.from('attendance').select('time_in, activities(name,center_id,activity_date)').eq('person_id',PF_PERSON.id).order('time_in',{ascending:false})
+  ]);
+  const rows=[...(vh||[]).map(r=>({name:r.activity||'Volunteering',center:r.center_id,date:r.happened_on})),
+    ...(att||[]).map(a=>({name:a.activities?.name||'Activity',center:a.activities?.center_id,date:a.activities?.activity_date||a.time_in}))]
+    .filter(r=>r.date).sort((a,b)=>String(b.date).localeCompare(String(a.date)));
+  host.dataset.loaded='1';
+  host.innerHTML = rows.length
+    ? `<p class="muted" style="font-size:.8rem;margin:2px 2px 8px">${rows.length} activit${rows.length===1?'y':'ies'}</p>`+
+      rows.map(r=>`<div class="row simple"><div class="grow"><div class="name">${esc(r.name)}</div><div class="sub">${centerName(r.center)} · ${fmtD(r.date)}</div></div></div>`).join('')
+    : '<div class="empty">No volunteering activities recorded yet.</div>';
+}
+function pickPhoto(){
+  const i=document.createElement('input'); i.type='file'; i.accept='image/*';
+  i.onchange=()=>{ const f=i.files&&i.files[0]; if(!f) return;
+    const r=new FileReader(); r.onload=()=>{ const img=new Image();
+      img.onload=async()=>{ const max=320; let w=img.width,h=img.height; const sc=Math.min(1,max/Math.max(w,h));
+        w=Math.round(w*sc); h=Math.round(h*sc); const c=document.createElement('canvas'); c.width=w;c.height=h;
+        c.getContext('2d').drawImage(img,0,0,w,h); const url=c.toDataURL('image/jpeg',0.82);
+        const {error}=await sb.from('profiles').update({photo_url:url}).eq('id',ME.id);
+        if(error) return toast(error.message); ME.photo_url=url; toast('Photo updated'); renderProfile(); };
+      img.src=r.result; }; r.readAsDataURL(f); };
+  i.click();
+}
+async function saveProfile(){
+  const first=$('pf-first').value.trim(), last=$('pf-last').value.trim();
+  const full=(first+' '+last).trim(); const phone=$('pf-phone').value.trim(); const email=$('pf-email').value.trim();
+  const upd={};
+  if(full && full!==(ME.full_name||'')) upd.full_name=full;
+  if(phone!==(ME.phone||'')) upd.phone=phone||null;
+  if(Object.keys(upd).length){ const {error}=await sb.from('profiles').update(upd).eq('id',ME.id); if(error) return toast(error.message); Object.assign(ME,upd); }
+  if(email && email!==(ME.email||'')){
+    const {error}=await sb.auth.updateUser({email});
+    if(error) return toast(error.message);
+    await sb.from('profiles').update({email}).eq('id',ME.id); ME.email=email;
+    toast('Saved — check your new email to confirm the change');
+  } else if(Object.keys(upd).length){ toast('Profile saved'); }
+  else { toast('Nothing to update'); }
+  $('who-name').textContent = ME.full_name || ME.email;
+  renderProfile();
 }
 const roleLabel = r => ({nurturer:'Nurturer', center_coordinator:'Center Co-ordinator', sector_nurturer:'Sector Nurturer', admin:'Admin'}[r]||r);
 const ROLES = ['nurturer','center_coordinator','sector_nurturer','admin'];
@@ -192,7 +320,7 @@ function go(v){
   CURRENT_VIEW = v;
   document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('active', b.dataset.v===v));
   return ({today:renderToday, people:renderPeople, vols:renderVols,
-    insights:renderInsights, admin:renderAdmin}[v])();
+    insights:renderInsights, admin:renderAdmin, profile:renderProfile}[v])();
 }
 // Tap an Insights number to jump straight to the matching list (optionally pre-filtered).
 function drillTo(v, tab, opt){
