@@ -290,10 +290,8 @@ function callRow(c){
   // Use the user's first nurturing template if they have one; else the built-in context message.
   const msg = DEFAULT_NURTURE_TPL ? applyTpl(DEFAULT_NURTURE_TPL, p.full_name)
                                   : decorateMsg((WA_MSG[j.type]||WA_MSG.meditator)(first0), first0);
-  const sub = `${JT[j.type]}${j.program_name?' · '+esc(j.program_name):''} · Call ${c.call_no}${j.type==='new_meditator'?'/3':''}${day?` · Day ${day}`:''} · due ${fmtD(c.due_date)}`;
-  const badge = od ? '<span class="badge red">overdue</span>' : '';
   const log = `<button class="actbtn log" onclick='openLog(${JSON.stringify({id:c.id,call_no:c.call_no,jtype:j.type,name:p.full_name,jid:j.id,pid:p.id}).replace(/"/g,'&quot;').replace(/'/g,"&#39;")})'>Log</button>`;
-  return simpleRow({name:p.full_name, phone:p.phone, msg, sub, badge, extra:log});
+  return simpleRow({name:p.full_name, phone:p.phone, msg, extra:log});
 }
 
 /* ---- call logging ---- */
@@ -991,14 +989,17 @@ function blRender(ctx){
     ${total>shown.length?`<button class="btn small ghost" onclick="blSelectAll('${ctx}')">Select all ${total}</button>`:''}
   </div>`;
   if(!s.external){
-    h += `<div class="pager">
-      <span class="muted">Show</span>
-      <input id="bl-from" type="number" min="1" placeholder="from" value="${ranged?s.from:''}" style="width:72px">
-      <span class="muted">to</span>
-      <input id="bl-to" type="number" min="1" placeholder="to" value="${ranged?s.to:''}" style="width:72px">
-      <button class="btn small ghost" onclick="blRange('${ctx}')">Go</button>
-      ${ranged?`<button class="btn small gray" onclick="blShowAll('${ctx}')">Show all</button>`:''}
-    </div>`;
+    h += `<details class="menu rangetog" ${ranged?'open':''}><summary class="btn small ghost">↔ Range${ranged?` ${s.from}–${s.to}`:''}</summary>
+      <div class="menu-pop">
+        <div class="choices" style="gap:6px;align-items:center">
+          <span class="muted">Show</span>
+          <input id="bl-from" type="number" min="1" placeholder="from" value="${ranged?s.from:''}" style="width:72px">
+          <span class="muted">to</span>
+          <input id="bl-to" type="number" min="1" placeholder="to" value="${ranged?s.to:''}" style="width:72px">
+          <button class="btn small ghost" onclick="blRange('${ctx}')">Go</button>
+          ${ranged?`<button class="btn small gray" onclick="blShowAll('${ctx}')">Show all</button>`:''}
+        </div>
+      </div></details>`;
   }
   h += shown.map(it=>{ const id=s.idOf(it);
     return `<div class="selrow"><input type="checkbox" class="selcb" ${s.sel.has(id)?'checked':''} onclick="blToggle('${ctx}','${esc(id)}',this.checked)">${s.rowFn(it)}</div>`;
@@ -2056,11 +2057,16 @@ async function renderAdmin(){
   if(isAdmin()){
     const pending = (profs||[]).filter(p=>p.active===false);
     h += '<details class="acc" open><summary>🕒 Pending approvals <span class="badge">'+pending.length+'</span></summary><div class="acc-body">';
-    h += pending.length ? pending.map(p=>'<div class="row"><div class="grow">' +
+    h += pending.length ? pending.map(p=>'<div class="row simple"><div class="grow" style="min-width:0">' +
         '<div class="name">'+esc(p.full_name||p.email)+'</div>' +
-        '<div class="sub">'+esc(p.email||'')+(p.phone?' · '+esc(p.phone):'')+'</div>' +
-        '<div class="choices" style="gap:6px;margin-top:6px">'+roleOpts('nurturer',p.id,'pa-role-')+centerOptsSel(p.center_id||CENTERS[0]?.id,p.id,'pa-ctr-')+'</div></div>' +
-      '<button class="btn small green" onclick="approveUser(\''+p.id+'\')">Approve</button></div>').join('')
+        '<div class="sub">'+esc(p.email||'')+(p.phone?' · '+esc(p.phone):'')+'</div></div>' +
+        '<div class="acts">' +
+          '<details class="menu"><summary class="actbtn assign">Role ▾</summary><div class="menu-pop">' +
+            '<label class="muted" style="font-size:.72rem;margin:0">Role</label>'+roleOpts('nurturer',p.id,'pa-role-') +
+            '<label class="muted" style="font-size:.72rem;margin:6px 0 0">Center</label>'+centerOptsSel(p.center_id||CENTERS[0]?.id,p.id,'pa-ctr-') +
+          '</div></details>' +
+          '<button class="actbtn msg" onclick="approveUser(\''+p.id+'\')">Approve</button>' +
+        '</div></div>').join('')
       : '<div class="empty">No one waiting for approval.</div>';
     h += '</div></details>';
   }
@@ -2085,17 +2091,23 @@ async function renderAdmin(){
 
   // 👥 Users & Roles — collapsed
   h += '<details class="acc"><summary>👥 Users &amp; Roles <span class="badge">'+(profs||[]).filter(p=>p.active!==false).length+'</span></summary><div class="acc-body">';
-  h += (profs||[]).filter(p=>p.active!==false).map(p=>'<div class="row"><div class="grow">' +
+  h += (profs||[]).filter(p=>p.active!==false).map(p=>'<div class="row simple"><div class="grow" style="min-width:0">' +
       '<div class="name">' + esc(p.full_name||p.email) + '</div>' +
-      '<div class="sub">' + esc(p.email||'') + ' - ' + roleLabel(p.role) + ' - ' + centerName(p.center_id) + '</div></div>' +
+      '<div class="sub">' + roleLabel(p.role) + ' · ' + centerName(p.center_id) + '</div></div>' +
+    '<div class="acts">' +
+    (p.phone?'<a class="actbtn msg" href="https://wa.me/91' + p.phone + '?text=' + encodeURIComponent('Namaskaram - Gentle reminder: you have nurturing calls due on the dashboard. Please take a look when you can!') + '" target="_blank">Msg</a>':'') +
     (isAdmin()?
-      '<select style="width:auto;font-size:.78rem;padding:6px" onchange="setRole(\'' + p.id + '\',\'role\',this.value)">' +
-        ROLES.map(r=>'<option value="' + r + '" ' + (p.role===r?'selected':'') + '>' + roleLabel(r) + '</option>').join('') + '</select>' +
-      '<select style="width:auto;font-size:.78rem;padding:6px" onchange="setRole(\'' + p.id + '\',\'center_id\',this.value)">' +
-        assignCenters.map(c=>'<option value="' + c.id + '" ' + (p.center_id===c.id?'selected':'') + '>' + c.name + '</option>').join('') + '</select>' +
-      (p.id!==ME.id?'<button class="btn small gray" onclick="setActive(\''+p.id+'\',false)">Deactivate</button>':'')
+      '<details class="menu"><summary class="actbtn assign">Edit ▾</summary><div class="menu-pop">' +
+        '<label class="muted" style="font-size:.72rem;margin:0">Role</label>' +
+        '<select onchange="setRole(\'' + p.id + '\',\'role\',this.value)">' +
+          ROLES.map(r=>'<option value="' + r + '" ' + (p.role===r?'selected':'') + '>' + roleLabel(r) + '</option>').join('') + '</select>' +
+        '<label class="muted" style="font-size:.72rem;margin:6px 0 0">Center</label>' +
+        '<select onchange="setRole(\'' + p.id + '\',\'center_id\',this.value)">' +
+          assignCenters.map(c=>'<option value="' + c.id + '" ' + (p.center_id===c.id?'selected':'') + '>' + c.name + '</option>').join('') + '</select>' +
+        (p.id!==ME.id?'<button class="btn small gray" style="margin-top:8px" onclick="setActive(\''+p.id+'\',false)">Deactivate</button>':'') +
+      '</div></details>'
       :'') +
-    (p.phone?'<a class="iconbtn wa" href="https://wa.me/91' + p.phone + '?text=' + encodeURIComponent('Namaskaram - Gentle reminder: you have nurturing calls due on the dashboard. Please take a look when you can!') + '" target="_blank">WA</a>':'') +
+    '</div>' +
     '</div>').join('');
   h += '</div></details>';
 
