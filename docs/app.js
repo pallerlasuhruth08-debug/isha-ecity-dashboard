@@ -1431,22 +1431,11 @@ const isNewInterest = v => v.status==='new';
 
 function icvRow(r, prof){
   const ph = r.phone;
-  const wa = ph ? `https://wa.me/91${ph}?text=${encodeURIComponent('Namaskaram '+((r.full_name||'').split(' ')[0])+' -- You had expressed interest to volunteer when you completed Inner Engineering. We would love to have you involved at Isha Electronic City. When is a good time to talk?')}` : null;
-  const sel = isCoord() ? `<select style="width:auto;font-size:.75rem;padding:4px 6px" onchange="setIcvStatus('${r.id}',this.value)">${['new','contacted','active','done','dropped'].map(s=>`<option value="${s}" ${r.status===s?'selected':''}>${s}</option>`).join('')}</select>` : '';
-  // prof = matched people row (back-annotation), if any
-  const line2 = prof ? profileSummary(prof)
-    : '🪷 IE: '+fmtD(r.ie_date)+(r.program_name?' - '+esc(r.program_name):'')+' · <span class="muted">profile not yet synced</span>';
-  const tap = prof ? ` style="cursor:pointer" onclick='showPersonProfile(${JSON.stringify(personToProfile(prof)).replace(/'/g,"&#39;")})'` : '';
-  return `<div class="row">
-    ${prof&&prof.photo_url?`<img class="av" src="${esc(prof.photo_url)}" loading="lazy" alt="" onerror="this.style.display='none'">`:''}
-    <div class="grow"${tap}>
-      <div class="name">${esc(prof?.full_name||r.full_name||'?')} <span class="badge ${r.status==='active'||r.status==='done'?'green':'gray'}">${esc(r.status||'new')}</span></div>
-      <div class="sub">${line2}${prof?' <span class="muted" style="font-size:.7rem">· tap for profile</span>':''}</div>
-    </div>
-    ${ph?`<a class="iconbtn call" href="tel:+91${ph}">Call</a>`:''}
-    ${wa?`<a class="iconbtn wa" href="${wa}" target="_blank">WA</a>`:''}
-    ${sel}
-  </div>`;
+  const msg = 'Namaskaram '+((r.full_name||'').split(' ')[0])+' -- You had expressed interest to volunteer when you completed Inner Engineering. We would love to have you involved at Isha Electronic City. When is a good time to talk?';
+  const onclk = prof ? `showPersonProfile(${JSON.stringify(personToProfile(prof))})` : '';
+  // Assign only when a synced profile exists (we need a person id to tag a nurturer)
+  const assign = (isCoord() && prof) ? `<button class="actbtn assign" onclick="quickAssign('${prof.id}','${esc(prof.full_name||r.full_name||'')}')">Assign</button>` : '';
+  return simpleRow({photo:prof?.photo_url, name:prof?.full_name||r.full_name, onclick:onclk, phone:ph, msg, extra:assign});
 }
 async function setIcvStatus(id, status){ const {error}=await sb.from('ie_completion_volunteer').update({status}).eq('id', id); toast(error?error.message:'Updated'); }
 
@@ -2075,16 +2064,16 @@ async function renderAdmin(){
   if(isSector()){
     h += '<details class="acc"><summary>🎉 Events &amp; Attendance <span class="badge">'+(acts||[]).length+'</span></summary><div class="acc-body">';
     h += '<button class="btn small ghost" style="margin-bottom:6px" onclick="openNewActivity()">➕ New activity</button>';
-    h += (acts||[]).map(a=>'<div style="padding:10px 0;border-bottom:1px solid var(--line)">' +
+    h += (acts||[]).map(a=>'<div class="row simple"><div class="grow" style="min-width:0">' +
         '<div class="name">' + esc(a.name) + ' ' + (a.is_open?'<span class="badge green">open</span>':'<span class="badge gray">closed</span>') + '</div>' +
-        '<div class="sub">' + centerName(a.center_id) + ' · ' + fmtD(a.activity_date) + (a.activity_type&&a.activity_type!=='general'?' · '+esc(a.activity_type):'') + '</div>' +
-        '<details class="menu" style="margin-top:6px"><summary class="btn small ghost">⋯ Manage</summary><div class="menu-pop">' +
+        '<div class="sub">' + centerName(a.center_id) + ' · ' + fmtD(a.activity_date) + (a.activity_type&&a.activity_type!=='general'?' · '+esc(a.activity_type):'') + '</div></div>' +
+        '<div class="acts"><details class="menu"><summary class="actbtn assign">⋯ Manage</summary><div class="menu-pop">' +
           '<button class="btn small ghost" onclick="showQR(\'' + a.qr_token + '\',\'' + esc(a.name) + '\')">📲 QR code</button>' +
           '<button class="btn small ghost" onclick="viewAttendees(\'' + a.id + '\',\'' + esc(a.name) + '\')">👥 Attendees</button>' +
           '<button class="btn small ghost" onclick="openEditActivity(\'' + a.id + '\')">✏️ Edit</button>' +
           '<button class="btn small gray" onclick="toggleActivity(\'' + a.id + '\',' + (!a.is_open) + ')">' + (a.is_open?'🔒 Close':'🔓 Reopen') + '</button>' +
           '<button class="btn small gray" onclick="deleteActivity(\'' + a.id + '\')">🗑 Delete</button>' +
-        '</div></details>' +
+        '</div></details></div>' +
       '</div>').join('') || '<div class="empty">No activities yet.</div>';
     h += '</div></details>';
   }
