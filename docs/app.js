@@ -427,6 +427,7 @@ async function renderPeople(tab){
 
 /* ---- New Meditators (nurturer chooses who to call -- nothing is automatic) ---- */
 let NEWMED_ALL=[], NM_VOLS=[];
+const NEWMED_CAP = 400;   // only load the most recent N new-meditator journeys for fast first open
 const ieOfJ = j => (j.people?.ie_date || '');
 async function renderNewMeditators(tabBar){
   const f = PF.new_meditator;
@@ -455,22 +456,25 @@ async function renderNewMeditators(tabBar){
     </div>
   </details>`;
 
-  // Load ALL new-meditator journeys ONCE (cached); filter/sort client-side for instant changes.
+  // Load the most-recent new-meditator journeys ONCE (cached, capped & slim — no calls join);
+  // filter/sort client-side for instant changes. Newest-first by journey date.
   const role = ME.role;
-  const all = await cached('newmed_all', ()=>fetchAll(()=>{
+  const all = await cached('newmed_all', async()=>{
     let q = sb.from('journeys')
-      .select('id, type, program_name, program_date, status, sadhana_status, assigned_to, center_id, people!inner(id,full_name,phone,email,occupation,gender,date_of_birth,area,city,street,pincode,center_id,ie_date,bsp_date,shoonya_date,samyama_date,guru_puja_date,tags,photo_url), calls(id, call_no, due_date, completed_at)')
-      .eq('type','new_meditator');
+      .select('id, type, program_name, program_date, status, sadhana_status, assigned_to, center_id, people!inner(id,full_name,phone,email,occupation,gender,date_of_birth,area,city,street,pincode,center_id,ie_date,bsp_date,shoonya_date,samyama_date,guru_puja_date,tags,photo_url)')
+      .eq('type','new_meditator').order('program_date',{ascending:false,nullsFirst:false}).limit(NEWMED_CAP);
     if(role==='nurturer') q = q.eq('assigned_to', ME.id);
-    return q;
-  }));
+    const {data,error} = await q; if(error){ toast(error.message); return []; }
+    return data||[];
+  });
   NM_VOLS = isCoord() ? await cached('nm_vols', async()=>{ const {data}=await sb.from('profiles').select('id, full_name, email, role, center_id').eq('active',true); return data||[]; }) : [];
   NEWMED_ALL = all;
   const rows = nmFilter();
   NEWMED_PEOPLE = rows.map(j=>({full_name:j.people?.full_name, phone:j.people?.phone})).filter(p=>p.phone);
 
+  const capped = all.length >= NEWMED_CAP;
   h += `<div class="card"><h2>🌱 New Meditators <span class="badge" id="nm-count2">${rows.length}</span></h2>
-    <p class="muted" style="font-size:.8rem;margin-bottom:8px">Newest first. ${isCoord()?'Tick people and press <b>📞 Start calling</b> to add them to nurturing calls.':'These are the new meditators assigned to you.'}</p><div id="nm-host"></div></div>`;
+    <p class="muted" style="font-size:.8rem;margin-bottom:8px">Newest first. ${isCoord()?'Tick people and press <b>📞 Start calling</b> to add them to nurturing calls.':'These are the new meditators assigned to you.'}${capped?` Showing the most recent ${NEWMED_CAP} — use 🔍 search to find anyone older.`:''}</p><div id="nm-host"></div></div>`;
   view().innerHTML = h;
   nmMount(rows);
 }
@@ -486,12 +490,32 @@ function nmFilter(){
   return rows;
 }
 let NM_SEARCH_T=null;
-function nmSearchLive(){
-  clearTimeout(NM_SEARCH_T);
-  NM_SEARCH_T = setTimeout(()=>{ const host=$('nm-host'); if(!host) return;
-    const rows=nmFilter(); const c=$('nm-count2'); if(c) c.textContent=rows.length;
-    NEWMED_PEOPLE=rows.map(j=>({full_name:j.people?.full_name,phone:j.people?.phone})).filter(p=>p.phone);
-    nmMount(rows); }, 180);
+function nmSearchLive(){ clearTimeout(NM_SEARCH_T); NM_SEARCH_T = setTimeout(nmRunSearch, 250); }
+async function nmRunSearch(){
+  const host=$('nm-host'); if(!host) return;
+  const f=PF.new_meditator; const term=(f.search||'').trim();
+  let rows;
+  if(term.length>=2){
+    // search the whole base (not just the capped recent set) so older people are findable
+    const isDigit = /^[\d\s+]+$/.test(term);
+    let q = sb.from('journeys')
+      .select('id, type, program_name, program_date, status, sadhana_status, assigned_to, center_id, people!inner(id,full_name,phone,email,occupation,gender,date_of_birth,area,city,street,pincode,center_id,ie_date,bsp_date,shoonya_date,samyama_date,guru_puja_date,tags,photo_url)')
+      .eq('type','new_meditator').limit(200);
+    if(ME.role==='nurturer') q = q.eq('assigned_to', ME.id);
+    if(isDigit) q = q.ilike('people.phone', '%'+term.replace(/\D/g,'')+'%');
+    else q = q.ilike('people.full_name', '%'+term+'%');
+    const {data} = await q; let list = data||[];
+    const isAdv = j=>{const p=j.people||{};return !!(p.bsp_date||p.shoonya_date||p.samyama_date||p.guru_puja_date);};
+    list = list.filter(j=> !isAdv(j) && ieOfJ(j));
+    if(f.center) list = list.filter(j=> j.center_id===f.center || j.people?.center_id===f.center);
+    list.sort((a,b)=> ieOfJ(b).localeCompare(ieOfJ(a)));
+    rows = list;
+  } else {
+    rows = nmFilter();
+  }
+  const c=$('nm-count2'); if(c) c.textContent=rows.length;
+  NEWMED_PEOPLE=rows.map(j=>({full_name:j.people?.full_name,phone:j.people?.phone})).filter(p=>p.phone);
+  nmMount(rows);
 }
 
 let NEWMED_PEOPLE=[];
