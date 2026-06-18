@@ -232,18 +232,10 @@ function dismissQuote(){
   ov.classList.remove('show');
   setTimeout(()=>{ if(ov&&ov.parentNode) ov.remove(); }, 350);
 }
-// looping lotus loader — full flower blooms open, light radiates, closes, repeats (shown during loading)
-const LOTUS_LOADER = `<div class="lotus-loader"><span class="ll-light"></span>
-  <svg class="ll-svg" viewBox="0 0 120 120" width="96" height="96" aria-hidden="true">
-    <g class="ll-bloom" fill="currentColor">
-      <g fill-opacity=".4">
-        ${[0,45,90,135,180,225,270,315].map(d=>`<ellipse cx="60" cy="60" rx="9" ry="40" transform="rotate(${d} 60 60)"/>`).join('')}
-      </g>
-      <g fill-opacity=".8">
-        ${[22,67,112,157,202,247,292,337].map(d=>`<ellipse cx="60" cy="60" rx="7.5" ry="30" transform="rotate(${d} 60 60)"/>`).join('')}
-      </g>
-      <circle cx="60" cy="60" r="7"/>
-    </g></svg></div>`;
+// lotus loader — plays the lotus-blooming video on a loop while loading
+const LOTUS_LOADER = `<div class="lotus-loader">
+  <video class="ll-video" src="lotus-loom.mp4" autoplay loop muted playsinline preload="auto"
+    onerror="this.closest('.lotus-loader').classList.add('ll-fallback')"></video></div>`;
 // quick celebratory lotus + check pulse on a successful action
 function celebrate(label){
   if(matchMedia('(prefers-reduced-motion:reduce)').matches) return;

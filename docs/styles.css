@@ -316,7 +316,11 @@ html{scroll-behavior:smooth}
 ::view-transition-old(root),::view-transition-new(root){animation-duration:.28s;animation-timing-function:cubic-bezier(.2,.8,.2,1)}
 
 /* ---- looping lotus loader: bloom → light → close → repeat ---- */
-.lotus-loader{position:relative;display:flex;align-items:center;justify-content:center;padding:34px 0 24px;color:var(--accent)}
+.lotus-loader{position:relative;display:flex;align-items:center;justify-content:center;padding:30px 0 22px;color:var(--accent)}
+.ll-video{width:160px;max-width:60vw;border-radius:18px;box-shadow:var(--shadow-lg);object-fit:cover;animation:llfade .4s ease both}
+@keyframes llfade{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:none}}
+.lotus-loader.ll-fallback{padding:26px 0;font-size:2rem}
+.lotus-loader.ll-fallback::after{content:'🪷';animation:lotusGlow 2.4s ease-in-out infinite}
 .ll-svg{position:relative;z-index:1}
 .ll-svg .ll-bloom{transform-box:fill-box;transform-origin:center;animation:lotusLoop 2.1s ease-in-out infinite}
 .ll-light{position:absolute;width:150px;height:150px;border-radius:50%;
