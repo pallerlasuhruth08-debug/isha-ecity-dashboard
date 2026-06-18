@@ -425,14 +425,13 @@ async function renderPeople(tab){
   else await renderAdvancedList(tabBar);
 }
 
-/* ---- New Meditators (nurturer chooses who to call -- nothing is automatic) ---- */
-let NEWMED_ALL=[], NM_VOLS=[];
-const NEWMED_CAP = 400;   // only load the most recent N new-meditator journeys for fast first open
+/* ---- New Meditators: nothing loads until an IE date range (or search) is chosen ---- */
+let NM_VOLS=[];
 const ieOfJ = j => (j.people?.ie_date || '');
 async function renderNewMeditators(tabBar){
   const f = PF.new_meditator;
   const centerOpts = `<option value="">All Centers</option>${CENTERS.map(c=>`<option value="${c.id}" ${f.center===c.id?'selected':''}>${c.name}</option>`).join('')}`;
-  const activeF = [f.center,f.search].filter(Boolean).length;
+  const activeF = [f.center,f.dateFrom,f.dateTo,f.search].filter(Boolean).length;
   let h = tabBar;
   h += `<div style="display:flex;gap:8px;margin:6px 0;flex-wrap:wrap;align-items:center">
     <details class="menu"><summary class="btn small green">✉️ Message ▾</summary>
@@ -446,77 +445,59 @@ async function renderNewMeditators(tabBar){
         <button class="btn small ghost" onclick="openAddPerson()">➕ Add person</button>
       </div></details>`:''}
   </div>`;
-  h += `<details class="card vfilters" ${activeF?'open':''}>
-    <summary>🔍 Filters${activeF?` <span class="badge">${activeF}</span>`:''}</summary>
+  h += `<details class="card vfilters" open>
+    <summary>🔍 Filters &amp; date range${activeF?` <span class="badge">${activeF}</span>`:''}</summary>
     <input placeholder="🔍 Search name/phone" style="width:100%;margin-top:10px" value="${esc(f.search)}"
-      oninput="PF.new_meditator.search=this.value;nmSearchLive()">
+      oninput="PF.new_meditator.search=this.value" onkeydown="if(event.key==='Enter')renderPeople()">
     <div class="choices" style="flex-wrap:wrap;gap:6px;margin-top:8px;align-items:center">
       <select style="width:auto" onchange="PF.new_meditator.center=this.value;renderPeople()">${centerOpts}</select>
-      ${activeF?`<button class="btn small gray" onclick="PF.new_meditator.center='';PF.new_meditator.search='';renderPeople()">Clear filters</button>`:''}
+      <input type="date" title="IE date from (or single date)" value="${f.dateFrom}"
+        onchange="PF.new_meditator.dateFrom=this.value;renderPeople()" style="width:130px">
+      <input type="date" title="IE date to (leave blank for a single date)" value="${f.dateTo}"
+        onchange="PF.new_meditator.dateTo=this.value;renderPeople()" style="width:130px">
+      <button class="btn small ghost" onclick="renderPeople()">Search</button>
+      ${activeF?`<button class="btn small gray" onclick="PF.new_meditator.dateFrom='';PF.new_meditator.dateTo='';PF.new_meditator.search='';PF.new_meditator.center='';renderPeople()">Clear</button>`:''}
     </div>
+    <p class="muted" style="font-size:.76rem;margin-top:6px">Pick an IE date (or a from–to range) to load new meditators for that period — or search by name/phone.</p>
   </details>`;
 
-  // Load the most-recent new-meditator journeys ONCE (cached, capped & slim — no calls join);
-  // filter/sort client-side for instant changes. Newest-first by journey date.
+  // Date-gate: load nothing until a date (or search) is chosen — keeps it fast.
+  const effFrom = f.dateFrom || f.dateTo;
+  const effTo   = f.dateTo   || f.dateFrom;
+  const term = (f.search||'').trim();
+  if(!effFrom && !term){
+    view().innerHTML = h + `<div class="card"><div class="empty">📅 Choose an IE date or a date range above (or search by name/phone) to load new meditators.<br>Nothing loads until you do — that keeps this page fast.</div></div>`;
+    return;
+  }
+
+  // fetch ONLY the matching records (scoped server-side by IE date / search); cached per query
   const role = ME.role;
-  const all = await cached('newmed_all', async()=>{
+  const key = 'newmed_'+(effFrom||'')+'_'+(effTo||'')+'_'+(f.center||'')+'_'+term;
+  let rows = await cached(key, async()=>{
     let q = sb.from('journeys')
       .select('id, type, program_name, program_date, status, sadhana_status, assigned_to, center_id, people!inner(id,full_name,phone,email,occupation,gender,date_of_birth,area,city,street,pincode,center_id,ie_date,bsp_date,shoonya_date,samyama_date,guru_puja_date,tags,photo_url)')
-      .eq('type','new_meditator').order('program_date',{ascending:false,nullsFirst:false}).limit(NEWMED_CAP);
+      .eq('type','new_meditator').limit(800);
     if(role==='nurturer') q = q.eq('assigned_to', ME.id);
+    if(f.center) q = q.eq('center_id', f.center);
+    if(effFrom) q = q.gte('people.ie_date', effFrom).lte('people.ie_date', effTo);
+    if(term){ const isDigit=/^[\d\s+]+$/.test(term);
+      if(isDigit) q = q.ilike('people.phone', '%'+term.replace(/\D/g,'')+'%');
+      else q = q.ilike('people.full_name', '%'+term+'%'); }
     const {data,error} = await q; if(error){ toast(error.message); return []; }
     return data||[];
   });
+  const isAdv = j=>{const p=j.people||{};return !!(p.bsp_date||p.shoonya_date||p.samyama_date||p.guru_puja_date);};
+  rows = rows.filter(j=> !isAdv(j) && ieOfJ(j)).sort((a,b)=> ieOfJ(b).localeCompare(ieOfJ(a)));
   NM_VOLS = isCoord() ? await cached('nm_vols', async()=>{ const {data}=await sb.from('profiles').select('id, full_name, email, role, center_id').eq('active',true); return data||[]; }) : [];
-  NEWMED_ALL = all;
-  const rows = nmFilter();
   NEWMED_PEOPLE = rows.map(j=>({full_name:j.people?.full_name, phone:j.people?.phone})).filter(p=>p.phone);
 
-  const capped = all.length >= NEWMED_CAP;
-  h += `<div class="card"><h2>🌱 New Meditators <span class="badge" id="nm-count2">${rows.length}</span></h2>
-    <p class="muted" style="font-size:.8rem;margin-bottom:8px">Newest first. ${isCoord()?'Tick people and press <b>📞 Start calling</b> to add them to nurturing calls.':'These are the new meditators assigned to you.'}${capped?` Showing the most recent ${NEWMED_CAP} — use 🔍 search to find anyone older.`:''}</p><div id="nm-host"></div></div>`;
+  h += `<div class="card"><h2>🌱 New Meditators <span class="badge">${rows.length}</span></h2>
+    <p class="muted" style="font-size:.8rem;margin-bottom:8px">${isCoord()?'Tick people and press <b>📞 Start calling</b> to add them to nurturing calls.':'These are the new meditators assigned to you.'}</p><div id="nm-host"></div></div>`;
   view().innerHTML = h;
   nmMount(rows);
 }
 function nmMountCfg(){ return {externalRange:false, rowFn:newMeditatorRow, idOf:j=>j.id, personOf:j=>({full_name:j.people?.full_name,phone:j.people?.phone}), aud:'new_meditator', assignable:false, bulkActions: isCoord()?[{label:'📞 Start calling', fn:'nmStartSelected'}]:[]}; }
 function nmMount(rows){ bulkMount('newmed', $('nm-host'), rows, nmMountCfg()); }
-function nmFilter(){
-  const f=PF.new_meditator; const s=(f.search||'').toLowerCase().trim();
-  const isAdv = j=>{const p=j.people||{};return !!(p.bsp_date||p.shoonya_date||p.samyama_date||p.guru_puja_date);};
-  let rows = NEWMED_ALL.filter(j=> !isAdv(j) && ieOfJ(j));
-  if(f.center) rows = rows.filter(j=> j.center_id===f.center || j.people?.center_id===f.center);
-  if(s) rows = rows.filter(j=>j.people?.full_name?.toLowerCase().includes(s)||j.people?.phone?.includes(s));
-  rows.sort((a,b)=> ieOfJ(b).localeCompare(ieOfJ(a)));
-  return rows;
-}
-let NM_SEARCH_T=null;
-function nmSearchLive(){ clearTimeout(NM_SEARCH_T); NM_SEARCH_T = setTimeout(nmRunSearch, 250); }
-async function nmRunSearch(){
-  const host=$('nm-host'); if(!host) return;
-  const f=PF.new_meditator; const term=(f.search||'').trim();
-  let rows;
-  if(term.length>=2){
-    // search the whole base (not just the capped recent set) so older people are findable
-    const isDigit = /^[\d\s+]+$/.test(term);
-    let q = sb.from('journeys')
-      .select('id, type, program_name, program_date, status, sadhana_status, assigned_to, center_id, people!inner(id,full_name,phone,email,occupation,gender,date_of_birth,area,city,street,pincode,center_id,ie_date,bsp_date,shoonya_date,samyama_date,guru_puja_date,tags,photo_url)')
-      .eq('type','new_meditator').limit(200);
-    if(ME.role==='nurturer') q = q.eq('assigned_to', ME.id);
-    if(isDigit) q = q.ilike('people.phone', '%'+term.replace(/\D/g,'')+'%');
-    else q = q.ilike('people.full_name', '%'+term+'%');
-    const {data} = await q; let list = data||[];
-    const isAdv = j=>{const p=j.people||{};return !!(p.bsp_date||p.shoonya_date||p.samyama_date||p.guru_puja_date);};
-    list = list.filter(j=> !isAdv(j) && ieOfJ(j));
-    if(f.center) list = list.filter(j=> j.center_id===f.center || j.people?.center_id===f.center);
-    list.sort((a,b)=> ieOfJ(b).localeCompare(ieOfJ(a)));
-    rows = list;
-  } else {
-    rows = nmFilter();
-  }
-  const c=$('nm-count2'); if(c) c.textContent=rows.length;
-  NEWMED_PEOPLE=rows.map(j=>({full_name:j.people?.full_name,phone:j.people?.phone})).filter(p=>p.phone);
-  nmMount(rows);
-}
 
 let NEWMED_PEOPLE=[];
 function newMedMessageAll(){ if(!NEWMED_PEOPLE.length) return toast('No new meditators with phone numbers in view'); openMsgAll('new_meditator', NEWMED_PEOPLE, 'Message new meditators'); }
