@@ -15,9 +15,8 @@ body{font-family:-apple-system,'Segoe UI',Roboto,sans-serif;background:var(--bg)
 
 /* header — warm gradient banner, sticky + shrinks on scroll */
 header{display:flex;align-items:center;justify-content:space-between;gap:10px;
-  padding:14px 16px;margin:8px 0 4px;border-radius:var(--radius);position:sticky;top:6px;z-index:40;
-  background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#fff;box-shadow:var(--shadow-lg);
-  transition:padding .18s ease}
+  padding:14px 16px;margin:8px 0 4px;border-radius:var(--radius);position:static;
+  background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#fff;box-shadow:var(--shadow-lg)}
 header h1{font-size:1.4rem;font-weight:800;letter-spacing:.2px;transition:font-size .18s ease}
 header.slim{padding:7px 14px;border-radius:14px}
 header.slim h1{font-size:1.06rem}
@@ -264,12 +263,15 @@ html{scroll-behavior:smooth}
 .quote-hint{margin-top:18px;color:rgba(255,255,255,.8);font-size:.85rem;letter-spacing:.4px;animation:pulse 1.8s ease-in-out infinite}
 @keyframes pulse{0%,100%{opacity:.5}50%{opacity:1}}
 /* slim quote banner under the header (every page); tap to expand */
-#quotebar{display:flex;align-items:center;gap:8px;cursor:pointer;margin:6px 0 2px;padding:9px 14px;
+#quotebar{display:flex;align-items:center;gap:9px;cursor:pointer;margin:6px 0 2px;padding:10px 14px;
   border-radius:12px;background:linear-gradient(135deg,#5a4030,#7a5840);color:#fdf6ee;font-size:.86rem;
   box-shadow:var(--shadow);transition:filter .15s,transform .12s}
 #quotebar:active{transform:scale(.99)}
-#quotebar .qtext{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-style:italic}
-#quotebar .qexp{opacity:.8;font-size:.78rem;white-space:nowrap}
+#quotebar .qlotus{flex-shrink:0;display:flex;align-items:center}
+#quotebar .qtext{flex:1;min-width:0;font-style:italic;line-height:1.35}   /* full quote — wraps, never truncated */
+#quotebar .qexp{opacity:.8;font-size:.78rem;white-space:nowrap;align-self:flex-start;margin-top:2px}
+.lotus-mini{filter:drop-shadow(0 0 5px rgba(246,234,212,.5));animation:lotusGlow 3s ease-in-out infinite}
+.lotus-mini g{transform-box:fill-box;transform-origin:center bottom;animation:lotusBloom 1s cubic-bezier(.2,.8,.2,1) both}
 /* profile */
 .profile-card .pf-head{display:flex;flex-direction:column;align-items:center;gap:10px;margin-bottom:8px}
 .pf-photo-wrap{display:flex;justify-content:center;margin:4px 0 12px}
@@ -309,13 +311,13 @@ html{scroll-behavior:smooth}
 ::view-transition-old(root),::view-transition-new(root){animation-duration:.28s;animation-timing-function:cubic-bezier(.2,.8,.2,1)}
 
 /* ---- looping lotus loader: bloom → light → close → repeat ---- */
-.lotus-loader{position:relative;display:flex;align-items:center;justify-content:center;padding:34px 0 22px;color:var(--accent)}
+.lotus-loader{position:relative;display:flex;align-items:center;justify-content:center;padding:34px 0 24px;color:var(--accent)}
 .ll-svg{position:relative;z-index:1}
-.ll-svg g{transform-box:fill-box;transform-origin:50% 78%;animation:lotusLoop 2s ease-in-out infinite}
-.ll-light{position:absolute;width:130px;height:130px;border-radius:50%;
-  background:radial-gradient(circle,rgba(216,161,58,.55),rgba(216,161,58,0) 70%);animation:lightLoop 2s ease-in-out infinite}
-@keyframes lotusLoop{0%{transform:scale(.18);opacity:.4}45%{transform:scale(1);opacity:1}60%{transform:scale(1);opacity:1}100%{transform:scale(.18);opacity:.4}}
-@keyframes lightLoop{0%,100%{opacity:0;transform:scale(.4)}45%,60%{opacity:.85;transform:scale(1)}}
+.ll-svg .ll-bloom{transform-box:fill-box;transform-origin:center;animation:lotusLoop 2.1s ease-in-out infinite}
+.ll-light{position:absolute;width:150px;height:150px;border-radius:50%;
+  background:radial-gradient(circle,rgba(228,178,86,.6),rgba(228,178,86,0) 68%);animation:lightLoop 2.1s ease-in-out infinite}
+@keyframes lotusLoop{0%{transform:scale(.16) rotate(-12deg);opacity:.35}45%{transform:scale(1) rotate(0);opacity:1}58%{transform:scale(1) rotate(0);opacity:1}100%{transform:scale(.16) rotate(-12deg);opacity:.35}}
+@keyframes lightLoop{0%,100%{opacity:0;transform:scale(.35)}45%,58%{opacity:.9;transform:scale(1)}}
 
 /* ---- success celebration: lotus + check pulse ---- */
 .celebrate{position:fixed;inset:0;z-index:280;display:flex;align-items:center;justify-content:center;
@@ -338,8 +340,8 @@ html{scroll-behavior:smooth}
 @keyframes lotusGlow{0%,100%{filter:drop-shadow(0 0 6px rgba(243,230,207,.35))}50%{filter:drop-shadow(0 0 18px rgba(243,230,207,.75))}}
 .quote-fallback blockquote{margin-top:4px}
 @media(prefers-reduced-motion:reduce){
-  .sk-av,.sk-line,.lotus-svg,.lotus-svg g,.staggered .selrow,.staggered .row.simple,
-  .ll-svg g,.ll-light,.celebrate-card,.celebrate-check{animation:none}
+  .sk-av,.sk-line,.lotus-svg,.lotus-svg g,.lotus-mini,.lotus-mini g,.staggered .selrow,.staggered .row.simple,
+  .ll-svg .ll-bloom,.ll-light,.celebrate-card,.celebrate-check{animation:none}
 }
 
 /* wider screens: roomier */

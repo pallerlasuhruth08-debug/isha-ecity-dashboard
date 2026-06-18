@@ -172,7 +172,7 @@ async function boot(){
       adminBtn.innerHTML='<span class="ico">🙏</span><span>Profile</span>'; }
   }
   $('quotebar').classList.remove('hidden');
-  $('quotebar').innerHTML = `🪷 <span class="qtext">“${esc(VOL_QUOTE)}”</span> <span class="qexp">tap ›</span>`;
+  $('quotebar').innerHTML = `<span class="qlotus">${LOTUS_MINI}</span><span class="qtext">“${esc(VOL_QUOTE)}”</span><span class="qexp">tap ›</span>`;
   // load AutoAnimate (fluid list add/remove); harmless if it fails — lists fall back to a CSS stagger
   loadScript(CDN.autoanimate).then(()=>{ AA = window.autoAnimate || (window.formkit&&window.formkit.autoAnimate) || null; }).catch(()=>{});
   go('profile');           // land on Profile after the opening quote
@@ -195,6 +195,14 @@ const LOTUS_SVG = `<svg class="lotus-svg" viewBox="0 0 100 64" width="88" height
   <ellipse cx="50" cy="44" rx="6.5" ry="18" fill="#e7cfa6" transform="rotate(-66 50 44)"/>
   <ellipse cx="50" cy="44" rx="6" ry="13" fill="#dcbf90" transform="rotate(96 50 44)"/>
   <ellipse cx="50" cy="44" rx="6" ry="13" fill="#dcbf90" transform="rotate(-96 50 44)"/>
+</g></svg>`;
+// small lotus for the top quote banner — blooms once + gentle glow
+const LOTUS_MINI = `<svg class="lotus-svg lotus-mini" viewBox="0 0 100 64" width="30" height="20" aria-hidden="true"><g>
+  <ellipse cx="50" cy="44" rx="7" ry="22" fill="#f6ead4"/>
+  <ellipse cx="50" cy="44" rx="7" ry="22" fill="#efddbf" transform="rotate(34 50 44)"/>
+  <ellipse cx="50" cy="44" rx="7" ry="22" fill="#efddbf" transform="rotate(-34 50 44)"/>
+  <ellipse cx="50" cy="44" rx="6.5" ry="17" fill="#e7cfa6" transform="rotate(66 50 44)"/>
+  <ellipse cx="50" cy="44" rx="6.5" ry="17" fill="#e7cfa6" transform="rotate(-66 50 44)"/>
 </g></svg>`;
 let QUOTE_T = null;
 function quoteOverlayHTML(splash){
@@ -224,17 +232,18 @@ function dismissQuote(){
   ov.classList.remove('show');
   setTimeout(()=>{ if(ov&&ov.parentNode) ov.remove(); }, 350);
 }
-// looping lotus loader — blooms, light comes, closes, repeats (shown during loading)
+// looping lotus loader — full flower blooms open, light radiates, closes, repeats (shown during loading)
 const LOTUS_LOADER = `<div class="lotus-loader"><span class="ll-light"></span>
-  <svg class="ll-svg" viewBox="0 0 100 64" width="78" height="50" aria-hidden="true"><g fill="currentColor">
-    <ellipse cx="50" cy="44" rx="7" ry="22"/>
-    <ellipse cx="50" cy="44" rx="7" ry="22" transform="rotate(34 50 44)"/>
-    <ellipse cx="50" cy="44" rx="7" ry="22" transform="rotate(-34 50 44)"/>
-    <ellipse cx="50" cy="44" rx="6.5" ry="18" transform="rotate(66 50 44)"/>
-    <ellipse cx="50" cy="44" rx="6.5" ry="18" transform="rotate(-66 50 44)"/>
-    <ellipse cx="50" cy="44" rx="6" ry="13" transform="rotate(96 50 44)"/>
-    <ellipse cx="50" cy="44" rx="6" ry="13" transform="rotate(-96 50 44)"/>
-  </g></svg></div>`;
+  <svg class="ll-svg" viewBox="0 0 120 120" width="96" height="96" aria-hidden="true">
+    <g class="ll-bloom" fill="currentColor">
+      <g fill-opacity=".4">
+        ${[0,45,90,135,180,225,270,315].map(d=>`<ellipse cx="60" cy="60" rx="9" ry="40" transform="rotate(${d} 60 60)"/>`).join('')}
+      </g>
+      <g fill-opacity=".8">
+        ${[22,67,112,157,202,247,292,337].map(d=>`<ellipse cx="60" cy="60" rx="7.5" ry="30" transform="rotate(${d} 60 60)"/>`).join('')}
+      </g>
+      <circle cx="60" cy="60" r="7"/>
+    </g></svg></div>`;
 // quick celebratory lotus + check pulse on a successful action
 function celebrate(label){
   if(matchMedia('(prefers-reduced-motion:reduce)').matches) return;
@@ -629,7 +638,7 @@ async function renderNewMeditators(tabBar){
   const centerOpts = `<option value="">All Centers</option>${CENTERS.map(c=>`<option value="${c.id}" ${f.center===c.id?'selected':''}>${c.name}</option>`).join('')}`;
   const activeF = [f.center,f.dateFrom,f.dateTo,f.search].filter(Boolean).length;
   let h = tabBar;
-  h += `<div style="display:flex;gap:8px;margin:6px 0;flex-wrap:wrap;align-items:center">
+  h += `<div style="display:flex;gap:8px;margin:6px 0;flex-wrap:nowrap;align-items:center">
     <details class="menu"><summary class="btn small green">✉️ Message ▾</summary>
       <div class="menu-pop">
         <button class="btn small green" onclick="newMedMessageAll()">✉️ Message all shown</button>
