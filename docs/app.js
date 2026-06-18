@@ -62,8 +62,24 @@ const CDN = {
   xlsx:'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',
   papa:'https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js',
   qrcode:'https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js',
-  autoanimate:'https://cdn.jsdelivr.net/npm/@formkit/auto-animate@0.8.2/index.global.js'
+  autoanimate:'https://cdn.jsdelivr.net/npm/@formkit/auto-animate@0.8.2/index.global.js',
+  lottie:'https://cdn.jsdelivr.net/npm/lottie-web@5.12.2/build/player/lottie_light.min.js'
 };
+// Play a Lottie animation (docs/lottie/<name>.json) into a container. Returns false if the file
+// isn't present yet — callers keep their SVG/CSS fallback, so dropping files in "just works".
+let LOTTIE = null;
+async function playLottie(container, path, opts){
+  opts = opts||{}; if(!container) return false;
+  try{
+    const res = await fetch(path, {cache:'force-cache'}); if(!res.ok) return false;
+    const data = await res.json();
+    if(!LOTTIE){ await loadScript(CDN.lottie).catch(()=>{}); LOTTIE = window.lottie||null; }
+    if(!LOTTIE) return false;
+    container.innerHTML='';
+    LOTTIE.loadAnimation({container, renderer:'svg', loop:opts.loop!==false, autoplay:true, animationData:data});
+    return true;
+  }catch(e){ return false; }
+}
 // shimmer skeleton placeholder shown while a view loads
 function skel(rows){ rows=rows||5;
   let r=''; for(let i=0;i<rows;i++) r+='<div class="sk-row"><div class="sk-av"></div><div class="sk-lines"><div class="sk-line"></div><div class="sk-line short"></div></div></div>';
@@ -175,6 +191,7 @@ async function boot(){
   $('quotebar').innerHTML = `<span class="qlotus">${LOTUS_MINI}</span><span class="qtext">“${esc(VOL_QUOTE)}”</span><span class="qexp">tap ›</span>`;
   // load AutoAnimate (fluid list add/remove); harmless if it fails — lists fall back to a CSS stagger
   loadScript(CDN.autoanimate).then(()=>{ AA = window.autoAnimate || (window.formkit&&window.formkit.autoAnimate) || null; }).catch(()=>{});
+  loadScript(CDN.lottie).then(()=>{ LOTTIE = window.lottie||null; }).catch(()=>{});
   go('profile');           // land on Profile after the opening quote
   showQuote(true);         // opening Sadhguru photo + volunteering quote
 }
@@ -207,6 +224,7 @@ const LOTUS_MINI = `<svg class="lotus-svg lotus-mini" viewBox="0 0 100 64" width
 let QUOTE_T = null;
 function quoteOverlayHTML(splash){
   return `<div class="quote-card">
+    <div class="quote-lottie"></div>
     <div class="lotus">${LOTUS_SVG}</div>
     <img src="${SPLASH_IMG}" alt="Sadhguru on volunteering" class="quote-img"
       onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
@@ -220,6 +238,8 @@ function quoteOverlayHTML(splash){
 function showQuote(splash){
   let ov=document.getElementById('quoteov');
   if(!ov){ ov=document.createElement('div'); ov.id='quoteov'; document.body.appendChild(ov); }
+  // if docs/lottie/splash.json is present, play it above the photo (else the photo/lotus stays)
+  setTimeout(()=>playLottie(ov.querySelector('.quote-lottie'),'lottie/splash.json'),30);
   ov.className='quoteov'; ov.innerHTML=quoteOverlayHTML(splash);
   ov.onclick=()=>dismissQuote();
   requestAnimationFrame(()=>ov.classList.add('show'));
@@ -240,10 +260,12 @@ const LOTUS_LOADER = `<div class="lotus-loader">
 function celebrate(label){
   if(matchMedia('(prefers-reduced-motion:reduce)').matches) return;
   const el=document.createElement('div'); el.className='celebrate';
-  el.innerHTML=`<div class="celebrate-card"><div class="lotus">${LOTUS_SVG}</div>
+  el.innerHTML=`<div class="celebrate-card"><div class="lotus celebrate-anim">${LOTUS_SVG}</div>
     <div class="celebrate-check">✓</div>${label?`<div class="celebrate-label">${esc(label)}</div>`:''}</div>`;
   document.body.appendChild(el);
   requestAnimationFrame(()=>el.classList.add('show'));
+  // upgrade to a Lottie burst if docs/lottie/success.json is present (else the SVG lotus stays)
+  playLottie(el.querySelector('.celebrate-anim'), 'lottie/success.json', {loop:false});
   setTimeout(()=>{ el.classList.remove('show'); setTimeout(()=>el.remove(),300); }, 1150);
 }
 
@@ -455,7 +477,7 @@ async function renderToday(){
     <button class="btn small ghost" onclick="openTemplates()">📝 Templates</button>
   </div>`;
   if(!calls.length){
-    h += `<div class="card"><div class="empty">🎉 All caught up — no calls due.</div></div>`;
+    h += `<div class="card"><div class="empty"><div class="empty-anim" id="today-empty"></div>🎉 All caught up — no calls due.</div></div>`;
   } else {
     if(overdue.length){
       h += `<details class="acc" open><summary>⚠️ Overdue <span class="badge red">${overdue.length}</span></summary>
@@ -470,6 +492,7 @@ async function renderToday(){
        <div class="sub">${JT[c.journeys.type]} - Call ${c.call_no} - due ${fmtD(c.due_date)}</div></div></div>`).join('') + '</div></details>';
   }
   view().innerHTML = h;
+  if(!calls.length) playLottie($('today-empty'), 'lottie/empty.json');   // animated empty state if file present
   const callCfg = { rowFn:callRow, idOf:c=>c.id, personOf:c=>({full_name:c.journeys.people.full_name, phone:c.journeys.people.phone}), aud:'nurture', assignable:false };
   if(overdue.length)  bulkMount('today_od',  $('today-od-host'),  overdue,  callCfg);
   if(dueToday.length) bulkMount('today_due', $('today-due-host'), dueToday, callCfg);

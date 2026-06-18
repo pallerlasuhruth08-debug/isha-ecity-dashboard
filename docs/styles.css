@@ -340,6 +340,13 @@ html{scroll-behavior:smooth}
 .celebrate-check{font-size:1.7rem;color:var(--good);font-weight:800;line-height:1;animation:checkpop .42s .14s cubic-bezier(.2,.8,.2,1) both}
 @keyframes checkpop{from{transform:scale(0);opacity:0}to{transform:scale(1);opacity:1}}
 .celebrate-label{font-size:.92rem;font-weight:700;color:var(--ink)}
+/* Lottie containers (empty until a docs/lottie/*.json is added) */
+.celebrate-anim{width:80px;height:56px;display:flex;align-items:center;justify-content:center}
+.celebrate-anim svg{width:100%;height:100%}
+.quote-lottie:empty{display:none}
+.quote-lottie{width:min(78vw,360px);margin:0 auto}
+.empty-anim:empty{display:none}
+.empty-anim{width:120px;height:120px;margin:0 auto 6px}
 
 /* ---- animated lotus (splash) ---- */
 .lotus{display:flex;justify-content:center;margin-bottom:14px}
