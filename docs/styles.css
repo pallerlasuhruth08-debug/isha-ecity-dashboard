@@ -272,8 +272,14 @@ html{scroll-behavior:smooth}
 #quotebar .qexp{opacity:.8;font-size:.78rem;white-space:nowrap}
 /* profile */
 .profile-card .pf-head{display:flex;flex-direction:column;align-items:center;gap:10px;margin-bottom:8px}
-.pf-photo{width:96px;height:96px;border-radius:50%;object-fit:cover;background:var(--accent-soft)}
-.pf-photo.pf-ph{display:flex;align-items:center;justify-content:center;font-size:2.2rem;font-weight:800;color:var(--accent)}
+.pf-photo-wrap{display:flex;justify-content:center;margin:4px 0 12px}
+.pf-photo{width:104px;height:104px;border-radius:50%;object-fit:cover;background:var(--accent-soft)}
+.pf-photo.pf-ph{display:flex;align-items:center;justify-content:center;font-size:2.4rem;font-weight:800;color:var(--accent)}
+.pf-name{font-weight:800;font-size:1.15rem}
+.pf-row{display:flex;justify-content:space-between;gap:12px;padding:11px 2px;border-bottom:1px solid var(--line)}
+.pf-row:last-of-type{border-bottom:none}
+.pf-k{color:var(--muted);font-size:.85rem;font-weight:600;flex-shrink:0}
+.pf-v{text-align:right;overflow-wrap:anywhere}
 
 /* wider screens: roomier */
 @media(min-width:700px){

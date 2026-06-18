@@ -215,28 +215,42 @@ async function renderProfile(){
   const photo = ME.photo_url || person?.photo_url || '';
   const {first,last} = nameParts(ME.full_name);
   const initial = esc((ME.full_name||ME.email||'?').trim().charAt(0).toUpperCase());
+  const scope = (ME.center_id==='all'||ME.role==='admin'||ME.role==='sector_nurturer')?'All Centers':centerName(ME.center_id);
+  const avatar = photo
+    ? `<img class="pf-photo" src="${esc(photo)}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+       <div class="pf-photo pf-ph" style="display:none">${initial}</div>`
+    : `<div class="pf-photo pf-ph">${initial}</div>`;
+  // body of the collapsible "Profile" section — view rows, or the edit form
+  let body;
+  if(PF_EDIT){
+    body = `<button class="btn small ghost" onclick="pickPhoto()">📷 Change photo</button>
+      <label>First name</label><input id="pf-first" value="${esc(first)}">
+      <label>Last name</label><input id="pf-last" value="${esc(last)}">
+      <label>Email</label><input id="pf-email" type="email" value="${esc(ME.email||'')}">
+      <label>Phone</label><input id="pf-phone" inputmode="numeric" value="${esc(ME.phone||'')}">
+      <p class="muted" style="font-size:.74rem;margin-top:6px">Changing your email updates your sign-in address — you'll get a confirmation link at the new address.</p>
+      <button class="btn block" style="margin-top:12px" onclick="saveProfile()">💾 Save changes</button>
+      <button class="btn ghost block" style="margin-top:8px" onclick="PF_EDIT=false;renderProfile()">Cancel</button>`;
+  } else {
+    body = `<div class="pf-row"><span class="pf-k">Name</span><span class="pf-v">${esc(ME.full_name||'—')}</span></div>
+      <div class="pf-row"><span class="pf-k">Email</span><span class="pf-v">${esc(ME.email||'—')}</span></div>
+      <div class="pf-row"><span class="pf-k">Phone</span><span class="pf-v">${esc(ME.phone||'—')}</span></div>
+      <div class="pf-row"><span class="pf-k">Role</span><span class="pf-v">${roleLabel(ME.role)} · ${scope}</span></div>
+      <button class="btn block" style="margin-top:14px" onclick="PF_EDIT=true;renderProfile()">✏️ Edit profile</button>`;
+  }
+  // Default: photo + a tappable "Profile" header (details hidden). Volunteering journey always open below.
   let h = `<div class="card profile-card">
-    <div class="pf-head">
-      ${photo?`<img class="pf-photo" src="${esc(photo)}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
-        <div class="pf-photo pf-ph" style="display:none">${initial}</div>`
-       :`<div class="pf-photo pf-ph">${initial}</div>`}
-      <button class="btn small ghost" onclick="pickPhoto()">📷 Change photo</button>
+      <div class="pf-photo-wrap">${avatar}</div>
+      <details class="acc" id="pf-acc" ${PF_EDIT?'open':''}>
+        <summary>👤 Profile</summary>
+        <div class="acc-body">${body}</div>
+      </details>
     </div>
-    <label>First name</label><input id="pf-first" value="${esc(first)}">
-    <label>Last name</label><input id="pf-last" value="${esc(last)}">
-    <label>Email</label><input id="pf-email" type="email" value="${esc(ME.email||'')}">
-    <label>Phone</label><input id="pf-phone" inputmode="numeric" value="${esc(ME.phone||'')}">
-    <p class="muted" style="font-size:.74rem;margin-top:6px">Changing your email updates your sign-in address — you'll get a confirmation link at the new address.</p>
-    <button class="btn block" style="margin-top:12px" onclick="saveProfile()">Save changes</button>
-    <p class="muted" style="font-size:.78rem;margin-top:10px">${roleLabel(ME.role)} · ${ME.center_id==='all'||ME.role==='admin'||ME.role==='sector_nurturer'?'All Centers':centerName(ME.center_id)}</p>
-  </div>
-  <details class="acc" id="pf-histacc"><summary>🙌 My volunteering history</summary>
-    <div class="acc-body" id="pf-hist"><div class="empty">Tap to load…</div></div></details>`;
+    <div class="card"><h2>🙌 My volunteering journey</h2><div id="pf-hist"><div class="empty">Loading…</div></div></div>`;
   view().innerHTML = h;
-  const acc=$('pf-histacc');
-  if(acc){ acc.addEventListener('toggle', ()=>{ if(acc.open) pfHistory(); }); }
+  pfHistory();   // always-open journey loads right away
 }
-let PF_PERSON=null;
+let PF_PERSON=null, PF_EDIT=false;
 async function pfHistory(){
   const host=$('pf-hist'); if(!host) return; if(host.dataset.loaded) return;
   if(!PF_PERSON){ host.innerHTML='<div class="empty">No volunteering record is linked to your account yet.</div>'; return; }
@@ -281,6 +295,7 @@ async function saveProfile(){
   } else if(Object.keys(upd).length){ toast('Profile saved'); }
   else { toast('Nothing to update'); }
   $('who-name').textContent = ME.full_name || ME.email;
+  PF_EDIT=false;
   renderProfile();
 }
 const roleLabel = r => ({nurturer:'Nurturer', center_coordinator:'Center Co-ordinator', sector_nurturer:'Sector Nurturer', admin:'Admin'}[r]||r);
