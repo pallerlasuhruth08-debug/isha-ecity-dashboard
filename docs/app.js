@@ -426,16 +426,12 @@ async function renderPeople(tab){
 }
 
 /* ---- New Meditators (nurturer chooses who to call -- nothing is automatic) ---- */
+let NEWMED_ALL=[], NM_VOLS=[];
+const ieOfJ = j => (j.people?.ie_date || '');
 async function renderNewMeditators(tabBar){
   const f = PF.new_meditator;
   const centerOpts = `<option value="">All Centers</option>${CENTERS.map(c=>`<option value="${c.id}" ${f.center===c.id?'selected':''}>${c.name}</option>`).join('')}`;
-  const statusOpts = `
-    <option value="pending" ${f.status==='pending'?'selected':''}>Not yet calling</option>
-    <option value="active" ${f.status==='active'?'selected':''}>Calling now</option>
-    <option value="completed" ${f.status==='completed'?'selected':''}>Calls done</option>
-    <option value="" ${f.status===''?'selected':''}>All</option>`;
-
-  const activeF = [f.center,(f.status!=='pending'?f.status:''),f.dateFrom,f.dateTo,f.search].filter(Boolean).length;
+  const activeF = [f.center,f.search].filter(Boolean).length;
   let h = tabBar;
   h += `<div style="display:flex;gap:8px;margin:6px 0;flex-wrap:wrap;align-items:center">
     <details class="menu"><summary class="btn small green">✉️ Message ▾</summary>
@@ -449,124 +445,97 @@ async function renderNewMeditators(tabBar){
         <button class="btn small ghost" onclick="openAddPerson()">➕ Add person</button>
       </div></details>`:''}
   </div>`;
-  h += `<details class="card vfilters" open>
-    <summary>🔍 Filters &amp; date range${activeF?` <span class="badge">${activeF}</span>`:''}</summary>
+  h += `<details class="card vfilters" ${activeF?'open':''}>
+    <summary>🔍 Filters${activeF?` <span class="badge">${activeF}</span>`:''}</summary>
     <input placeholder="🔍 Search name/phone" style="width:100%;margin-top:10px" value="${esc(f.search)}"
-      oninput="PF.new_meditator.search=this.value" onkeydown="if(event.key==='Enter')renderPeople()">
+      oninput="PF.new_meditator.search=this.value;nmSearchLive()">
     <div class="choices" style="flex-wrap:wrap;gap:6px;margin-top:8px;align-items:center">
-      <select style="width:auto" onchange="PF.new_meditator.center=this.value;renderPeople()">
-        ${centerOpts}</select>
-      <select style="width:auto" title="Calling status" onchange="PF.new_meditator.status=this.value;renderPeople()">
-        ${statusOpts}</select>
-      <input type="date" title="IE date from (or single date)" value="${f.dateFrom}"
-        onchange="PF.new_meditator.dateFrom=this.value;renderPeople()" style="width:130px">
-      <input type="date" title="IE date to (leave blank for a single date)" value="${f.dateTo}"
-        onchange="PF.new_meditator.dateTo=this.value;renderPeople()" style="width:130px">
-      <button class="btn small ghost" onclick="renderPeople()">Search</button>
-      ${(f.dateFrom||f.dateTo||f.search)?`<button class="btn small gray" onclick="PF.new_meditator.dateFrom='';PF.new_meditator.dateTo='';PF.new_meditator.search='';renderPeople()">Clear</button>`:''}
+      <select style="width:auto" onchange="PF.new_meditator.center=this.value;renderPeople()">${centerOpts}</select>
+      ${activeF?`<button class="btn small gray" onclick="PF.new_meditator.center='';PF.new_meditator.search='';renderPeople()">Clear filters</button>`:''}
     </div>
-    <p class="muted" style="font-size:.76rem;margin-top:6px">Pick an IE date (or a from–to range) to load new meditators for that period.</p>
   </details>`;
 
-  // Date-gate: don't dump the whole base. Require a date (or a search).
-  const effFrom = f.dateFrom || f.dateTo;   // single date if only one box is filled
-  const effTo   = f.dateTo   || f.dateFrom;
-  if(!effFrom && !f.search){
-    view().innerHTML = h + `<div class="card"><div class="empty">📅 Choose an IE date or a date range above to see new meditators.<br>This keeps the list focused on the people you want to call — it won't show everyone at once.</div></div>`;
-    return;
-  }
-
-  // New Meditators is STRICTLY about IE completion date. Use the person's ie_date only
-  // (no fallback to the journey's program_date) so the from/to range matches the dates shown.
-  const ieOf = j => (j.people?.ie_date || '');
-  // Anyone who has already completed an advanced program is no longer a "new meditator".
-  const isAdvanced = j => { const p=j.people||{}; return !!(p.bsp_date||p.shoonya_date||p.samyama_date||p.guru_puja_date); };
-  let rows = await fetchAll(() => {
+  // Load ALL new-meditator journeys ONCE (cached); filter/sort client-side for instant changes.
+  const role = ME.role;
+  const all = await cached('newmed_all', ()=>fetchAll(()=>{
     let q = sb.from('journeys')
-      .select('id, type, program_name, program_date, status, sadhana_status, assigned_to, center_id, people!inner(*), calls(id, call_no, due_date, completed_at)')
-      .eq('type', 'new_meditator');
-    if(ME.role==='nurturer') q = q.eq('assigned_to', ME.id);
-    if(f.center) q = q.eq('center_id', f.center);
-    if(f.status) q = q.eq('status', f.status);
+      .select('id, type, program_name, program_date, status, sadhana_status, assigned_to, center_id, people!inner(id,full_name,phone,email,occupation,gender,date_of_birth,area,city,street,pincode,center_id,ie_date,bsp_date,shoonya_date,samyama_date,guru_puja_date,tags,photo_url), calls(id, call_no, due_date, completed_at)')
+      .eq('type','new_meditator');
+    if(role==='nurturer') q = q.eq('assigned_to', ME.id);
     return q;
-  });
-  // exclude advanced practitioners, and anyone without a real IE date
-  rows = rows.filter(j => !isAdvanced(j) && ieOf(j));
-  // date range on IE date (inclusive); single date if only one box filled
-  if(effFrom) rows = rows.filter(j=>{ const d=ieOf(j); return d>=effFrom && d<=effTo; });
-  if(f.search){
-    const s = f.search.toLowerCase();
-    rows = rows.filter(j=>j.people?.full_name?.toLowerCase().includes(s)||j.people?.phone?.includes(s));
-  }
-  // newest IE first
-  rows.sort((a,b)=> ieOf(b).localeCompare(ieOf(a)));
+  }));
+  NM_VOLS = isCoord() ? await cached('nm_vols', async()=>{ const {data}=await sb.from('profiles').select('id, full_name, email, role, center_id').eq('active',true); return data||[]; }) : [];
+  NEWMED_ALL = all;
+  const rows = nmFilter();
   NEWMED_PEOPLE = rows.map(j=>({full_name:j.people?.full_name, phone:j.people?.phone})).filter(p=>p.phone);
 
-  let vols = [];
-  if(isCoord()){
-    const {data:v} = await sb.from('profiles').select('id, full_name, email, role, center_id').eq('active', true);
-    vols = v||[];
-  }
-
-  const pendingShown = rows.filter(r=>r.status==='pending').length;
-  h += `<div class="card"><h2>🌱 New Meditators <span class="badge">${rows.length}</span></h2>
-    <p class="muted" style="font-size:.8rem;margin-bottom:8px">Tick the meditators you want to start nurturing calls for, then press <b>Start calling</b>. Nobody is added to calls automatically.</p>`;
-  if(isCoord() && pendingShown){
-    h += `<div class="row" style="position:sticky;top:0;background:var(--card-bg);z-index:5;flex-wrap:wrap;gap:6px;padding:8px;border:1px solid var(--border);border-radius:10px;margin-bottom:8px">
-      <button class="btn small ghost" onclick="nmSelectAllShown()">Select all shown</button>
-      <button class="btn small ghost" onclick="nmClearSel()">Clear</button>
-      <select id="nm-assign" style="width:auto;font-size:.78rem;padding:4px 6px">
-        <option value="">(assign later)</option>
-        ${vols.map(v=>`<option value="${v.id}">${esc(v.full_name||v.email)}</option>`).join('')}
-      </select>
-      <button class="btn small green" onclick="nmStartCalling()">📞 Start calling (<span id="nm-count">${NM_SEL.size}</span>)</button>
-    </div>`;
-  }
-  h += rows.length ? rows.map(j=>newMeditatorRow(j, vols)).join('') : '<div class="empty">No records matching filters.</div>';
-  h += '</div>';
+  h += `<div class="card"><h2>🌱 New Meditators <span class="badge" id="nm-count2">${rows.length}</span></h2>
+    <p class="muted" style="font-size:.8rem;margin-bottom:8px">Newest first. ${isCoord()?'Tick people and press <b>📞 Start calling</b> to add them to nurturing calls.':'These are the new meditators assigned to you.'}</p><div id="nm-host"></div></div>`;
   view().innerHTML = h;
+  nmMount(rows);
+}
+function nmMountCfg(){ return {externalRange:false, rowFn:newMeditatorRow, idOf:j=>j.id, personOf:j=>({full_name:j.people?.full_name,phone:j.people?.phone}), aud:'new_meditator', assignable:false, bulkActions: isCoord()?[{label:'📞 Start calling', fn:'nmStartSelected'}]:[]}; }
+function nmMount(rows){ bulkMount('newmed', $('nm-host'), rows, nmMountCfg()); }
+function nmFilter(){
+  const f=PF.new_meditator; const s=(f.search||'').toLowerCase().trim();
+  const isAdv = j=>{const p=j.people||{};return !!(p.bsp_date||p.shoonya_date||p.samyama_date||p.guru_puja_date);};
+  let rows = NEWMED_ALL.filter(j=> !isAdv(j) && ieOfJ(j));
+  if(f.center) rows = rows.filter(j=> j.center_id===f.center || j.people?.center_id===f.center);
+  if(s) rows = rows.filter(j=>j.people?.full_name?.toLowerCase().includes(s)||j.people?.phone?.includes(s));
+  rows.sort((a,b)=> ieOfJ(b).localeCompare(ieOfJ(a)));
+  return rows;
+}
+let NM_SEARCH_T=null;
+function nmSearchLive(){
+  clearTimeout(NM_SEARCH_T);
+  NM_SEARCH_T = setTimeout(()=>{ const host=$('nm-host'); if(!host) return;
+    const rows=nmFilter(); const c=$('nm-count2'); if(c) c.textContent=rows.length;
+    NEWMED_PEOPLE=rows.map(j=>({full_name:j.people?.full_name,phone:j.people?.phone})).filter(p=>p.phone);
+    nmMount(rows); }, 180);
 }
 
 let NEWMED_PEOPLE=[];
-function newMedMessageAll(){ if(!NEWMED_PEOPLE.length) return toast('Load a date range first, then Message all'); openMsgAll('new_meditator', NEWMED_PEOPLE, 'Message new meditators'); }
-function nmToggle(id,on){ on?NM_SEL.add(id):NM_SEL.delete(id); const c=$('nm-count'); if(c)c.textContent=NM_SEL.size; }
-function nmSelectAllShown(){
-  document.querySelectorAll('#view input.nm-cb').forEach(cb=>{ cb.checked=true; NM_SEL.add(cb.dataset.jid); });
-  const c=$('nm-count'); if(c)c.textContent=NM_SEL.size;
+function newMedMessageAll(){ if(!NEWMED_PEOPLE.length) return toast('No new meditators with phone numbers in view'); openMsgAll('new_meditator', NEWMED_PEOPLE, 'Message new meditators'); }
+
+async function nmStartSelected(ctx){
+  const s=BL[ctx]; if(!s) return;
+  const pend = s.items.filter(j=>s.sel.has(j.id) && j.status==='pending');
+  if(!pend.length) return toast('Tick people who are "not calling" yet');
+  modal(`<h3>Start calling — ${pend.length} meditator${pend.length>1?'s':''}</h3>
+    <p class="muted">They'll be added to nurturing calls (3-call Mandala journey).</p>
+    <label>Assign caller (optional)</label>
+    <select id="nm-assign"><option value="">(assign later)</option>${NM_VOLS.map(v=>`<option value="${v.id}">${esc(v.full_name||v.email)}</option>`).join('')}</select>
+    <button class="btn block" style="margin-top:12px" onclick="nmStartConfirm('${ctx}')">📞 Start calling</button>`);
 }
-function nmClearSel(){
-  NM_SEL.clear();
-  document.querySelectorAll('#view input.nm-cb').forEach(cb=>cb.checked=false);
-  const c=$('nm-count'); if(c)c.textContent=0;
-}
-async function nmStartCalling(){
-  if(!NM_SEL.size) return toast('Tick at least one meditator first');
+async function nmStartConfirm(ctx){
+  const s=BL[ctx]; if(!s) return;
   const assign = $('nm-assign')?.value || '';
-  const ids = [...NM_SEL];
+  const pend = s.items.filter(j=>s.sel.has(j.id) && j.status==='pending');
   toast('Starting nurturing...');
-  for(const id of ids){
-    const {error} = await sb.rpc('activate_journey', {j_id:id});
+  for(const j of pend){
+    const {error} = await sb.rpc('activate_journey', {j_id:j.id});
     if(error) return toast(error.message);
-    if(assign) await sb.from('journeys').update({assigned_to:assign}).eq('id', id);
+    if(assign) await sb.from('journeys').update({assigned_to:assign}).eq('id', j.id);
   }
-  NM_SEL.clear();
-  toast(`Calling started for ${ids.length} meditator${ids.length>1?'s':''}`);
+  s.sel.clear(); closeModal();
+  toast(`Calling started for ${pend.length} meditator${pend.length>1?'s':''}`);
   renderPeople();
 }
 
-function newMeditatorRow(j, vols){
+function newMeditatorRow(j){
   const p = j.people;
   const isPending = j.status==='pending';
-  const cb = (isCoord() && isPending)
-    ? `<input type="checkbox" class="nm-cb selcb" data-jid="${j.id}" ${NM_SEL.has(j.id)?'checked':''} onchange="nmToggle('${j.id}',this.checked)">`
-    : '';
+  // small status badge so pending vs calling vs done is clear (the bulk checkbox handles selection)
+  const badge = isPending ? '<span class="badge gray">not calling</span>'
+    : j.status==='completed' ? '<span class="badge green">done</span>'
+    : '<span class="badge">calling</span>';
   const extra = (isCoord() && !isPending) ? `<select class="actbtn-sel" onchange="assignJourney('${j.id}', this.value)">
-    <option value="">assign…</option>
-    ${vols.map(v=>`<option value="${v.id}" ${v.id===j.assigned_to?'selected':''}>${esc(v.full_name||v.email)}</option>`).join('')}
+    <option value="">caller…</option>
+    ${NM_VOLS.map(v=>`<option value="${v.id}" ${v.id===j.assigned_to?'selected':''}>${esc(v.full_name||v.email)}</option>`).join('')}
   </select>` : '';
   const prof = JSON.stringify({n:p?.full_name,ph:p?.phone,email:p?.email,occ:p?.occupation,gender:p?.gender,dob:p?.date_of_birth,area:p?.area,city:p?.city,street:p?.street,pin:p?.pincode,ctr:p?.center_id,ie:p?.ie_date||j.program_date,tags:p?.tags||[],photo:p?.photo_url});
   const msg = WA_MSG.new_meditator((p?.full_name||'').split(' ')[0]);
-  return simpleRow({cb, photo:p?.photo_url, name:p?.full_name, onclick:`showPersonProfile(${prof})`, phone:p?.phone, msg, extra});
+  return simpleRow({photo:p?.photo_url, name:p?.full_name, badge, onclick:`showPersonProfile(${prof})`, phone:p?.phone, msg, extra});
 }
 
 /* ---- Meditators (ALL is_meditator=true people) ---- */
@@ -961,7 +930,8 @@ function bulkMount(ctx, host, items, cfg){
   const prev = BL[ctx];
   BL[ctx] = { items, host, from:(prev?prev.from:null), to:(prev?prev.to:null),
     sel:(prev&&prev.sel)||new Set(), rowFn:cfg.rowFn, idOf:cfg.idOf, personOf:cfg.personOf,
-    aud:cfg.aud||'nurture', assignable:!!cfg.assignable, external:!!cfg.externalRange };
+    aud:cfg.aud||'nurture', assignable:!!cfg.assignable, external:!!cfg.externalRange,
+    bulkActions:cfg.bulkActions||[] };
   blRender(ctx);
 }
 // compute the visible slice (a From–To window, or everything capped at BL_MAXR)
@@ -985,6 +955,7 @@ function blRender(ctx){
     <span class="muted" style="font-size:.82rem"><b>${s.sel.size}</b> selected</span>
     ${s.sel.size?`<button class="btn small green" onclick="blMessage('${ctx}')">✉️ Message</button>`:''}
     ${s.sel.size&&s.assignable?`<button class="btn small ghost" onclick="blAssign('${ctx}')">👤 Assign nurturer</button>`:''}
+    ${s.sel.size?s.bulkActions.map(a=>`<button class="btn small green" onclick="${a.fn}('${ctx}')">${a.label}</button>`).join(''):''}
     ${s.sel.size?`<button class="btn small gray" onclick="blClear('${ctx}')">Clear</button>`:''}
     ${total>shown.length?`<button class="btn small ghost" onclick="blSelectAll('${ctx}')">Select all ${total}</button>`:''}
   </div>`;
@@ -1087,6 +1058,11 @@ async function saveNurturing(pid){
 
 /* ---- Advanced Programs (per-program: Completed this week + Interested) ---- */
 let ADV_MSG = {aud:'adv_completed', people:[], title:''};
+function advSetView(v){
+  if(v==='interested'){ PF.advanced.view='interested'; }
+  else { PF.advanced.view='completed'; PF.advanced.window = (v==='completed_week')?'week':'all'; }
+  renderPeople();
+}
 async function renderAdvancedList(tabBar){
   const f = PF.advanced;
   const meta = ADV_PROGS.find(p=>p[0]===f.program) || ADV_PROGS[0];
@@ -1104,12 +1080,10 @@ async function renderAdvancedList(tabBar){
   h += `<div style="display:flex;gap:8px;margin:6px 0;flex-wrap:wrap;align-items:center">
       <select style="width:auto" onchange="PF.advanced.program=this.value;renderPeople()">
         ${ADV_PROGS.map(([v,l])=>`<option value="${v}" ${f.program===v?'selected':''}>${progEmoji[v]||''} ${l}</option>`).join('')}</select>
-      <select style="width:auto" onchange="PF.advanced.view=this.value;renderPeople()">
-        <option value="completed" ${f.view==='completed'?'selected':''}>✅ Completed</option>
+      <select style="width:auto" onchange="advSetView(this.value)">
+        <option value="completed_week" ${(f.view==='completed'&&f.window==='week')?'selected':''}>✅ Completed · new this week</option>
+        <option value="completed_all" ${(f.view==='completed'&&f.window!=='week')?'selected':''}>✅ Completed · all</option>
         <option value="interested" ${f.view==='interested'?'selected':''}>✋ Interested</option></select>
-      ${f.view==='completed'?`<select style="width:auto" onchange="PF.advanced.window=this.value;renderPeople()">
-        <option value="week" ${f.window==='week'?'selected':''}>New this week</option>
-        <option value="all" ${f.window==='all'?'selected':''}>All completers</option></select>`:''}
       <details class="menu"><summary class="btn small green">✉️ Message ▾</summary>
         <div class="menu-pop">
           <button class="btn small green" onclick="openMsgAll(ADV_MSG.aud,ADV_MSG.people,ADV_MSG.title)">✉️ Message all shown</button>
@@ -1136,21 +1110,22 @@ async function renderAdvancedList(tabBar){
     h += `<p class="muted" style="font-size:.78rem;margin:6px 2px">Completed ${esc(label)} from Ishangam · last synced <b>${fmtD(sync.last_sync_date)}</b>.
       ${isCoord()?`<button class="btn small ghost" onclick="markSynced()" style="margin-left:6px">🔄 I synced today</button>`:''}</p>`;
     const winStart = f.window==='week' ? sync.prev_sync_date : null;   // 'all' = every completer, any date
-    let rows = await fetchAll(() => {
-      let q = sb.from('people').select(`id, full_name, phone, center_id, tags, photo_url, ${col}`)
-        .eq('is_meditator', true).not(col,'is',null).order(col,{ascending:false});
-      if(winStart) q = q.gte(col, winStart);
-      if(f.center) q = q.eq('center_id', f.center);
-      return q;
-    });
+    // fetch ALL completers for this program ONCE (cached); window/center/search filter client-side for instant switching
+    const all = await cached('adv_comp_'+f.program, ()=>fetchAll(() => sb.from('people')
+      .select(`id, full_name, phone, center_id, tags, photo_url, ${col}`)
+      .eq('is_meditator', true).not(col,'is',null).order(col,{ascending:false})));
+    let rows = all.slice();
+    if(winStart) rows = rows.filter(p=>p[col] && p[col] >= winStart);
+    if(f.center) rows = rows.filter(p=>p.center_id===f.center);
     if(f.search){ const s=f.search.toLowerCase(); rows = rows.filter(p=>p.full_name?.toLowerCase().includes(s)||p.phone?.includes(s)); }
     ADV_MSG = {aud:'adv_completed', people:rows.map(p=>({full_name:p.full_name,phone:p.phone})), title:'Message all — Completed '+label};
     h += `<div class="card"><h2>✅ Completed ${esc(label)} <span class="badge">${rows.length}</span></h2><div id="adv-host"></div></div>`;
     advMountCfg = {ctx:'adv_completed', items:rows, cfg:{externalRange:true, rowFn:p=>advCompletedRow(p,col,label), idOf:p=>p.id, personOf:p=>({full_name:p.full_name,phone:p.phone}), aud:'adv_completed', assignable:true}};
   } else {
-    let rows = await fetchAll(() => sb.from('advanced_interest')
+    const all = await cached('adv_int_'+f.program, ()=>fetchAll(() => sb.from('advanced_interest')
       .select('id, program, interest_date, status, notes, people!inner(id, full_name, phone, center_id, tags, photo_url)')
-      .eq('program', f.program).order('interest_date',{ascending:false}));
+      .eq('program', f.program).order('interest_date',{ascending:false})));
+    let rows = all.slice();
     if(f.center) rows = rows.filter(r=>r.people?.center_id===f.center);
     if(f.search){ const s=f.search.toLowerCase(); rows = rows.filter(r=>r.people?.full_name?.toLowerCase().includes(s)||r.people?.phone?.includes(s)); }
     ADV_MSG = {aud:'adv_interested', people:rows.map(r=>({full_name:r.people?.full_name,phone:r.people?.phone})), title:'Message all — Interested '+label};
@@ -1435,7 +1410,12 @@ function icvRow(r, prof){
   const onclk = prof ? `showPersonProfile(${JSON.stringify(personToProfile(prof))})` : '';
   // Assign only when a synced profile exists (we need a person id to tag a nurturer)
   const assign = (isCoord() && prof) ? `<button class="actbtn assign" onclick="quickAssign('${prof.id}','${esc(prof.full_name||r.full_name||'')}')">Assign</button>` : '';
-  return simpleRow({photo:prof?.photo_url, name:prof?.full_name||r.full_name, onclick:onclk, phone:ph, msg, extra:assign});
+  // status tracking lives in a compact per-row menu so the row stays clean
+  const statusMenu = isCoord() ? `<details class="menu"><summary class="actbtn log">⋯</summary><div class="menu-pop">
+      <label class="muted" style="font-size:.72rem;margin:0">Status: <b>${esc(r.status||'new')}</b></label>
+      <select onchange="setIcvStatus('${r.id}',this.value)">${['new','contacted','active','done','dropped'].map(s=>`<option value="${s}" ${r.status===s?'selected':''}>${s}</option>`).join('')}</select>
+    </div></details>` : '';
+  return simpleRow({photo:prof?.photo_url, name:prof?.full_name||r.full_name, onclick:onclk, phone:ph, msg, extra:assign+statusMenu});
 }
 async function setIcvStatus(id, status){ const {error}=await sb.from('ie_completion_volunteer').update({status}).eq('id', id); toast(error?error.message:'Updated'); }
 
