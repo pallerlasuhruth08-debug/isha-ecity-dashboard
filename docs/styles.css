@@ -77,6 +77,20 @@ nav button.active .ico{transform:translateY(-2px) scale(1.18)}
 .bulkbar .selall input{width:18px;height:18px;accent-color:var(--accent)}
 .pager{display:flex;align-items:center;justify-content:center;gap:14px;padding:10px 4px;color:var(--muted);font-size:.85rem;flex-wrap:wrap}
 .pager select{width:auto;padding:4px 8px}
+/* dropdown menus (Add / Message / per-row ⋯) */
+details.menu{display:inline-block}
+details.menu > summary{list-style:none;cursor:pointer}
+details.menu > summary::-webkit-details-marker{display:none}
+.menu-pop{background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow-lg);
+  padding:8px;margin:6px 0;display:flex;flex-direction:column;gap:6px;min-width:180px;animation:pop .12s ease both}
+.menu-pop .btn{width:100%;text-align:left}
+/* admin accordions */
+details.acc{border:1px solid var(--line);border-radius:14px;margin:10px 0;background:var(--card);box-shadow:var(--shadow)}
+details.acc > summary{list-style:none;cursor:pointer;padding:15px 16px;font-weight:700;font-size:1.15rem;display:flex;align-items:center;gap:9px}
+details.acc > summary::-webkit-details-marker{display:none}
+details.acc > summary::before{content:'▸';color:var(--accent);font-size:.95rem;transition:transform .15s}
+details.acc[open] > summary::before{transform:rotate(90deg)}
+details.acc > .acc-body{padding:0 16px 16px}
 /* collapsible filters */
 details.vfilters summary{cursor:pointer;font-weight:700;font-size:1.05rem;list-style:none;display:flex;align-items:center;gap:8px}
 details.vfilters summary::-webkit-details-marker{display:none}

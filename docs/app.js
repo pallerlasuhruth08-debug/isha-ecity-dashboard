@@ -933,7 +933,7 @@ function bulkMount(ctx, host, items, cfg){
   const prev = BL[ctx];
   BL[ctx] = { items, host, from:(prev?prev.from:null), to:(prev?prev.to:null),
     sel:(prev&&prev.sel)||new Set(), rowFn:cfg.rowFn, idOf:cfg.idOf, personOf:cfg.personOf,
-    aud:cfg.aud||'nurture', assignable:!!cfg.assignable };
+    aud:cfg.aud||'nurture', assignable:!!cfg.assignable, external:!!cfg.externalRange };
   blRender(ctx);
 }
 // compute the visible slice (a From–To window, or everything capped at BL_MAXR)
@@ -959,17 +959,17 @@ function blRender(ctx){
     ${s.sel.size&&s.assignable?`<button class="btn small ghost" onclick="blAssign('${ctx}')">👤 Assign nurturer</button>`:''}
     ${s.sel.size?`<button class="btn small gray" onclick="blClear('${ctx}')">Clear</button>`:''}
     ${total>shown.length?`<button class="btn small ghost" onclick="blSelectAll('${ctx}')">Select all ${total}</button>`:''}
-  </div>
-  <div class="pager">
-    <span class="muted">Show</span>
-    <input id="bl-from" type="number" min="1" placeholder="from" value="${ranged?s.from:''}" style="width:72px">
-    <span class="muted">to</span>
-    <input id="bl-to" type="number" min="1" placeholder="to" value="${ranged?s.to:''}" style="width:72px">
-    <button class="btn small ghost" onclick="blRange('${ctx}')">Go</button>
-    <button class="btn small ghost" onclick="blQuick('${ctx}',50)">1–50</button>
-    <button class="btn small ghost" onclick="blQuick('${ctx}',100)">1–100</button>
-    ${ranged?`<button class="btn small gray" onclick="blShowAll('${ctx}')">Show all</button>`:''}
   </div>`;
+  if(!s.external){
+    h += `<div class="pager">
+      <span class="muted">Show</span>
+      <input id="bl-from" type="number" min="1" placeholder="from" value="${ranged?s.from:''}" style="width:72px">
+      <span class="muted">to</span>
+      <input id="bl-to" type="number" min="1" placeholder="to" value="${ranged?s.to:''}" style="width:72px">
+      <button class="btn small ghost" onclick="blRange('${ctx}')">Go</button>
+      ${ranged?`<button class="btn small gray" onclick="blShowAll('${ctx}')">Show all</button>`:''}
+    </div>`;
+  }
   h += shown.map(it=>{ const id=s.idOf(it);
     return `<div class="selrow"><input type="checkbox" class="selcb" ${s.sel.has(id)?'checked':''} onclick="blToggle('${ctx}','${esc(id)}',this.checked)">${s.rowFn(it)}</div>`;
   }).join('') || '<div class="empty">No records.</div>';
@@ -1666,6 +1666,8 @@ async function renderVols(){
     if(VFILTER.activity){ const e=attIdx&&attIdx[v.person_id];
       if(!e || !e.types.has(VFILTER.activity)) return false;
       if(VFILTER.activity==='event' && VFILTER.event && !e.events.has(VFILTER.event)) return false; }
+    if(VFILTER.search){ const s=VFILTER.search.toLowerCase(), d=s.replace(/\D/g,''), p=v.people||{};
+      if(!((p.full_name||'').toLowerCase().includes(s) || (d && (p.phone||'').includes(d)))) return false; }
     return true;
   });
 
@@ -1686,21 +1688,25 @@ async function renderVols(){
 
   VOL_SHOWN = list.map(v=>({full_name:v.people?.full_name, phone:v.people?.phone})).filter(p=>p.phone);
 
-  let h = `<div style="display:flex;gap:8px;margin:6px 0;flex-wrap:wrap">
-    <button class="btn small green" onclick="volMessageAll()">✉️ Message all</button>
-    <button class="btn small ghost" onclick="openTemplates('volunteer')">📝 Templates</button>
-    <button class="btn small ghost" onclick="openPaperOCR()">📄 Paper Form (OCR)</button>
-    <button class="btn small ghost" onclick="openVolForm()">➕ Add interest</button>
-    <button class="btn small ghost" onclick="openGFormHelp()">📝 Google Form</button>
-    ${SHORTLIST.length?`<button class="btn small green" onclick="shareShortlist()">📤 Share shortlist (${SHORTLIST.length})</button>`:''}
-  </div>`;
-
-  // three folders: new volunteer interest | all existing volunteers | Ashram/SSB follow-up
-  h += `<div class="tabs" style="flex-wrap:wrap;overflow:visible">
-    <button class="${VOL_TAB==='new'?'active':''}" onclick="VOL_TAB='new';renderVols()">✨ New interest <span class="badge">${newCount}</span></button>
-    <button class="${VOL_TAB==='all'?'active':''}" onclick="VOL_TAB='all';renderVols()">🙌 All volunteers <span class="badge">${allCount}</span></button>
-    <button class="${VOL_TAB==='ssbiyc'?'active':''}" onclick="SSB_NAV={org:'',type:'',name:'',year:null};VOL_TAB='ssbiyc';renderVols()">🙏 SSB / IYC</button>
-    <button class="${VOL_TAB==='ie_completion'?'active':''}" onclick="VOL_TAB='ie_completion';renderVols()">🪷 IEO Completion Form <span class="badge">${icvCount}</span></button>
+  let h = `<div style="display:flex;gap:8px;margin:6px 0;flex-wrap:wrap;align-items:center">
+    <select onchange="volSection(this.value)" style="width:auto;font-weight:700;min-width:180px">
+      <option value="new" ${VOL_TAB==='new'?'selected':''}>✨ New interest (${newCount})</option>
+      <option value="all" ${VOL_TAB==='all'?'selected':''}>🙌 All volunteers (${allCount})</option>
+      <option value="ssbiyc" ${VOL_TAB==='ssbiyc'?'selected':''}>🙏 SSB / IYC</option>
+      <option value="ie_completion" ${VOL_TAB==='ie_completion'?'selected':''}>🪷 IEO Completion (${icvCount})</option>
+    </select>
+    <details class="menu"><summary class="btn small green">✉️ Message ▾</summary>
+      <div class="menu-pop">
+        <button class="btn small green" onclick="volMessageAll()">✉️ Message all shown</button>
+        <button class="btn small ghost" onclick="openTemplates('volunteer')">📝 Templates</button>
+      </div></details>
+    <details class="menu"><summary class="btn small ghost">＋ Add ▾</summary>
+      <div class="menu-pop">
+        <button class="btn small ghost" onclick="openPaperOCR()">📄 Paper Form (OCR)</button>
+        <button class="btn small ghost" onclick="openVolForm()">➕ Add interest</button>
+        <button class="btn small ghost" onclick="openGFormHelp()">📝 Google Form</button>
+        ${SHORTLIST.length?`<button class="btn small green" onclick="shareShortlist()">📤 Share shortlist (${SHORTLIST.length})</button>`:''}
+      </div></details>
   </div>`;
 
   // IE Completion volunteer-interest folder (sorted by IE date, newest first)
@@ -1748,10 +1754,13 @@ async function renderVols(){
 
   // (Recent Events moved to the Admin tab — managed there by Sector Nurturers / Admin.)
 
-  const activeF = [VFILTER.center,VFILTER.activity,VFILTER.interest,VFILTER.mode,VFILTER.timing,VFILTER.space?'s':''].filter(Boolean).length;
-  h += `<details class="card vfilters" ${activeF?'open':''}>
-    <summary>🔍 Filters${activeF?` <span class="badge">${activeF}</span>`:''}</summary>
-    <div class="choices" style="flex-wrap:wrap;gap:6px;margin-top:10px">
+  const activeF = [VFILTER.center,VFILTER.activity,VFILTER.interest,VFILTER.mode,VFILTER.timing,VFILTER.space?'s':'',VFILTER.search].filter(Boolean).length;
+  const vfFrom = (BL.vol&&BL.vol.from!=null)?BL.vol.from:'', vfTo = (BL.vol&&BL.vol.to!=null)?BL.vol.to:'';
+  h += `<details class="card vfilters" ${activeF||vfFrom!==''?'open':''}>
+    <summary>🔍 Filters &amp; range${activeF?` <span class="badge">${activeF}</span>`:''}</summary>
+    <input placeholder="🔍 Search name or phone" style="width:100%;margin-top:10px" value="${esc(VFILTER.search||'')}"
+      oninput="VFILTER.search=this.value" onkeydown="if(event.key==='Enter')renderVols()">
+    <div class="choices" style="flex-wrap:wrap;gap:6px;margin-top:8px">
       <select style="width:auto" onchange="VFILTER.center=this.value;renderVols()">
         <option value="">All centers</option>${CENTERS.map(c=>`<option value="${c.id}" ${VFILTER.center===c.id?'selected':''}>${c.name}</option>`).join('')}</select>
       <select style="width:auto" onchange="VFILTER.activity=this.value;VFILTER.event='';renderVols()">
@@ -1769,11 +1778,28 @@ async function renderVols(){
         <option value="">Any timing</option><option value="weekday_morning">Weekday AM</option>
         <option value="weekday_evening">Weekday PM</option><option value="weekend">Weekends</option></select>
       <button class="${VFILTER.space?'sel':''}" onclick="VFILTER.space=!VFILTER.space;renderVols()">Can offer space</button>
-      ${activeF?`<button class="btn small gray" onclick="VFILTER={center:'',interest:'',mode:'',timing:'',space:false,activity:'',event:''};renderVols()">Clear all</button>`:''}
+      ${activeF?`<button class="btn small gray" onclick="VFILTER={center:'',interest:'',mode:'',timing:'',space:false,activity:'',event:'',search:''};renderVols()">Clear filters</button>`:''}
+    </div>
+    <div class="choices" style="gap:6px;margin-top:10px;align-items:center">
+      <span class="muted" style="font-size:.82rem">Show profiles</span>
+      <input id="vf-from" type="number" min="1" placeholder="from" value="${vfFrom}" style="width:74px">
+      <span class="muted">to</span>
+      <input id="vf-to" type="number" min="1" placeholder="to" value="${vfTo}" style="width:74px">
+      <button class="btn small ghost" onclick="volApplyRange()">Apply</button>
+      ${vfFrom!==''?`<button class="btn small gray" onclick="volApplyRange(true)">Show all</button>`:''}
     </div></details>
   <div class="card"><h2>${VOL_TAB==='new'?'New volunteer interest':'All existing volunteers'} <span class="badge">${list.length}</span></h2><div id="vol-host"></div></div>`;
   view().innerHTML = h;
-  bulkMount('vol', $('vol-host'), list, {pageSize:30, rowFn:v=>volRow(v, histBy[v.person_id]||[]), idOf:v=>v.person_id, personOf:v=>({full_name:v.people?.full_name,phone:v.people?.phone}), aud:'volunteer', assignable:true});
+  bulkMount('vol', $('vol-host'), list, {externalRange:true, rowFn:v=>volRow(v, histBy[v.person_id]||[]), idOf:v=>v.person_id, personOf:v=>({full_name:v.people?.full_name,phone:v.people?.phone}), aud:'volunteer', assignable:true});
+}
+function volSection(v){ if(v==='ssbiyc') SSB_NAV={org:'',type:'',name:'',year:null}; VOL_TAB=v; renderVols(); }
+function volApplyRange(clear){
+  if(!BL.vol) return;
+  if(clear){ BL.vol.from=null; BL.vol.to=null; blRender('vol'); return; }
+  let f=parseInt(($('vf-from')||{}).value,10), t=parseInt(($('vf-to')||{}).value,10);
+  if(isNaN(f)&&isNaN(t)){ BL.vol.from=null; BL.vol.to=null; }
+  else { f=isNaN(f)?1:Math.max(1,f); t=isNaN(t)?f+49:Math.max(f,t); BL.vol.from=f; BL.vol.to=t; }
+  blRender('vol');
 }
 
 async function viewAttendees(actId, actName){
@@ -1990,43 +2016,47 @@ async function renderAdmin(){
     return {profs:a.data||[], acts:b.data||[]};
   });
 
-  let h = '';
-  // Events live here in Admin, and only Sector Nurturers / Admins manage them.
-  if(isSector()){
-    h += '<div class="card"><h2>🎉 Activities & Attendance QR</h2>' +
-      '<button class="btn small ghost" onclick="openNewActivity()">➕ New activity</button>';
-    h += (acts||[]).map(a=>'<div class="row"><div class="grow">' +
-        '<div class="name">' + esc(a.name) + ' ' + (a.is_open?'<span class="badge green">open</span>':'<span class="badge gray">closed</span>') + '</div>' +
-        '<div class="sub">' + centerName(a.center_id) + ' - ' + fmtD(a.activity_date) + (a.activity_type&&a.activity_type!=='general'?' - '+esc(a.activity_type):'') + '</div></div>' +
-      '<button class="btn small ghost" onclick="showQR(\'' + a.qr_token + '\',\'' + esc(a.name) + '\')">QR</button>' +
-      '<button class="btn small ghost" onclick="viewAttendees(\'' + a.id + '\',\'' + esc(a.name) + '\')">Attendees</button>' +
-      '<button class="btn small ghost" onclick="openEditActivity(\'' + a.id + '\')">Edit</button>' +
-      '<button class="btn small gray" onclick="toggleActivity(\'' + a.id + '\',' + (!a.is_open) + ')">' + (a.is_open?'Close':'Reopen') + '</button>' +
-      '<button class="btn small gray" onclick="deleteActivity(\'' + a.id + '\')">Delete</button>' +
-      '</div>').join('') || '<div class="empty">No activities yet.</div>';
-    h += '</div>';
-  }
-
   const assignCenters = CENTERS.concat([{id:'all',name:'All Centers'},{id:'unassigned',name:'Unassigned'}]);
   const roleOpts = (sel,id,pre)=>'<select id="'+(pre||'')+id+'" style="width:auto;font-size:.78rem;padding:6px">' +
       ROLES.map(r=>'<option value="'+r+'" '+(sel===r?'selected':'')+'>'+roleLabel(r)+'</option>').join('')+'</select>';
   const centerOptsSel = (sel,id,pre)=>'<select id="'+(pre||'')+id+'" style="width:auto;font-size:.78rem;padding:6px">' +
       assignCenters.map(c=>'<option value="'+c.id+'" '+(sel===c.id?'selected':'')+'>'+c.name+'</option>').join('')+'</select>';
 
-  // Pending approvals (Admin only)
+  let h = '';
+
+  // 🕒 Pending approvals (Admin only) — open by default
   if(isAdmin()){
     const pending = (profs||[]).filter(p=>p.active===false);
-    h += '<div class="card"><h2>🕒 Pending approvals <span class="badge">'+pending.length+'</span></h2>';
+    h += '<details class="acc" open><summary>🕒 Pending approvals <span class="badge">'+pending.length+'</span></summary><div class="acc-body">';
     h += pending.length ? pending.map(p=>'<div class="row"><div class="grow">' +
         '<div class="name">'+esc(p.full_name||p.email)+'</div>' +
         '<div class="sub">'+esc(p.email||'')+(p.phone?' · '+esc(p.phone):'')+'</div>' +
         '<div class="choices" style="gap:6px;margin-top:6px">'+roleOpts('nurturer',p.id,'pa-role-')+centerOptsSel(p.center_id||CENTERS[0]?.id,p.id,'pa-ctr-')+'</div></div>' +
       '<button class="btn small green" onclick="approveUser(\''+p.id+'\')">Approve</button></div>').join('')
       : '<div class="empty">No one waiting for approval.</div>';
-    h += '</div>';
+    h += '</div></details>';
   }
 
-  h += '<div class="card"><h2>👥 Users & Roles</h2>';
+  // 🎉 Events & Attendance (Sector + Admin) — collapsed; per-event ⋯ menu
+  if(isSector()){
+    h += '<details class="acc"><summary>🎉 Events &amp; Attendance <span class="badge">'+(acts||[]).length+'</span></summary><div class="acc-body">';
+    h += '<button class="btn small ghost" style="margin-bottom:6px" onclick="openNewActivity()">➕ New activity</button>';
+    h += (acts||[]).map(a=>'<div style="padding:10px 0;border-bottom:1px solid var(--line)">' +
+        '<div class="name">' + esc(a.name) + ' ' + (a.is_open?'<span class="badge green">open</span>':'<span class="badge gray">closed</span>') + '</div>' +
+        '<div class="sub">' + centerName(a.center_id) + ' · ' + fmtD(a.activity_date) + (a.activity_type&&a.activity_type!=='general'?' · '+esc(a.activity_type):'') + '</div>' +
+        '<details class="menu" style="margin-top:6px"><summary class="btn small ghost">⋯ Manage</summary><div class="menu-pop">' +
+          '<button class="btn small ghost" onclick="showQR(\'' + a.qr_token + '\',\'' + esc(a.name) + '\')">📲 QR code</button>' +
+          '<button class="btn small ghost" onclick="viewAttendees(\'' + a.id + '\',\'' + esc(a.name) + '\')">👥 Attendees</button>' +
+          '<button class="btn small ghost" onclick="openEditActivity(\'' + a.id + '\')">✏️ Edit</button>' +
+          '<button class="btn small gray" onclick="toggleActivity(\'' + a.id + '\',' + (!a.is_open) + ')">' + (a.is_open?'🔒 Close':'🔓 Reopen') + '</button>' +
+          '<button class="btn small gray" onclick="deleteActivity(\'' + a.id + '\')">🗑 Delete</button>' +
+        '</div></details>' +
+      '</div>').join('') || '<div class="empty">No activities yet.</div>';
+    h += '</div></details>';
+  }
+
+  // 👥 Users & Roles — collapsed
+  h += '<details class="acc"><summary>👥 Users &amp; Roles <span class="badge">'+(profs||[]).filter(p=>p.active!==false).length+'</span></summary><div class="acc-body">';
   h += (profs||[]).filter(p=>p.active!==false).map(p=>'<div class="row"><div class="grow">' +
       '<div class="name">' + esc(p.full_name||p.email) + '</div>' +
       '<div class="sub">' + esc(p.email||'') + ' - ' + roleLabel(p.role) + ' - ' + centerName(p.center_id) + '</div></div>' +
@@ -2039,25 +2069,25 @@ async function renderAdmin(){
       :'') +
     (p.phone?'<a class="iconbtn wa" href="https://wa.me/91' + p.phone + '?text=' + encodeURIComponent('Namaskaram - Gentle reminder: you have nurturing calls due on the dashboard. Please take a look when you can!') + '" target="_blank">WA</a>':'') +
     '</div>').join('');
-  h += '</div>';
+  h += '</div></details>';
 
   if(isAdmin()){
     const pm = SETTINGS.pincode_map||{};
-    h += '<div class="card"><h2>📍 Pincode -- Center Map</h2>' +
+    h += '<details class="acc"><summary>📍 Pincode → Center map</summary><div class="acc-body">' +
       '<table class="mini"><tr><th>Pincode</th><th>Center</th><th></th></tr>' +
       Object.entries(pm).map(([pin,cid])=>'<tr><td>' + pin + '</td><td>' + centerName(cid) + '</td>' +
         '<td><button class="btn small gray" onclick="delPin(\'' + pin + '\')">Remove</button></td></tr>').join('') + '</table>' +
       '<div style="display:flex;gap:8px;margin-top:8px">' +
         '<input id="pin-new" placeholder="560xxx" inputmode="numeric" style="flex:1">' +
         '<select id="pin-center" style="flex:1">' + CENTERS.map(c=>'<option value="' + c.id + '">' + c.name + '</option>').join('') + '</select>' +
-        '<button class="btn small" onclick="addPin()">Add</button></div></div>';
+        '<button class="btn small" onclick="addPin()">Add</button></div></div></details>';
     const rc = SETTINGS.reminder_config||{};
-    h += '<div class="card"><h2>🔔 Reminder Settings</h2>' +
+    h += '<details class="acc"><summary>🔔 Reminder settings</summary><div class="acc-body">' +
       '<label>Daily reminder email hour (IST, 0-23)</label>' +
       '<input id="rc-hour" type="number" min="0" max="23" value="' + (rc.email_hour_ist??8) + '">' +
       '<label>Overdue after (days past due)</label>' +
       '<input id="rc-od" type="number" min="0" value="' + (rc.overdue_after_days??0) + '">' +
-      '<button class="btn block" onclick="saveReminderCfg()">Save</button></div>';
+      '<button class="btn block" onclick="saveReminderCfg()">Save</button></div></details>';
   }
   view().innerHTML = h;
 }
