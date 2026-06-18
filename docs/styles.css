@@ -308,6 +308,28 @@ html{scroll-behavior:smooth}
 /* ---- View Transitions crossfade (Chrome) ---- */
 ::view-transition-old(root),::view-transition-new(root){animation-duration:.28s;animation-timing-function:cubic-bezier(.2,.8,.2,1)}
 
+/* ---- looping lotus loader: bloom → light → close → repeat ---- */
+.lotus-loader{position:relative;display:flex;align-items:center;justify-content:center;padding:34px 0 22px;color:var(--accent)}
+.ll-svg{position:relative;z-index:1}
+.ll-svg g{transform-box:fill-box;transform-origin:50% 78%;animation:lotusLoop 2s ease-in-out infinite}
+.ll-light{position:absolute;width:130px;height:130px;border-radius:50%;
+  background:radial-gradient(circle,rgba(216,161,58,.55),rgba(216,161,58,0) 70%);animation:lightLoop 2s ease-in-out infinite}
+@keyframes lotusLoop{0%{transform:scale(.18);opacity:.4}45%{transform:scale(1);opacity:1}60%{transform:scale(1);opacity:1}100%{transform:scale(.18);opacity:.4}}
+@keyframes lightLoop{0%,100%{opacity:0;transform:scale(.4)}45%,60%{opacity:.85;transform:scale(1)}}
+
+/* ---- success celebration: lotus + check pulse ---- */
+.celebrate{position:fixed;inset:0;z-index:280;display:flex;align-items:center;justify-content:center;
+  pointer-events:none;opacity:0;transition:opacity .25s}
+.celebrate.show{opacity:1}
+.celebrate-card{display:flex;flex-direction:column;align-items:center;gap:4px;background:rgba(255,255,255,.97);
+  border-radius:22px;padding:22px 30px;box-shadow:var(--shadow-lg);animation:pop .32s cubic-bezier(.2,.8,.2,1) both}
+.celebrate-card .lotus{margin:0}
+.celebrate-card .lotus-svg{width:72px;height:46px;color:var(--accent)}
+.celebrate-card .lotus-svg g ellipse{fill:var(--accent)}
+.celebrate-check{font-size:1.7rem;color:var(--good);font-weight:800;line-height:1;animation:checkpop .42s .14s cubic-bezier(.2,.8,.2,1) both}
+@keyframes checkpop{from{transform:scale(0);opacity:0}to{transform:scale(1);opacity:1}}
+.celebrate-label{font-size:.92rem;font-weight:700;color:var(--ink)}
+
 /* ---- animated lotus (splash) ---- */
 .lotus{display:flex;justify-content:center;margin-bottom:14px}
 .lotus-svg g{transform-box:fill-box;transform-origin:center bottom;animation:lotusBloom .9s cubic-bezier(.2,.8,.2,1) both}
@@ -316,7 +338,8 @@ html{scroll-behavior:smooth}
 @keyframes lotusGlow{0%,100%{filter:drop-shadow(0 0 6px rgba(243,230,207,.35))}50%{filter:drop-shadow(0 0 18px rgba(243,230,207,.75))}}
 .quote-fallback blockquote{margin-top:4px}
 @media(prefers-reduced-motion:reduce){
-  .sk-av,.sk-line,.lotus-svg,.lotus-svg g,.staggered .selrow,.staggered .row.simple{animation:none}
+  .sk-av,.sk-line,.lotus-svg,.lotus-svg g,.staggered .selrow,.staggered .row.simple,
+  .ll-svg g,.ll-light,.celebrate-card,.celebrate-check{animation:none}
 }
 
 /* wider screens: roomier */

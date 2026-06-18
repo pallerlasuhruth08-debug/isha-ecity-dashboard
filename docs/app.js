@@ -65,9 +65,9 @@ const CDN = {
   autoanimate:'https://cdn.jsdelivr.net/npm/@formkit/auto-animate@0.8.2/index.global.js'
 };
 // shimmer skeleton placeholder shown while a view loads
-function skel(rows){ rows=rows||6;
+function skel(rows){ rows=rows||5;
   let r=''; for(let i=0;i<rows;i++) r+='<div class="sk-row"><div class="sk-av"></div><div class="sk-lines"><div class="sk-line"></div><div class="sk-line short"></div></div></div>';
-  return `<div class="card sk-card">${r}</div>`;
+  return (typeof LOTUS_LOADER!=='undefined'?LOTUS_LOADER:'') + `<div class="card sk-card">${r}</div>`;
 }
 // fluid list animation: AutoAnimate if it loaded, otherwise a GPU CSS stagger (always smooth)
 let AA = null;   // auto-animate fn once loaded
@@ -223,6 +223,27 @@ function dismissQuote(){
   const ov=document.getElementById('quoteov'); if(!ov) return;
   ov.classList.remove('show');
   setTimeout(()=>{ if(ov&&ov.parentNode) ov.remove(); }, 350);
+}
+// looping lotus loader — blooms, light comes, closes, repeats (shown during loading)
+const LOTUS_LOADER = `<div class="lotus-loader"><span class="ll-light"></span>
+  <svg class="ll-svg" viewBox="0 0 100 64" width="78" height="50" aria-hidden="true"><g fill="currentColor">
+    <ellipse cx="50" cy="44" rx="7" ry="22"/>
+    <ellipse cx="50" cy="44" rx="7" ry="22" transform="rotate(34 50 44)"/>
+    <ellipse cx="50" cy="44" rx="7" ry="22" transform="rotate(-34 50 44)"/>
+    <ellipse cx="50" cy="44" rx="6.5" ry="18" transform="rotate(66 50 44)"/>
+    <ellipse cx="50" cy="44" rx="6.5" ry="18" transform="rotate(-66 50 44)"/>
+    <ellipse cx="50" cy="44" rx="6" ry="13" transform="rotate(96 50 44)"/>
+    <ellipse cx="50" cy="44" rx="6" ry="13" transform="rotate(-96 50 44)"/>
+  </g></svg></div>`;
+// quick celebratory lotus + check pulse on a successful action
+function celebrate(label){
+  if(matchMedia('(prefers-reduced-motion:reduce)').matches) return;
+  const el=document.createElement('div'); el.className='celebrate';
+  el.innerHTML=`<div class="celebrate-card"><div class="lotus">${LOTUS_SVG}</div>
+    <div class="celebrate-check">✓</div>${label?`<div class="celebrate-label">${esc(label)}</div>`:''}</div>`;
+  document.body.appendChild(el);
+  requestAnimationFrame(()=>el.classList.add('show'));
+  setTimeout(()=>{ el.classList.remove('show'); setTimeout(()=>el.remove(),300); }, 1150);
 }
 
 /* ============================================================
@@ -543,7 +564,7 @@ async function saveLog(close){
     await sb.from('calls').update({ completed_at:new Date().toISOString(), reachability:LOG.reach,
       sadhana_status:status, remarks, logged_by:ME.id }).eq('id', LOG.id);
   }
-  toast('Saved!');
+  toast('Saved!'); celebrate('Call logged 🙏');
   if(close){ closeModal(); renderToday(); }
   else { openLog({...LOG, id:null, reach:null, status:null}); }  // reopen: history grows, fresh ad-hoc log
 }
@@ -699,6 +720,7 @@ async function nmStartConfirm(ctx){
   }
   s.sel.clear(); closeModal();
   toast(`Calling started for ${pend.length} meditator${pend.length>1?'s':''}`);
+  celebrate('Calling started 📞');
   renderPeople();
 }
 
@@ -1044,7 +1066,7 @@ async function assignNurturer(medId, nurturerId, btn){
   const {error} = await sb.from('nurturer_assignments').upsert({meditator_id:medId, nurturer_id:nurturerId, assigned_by:ME.id},{onConflict:'meditator_id,nurturer_id',ignoreDuplicates:true});
   if(error) return toast(error.message);
   if(btn){ btn.textContent='Assigned'; btn.disabled=true; btn.classList.remove('green'); btn.classList.add('gray'); }
-  cacheBust(); toast('Assigned');
+  cacheBust(); toast('Assigned'); celebrate('Assigned 🙏');
 }
 async function createNurturerAssign(medId){
   const name = ($('an-name').value||'').trim(); if(!name) return toast('Name required');
@@ -1209,7 +1231,7 @@ async function blAssignSave(ctx){
   const chunk=(a,n)=>{const o=[];for(let i=0;i<a.length;i+=n)o.push(a.slice(i,i+n));return o;};
   let ok=0;
   for(const b of chunk(rows,200)){ const r=await sb.from('nurturer_assignments').upsert(b,{onConflict:'meditator_id,nurturer_id',ignoreDuplicates:true}).select('id'); if(r.error) return toast(r.error.message); ok+=(r.data?r.data.length:0); }
-  cacheBust(); closeModal(); toast('Assigned '+ids.length+' people'); BL[ctx].sel.clear();
+  cacheBust(); closeModal(); toast('Assigned '+ids.length+' people'); celebrate('Assigned '+ids.length+' 🙏'); BL[ctx].sel.clear();
   if(CURRENT_VIEW) go(CURRENT_VIEW);
 }
 
