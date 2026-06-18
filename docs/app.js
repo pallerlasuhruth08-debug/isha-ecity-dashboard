@@ -534,10 +534,7 @@ function newMeditatorRow(j){
   const badge = isPending ? '<span class="badge gray">not calling</span>'
     : j.status==='completed' ? '<span class="badge green">done</span>'
     : '<span class="badge">calling</span>';
-  const extra = (isCoord() && !isPending) ? `<select class="actbtn-sel" onchange="assignJourney('${j.id}', this.value)">
-    <option value="">caller…</option>
-    ${NM_VOLS.map(v=>`<option value="${v.id}" ${v.id===j.assigned_to?'selected':''}>${esc(v.full_name||v.email)}</option>`).join('')}
-  </select>` : '';
+  const extra = (isCoord() && p?.id) ? `<button class="actbtn assign" onclick="quickAssign('${p.id}','${esc(p.full_name||'')}')">Assign</button>` : '';
   const prof = JSON.stringify({n:p?.full_name,ph:p?.phone,email:p?.email,occ:p?.occupation,gender:p?.gender,dob:p?.date_of_birth,area:p?.area,city:p?.city,street:p?.street,pin:p?.pincode,ctr:p?.center_id,ie:p?.ie_date||j.program_date,tags:p?.tags||[],photo:p?.photo_url});
   const msg = WA_MSG.new_meditator((p?.full_name||'').split(' ')[0]);
   return simpleRow({photo:p?.photo_url, name:p?.full_name, badge, onclick:`showPersonProfile(${prof})`, phone:p?.phone, msg, extra});
@@ -955,27 +952,30 @@ function blRender(ctx){
   const {start,end,shown,capped,total,ranged} = blSlice(ctx);
   const shownIds = shown.map(s.idOf);
   const allSel = shownIds.length && shownIds.every(id=>s.sel.has(id));
-  let h = `<div class="bulkbar">
+  const sel = s.sel.size;
+  // Quiet by default (just a Select-shown checkbox); a clean action bar fades in once something is ticked.
+  let h = `<div class="bulkbar ${sel?'active':''}">
     <label class="selall"><input type="checkbox" ${allSel?'checked':''} onclick="blSelectPage('${ctx}',this.checked)"> Select shown</label>
-    <span class="muted" style="font-size:.82rem"><b>${s.sel.size}</b> selected</span>
-    ${s.sel.size?`<button class="btn small green" onclick="blMessage('${ctx}')">✉️ Message</button>`:''}
-    ${s.sel.size&&s.assignable?`<button class="btn small ghost" onclick="blAssign('${ctx}')">👤 Assign nurturer</button>`:''}
-    ${s.sel.size?s.bulkActions.map(a=>`<button class="btn small green" onclick="${a.fn}('${ctx}')">${a.label}</button>`).join(''):''}
-    ${s.sel.size?`<button class="btn small gray" onclick="blClear('${ctx}')">Clear</button>`:''}
-    ${total>shown.length?`<button class="btn small ghost" onclick="blSelectAll('${ctx}')">Select all ${total}</button>`:''}
+    ${sel?`<span class="selcount">${sel} selected</span>` : ``}
+    ${sel?`<span class="bulkacts">
+      <button class="btn small green" onclick="blMessage('${ctx}')">✉️ Message</button>
+      ${s.assignable?`<button class="btn small ghost" onclick="blAssign('${ctx}')">👤 Assign</button>`:''}
+      ${s.bulkActions.map(a=>`<button class="btn small green" onclick="${a.fn}('${ctx}')">${a.label}</button>`).join('')}
+      <button class="btn small gray" onclick="blClear('${ctx}')">Clear</button>
+    </span>`:''}
+    ${(sel && total>shown.length)?`<button class="btn small ghost" onclick="blSelectAll('${ctx}')">Select all ${total}</button>`:''}
   </div>`;
   if(!s.external){
-    h += `<details class="menu rangetog" ${ranged?'open':''}><summary class="btn small ghost">↔ Range${ranged?` ${s.from}–${s.to}`:''}</summary>
-      <div class="menu-pop">
-        <div class="choices" style="gap:6px;align-items:center">
-          <span class="muted">Show</span>
-          <input id="bl-from" type="number" min="1" placeholder="from" value="${ranged?s.from:''}" style="width:72px">
-          <span class="muted">to</span>
-          <input id="bl-to" type="number" min="1" placeholder="to" value="${ranged?s.to:''}" style="width:72px">
-          <button class="btn small ghost" onclick="blRange('${ctx}')">Go</button>
-          ${ranged?`<button class="btn small gray" onclick="blShowAll('${ctx}')">Show all</button>`:''}
-        </div>
-      </div></details>`;
+    // sideways range: the from–to fields expand inline to the RIGHT of the chip (never drop down)
+    h += `<details class="rangetog" ${ranged?'open':''}>
+      <summary class="btn small ghost">↔ Range${ranged?` · ${s.from}–${s.to}`:''}</summary>
+      <span class="rangefields">
+        <input id="bl-from" type="number" min="1" placeholder="from" value="${ranged?s.from:''}">
+        <span class="muted">to</span>
+        <input id="bl-to" type="number" min="1" placeholder="to" value="${ranged?s.to:''}">
+        <button class="btn small ghost" onclick="blRange('${ctx}')">Go</button>
+        ${ranged?`<button class="btn small gray" onclick="blShowAll('${ctx}')">Show all</button>`:''}
+      </span></details>`;
   }
   h += shown.map(it=>{ const id=s.idOf(it);
     return `<div class="selrow"><input type="checkbox" class="selcb" ${s.sel.has(id)?'checked':''} onclick="blToggle('${ctx}','${esc(id)}',this.checked)">${s.rowFn(it)}</div>`;
@@ -1394,7 +1394,7 @@ async function runImport(){
 /* ============================================================
    VOLUNTEERS -- Module 2 + Event/Attendance
    ============================================================ */
-const INTERESTS = ['Online Calling','Online Operations','Offline Programs','Sadhguru Sannidhi','E-Media','Promotions','Devi Seva','Event Setup','Cooking/Annadanam','Transport'];
+const INTERESTS = ['Online Calling','Online Operations','Offline Programs','Sadhguru Sannidhi','E-Media','Promotions','Devi Seva','Event Setup','Cooking/Annadanam','Transport','Can offer space'];
 let VFILTER = {center:'', interest:'', mode:'', timing:'', space:false, activity:'', event:''};
 let VOL_SHOWN = [];   // people currently shown in the active volunteer tab (for Message all)
 function volMessageAll(){ if(!VOL_SHOWN.length) return toast('No one with a phone in this list'); openMsgAll('volunteer', VOL_SHOWN, 'Message volunteers'); }
@@ -1655,10 +1655,11 @@ async function renderVols(){
   const list = (vps||[]).filter(v=>{
     if(VOL_TAB==='new' && !isNewInterest(v)) return false;
     if(VFILTER.center && derivedCenter(v.people)!==VFILTER.center) return false;
-    if(VFILTER.interest && !(v.interests||[]).includes(VFILTER.interest)) return false;
+    if(VFILTER.interest){
+      if(VFILTER.interest==='Can offer space'){ if(!v.can_offer_space && !(v.interests||[]).includes('Can offer space')) return false; }
+      else if(!(v.interests||[]).includes(VFILTER.interest)) return false; }
     if(VFILTER.mode && v.mode!==VFILTER.mode && v.mode!=='both') return false;
     if(VFILTER.timing && v.preferred_timing!==VFILTER.timing && v.preferred_timing!=='flexible') return false;
-    if(VFILTER.space && !v.can_offer_space) return false;
     if(VFILTER.activity){ const e=attIdx&&attIdx[v.person_id];
       if(!e || !e.types.has(VFILTER.activity)) return false;
       if(VFILTER.activity==='event' && VFILTER.event && !e.events.has(VFILTER.event)) return false; }
@@ -1750,7 +1751,7 @@ async function renderVols(){
 
   // (Recent Events moved to the Admin tab — managed there by Sector Nurturers / Admin.)
 
-  const activeF = [VFILTER.center,VFILTER.activity,VFILTER.interest,VFILTER.mode,VFILTER.timing,VFILTER.space?'s':'',VFILTER.search].filter(Boolean).length;
+  const activeF = [VFILTER.center,VFILTER.activity,VFILTER.interest,VFILTER.mode,VFILTER.timing,VFILTER.search].filter(Boolean).length;
   const vfFrom = (BL.vol&&BL.vol.from!=null)?BL.vol.from:'', vfTo = (BL.vol&&BL.vol.to!=null)?BL.vol.to:'';
   h += `<details class="card vfilters" ${activeF||vfFrom!==''?'open':''}>
     <summary>🔍 Filters &amp; range${activeF?` <span class="badge">${activeF}</span>`:''}</summary>
@@ -1773,17 +1774,18 @@ async function renderVols(){
       <select style="width:auto" onchange="VFILTER.timing=this.value;renderVols()">
         <option value="">Any timing</option><option value="weekday_morning">Weekday AM</option>
         <option value="weekday_evening">Weekday PM</option><option value="weekend">Weekends</option></select>
-      <button class="${VFILTER.space?'sel':''}" onclick="VFILTER.space=!VFILTER.space;renderVols()">Can offer space</button>
       ${activeF?`<button class="btn small gray" onclick="VFILTER={center:'',interest:'',mode:'',timing:'',space:false,activity:'',event:'',search:''};renderVols()">Clear filters</button>`:''}
     </div>
-    <div class="choices" style="gap:6px;margin-top:10px;align-items:center">
-      <span class="muted" style="font-size:.82rem">Show profiles</span>
-      <input id="vf-from" type="number" min="1" placeholder="from" value="${vfFrom}" style="width:74px">
-      <span class="muted">to</span>
-      <input id="vf-to" type="number" min="1" placeholder="to" value="${vfTo}" style="width:74px">
-      <button class="btn small ghost" onclick="volApplyRange()">Apply</button>
-      ${vfFrom!==''?`<button class="btn small gray" onclick="volApplyRange(true)">Show all</button>`:''}
-    </div></details>
+    <details class="rangetog" ${vfFrom!==''?'open':''} style="margin-top:10px">
+      <summary class="btn small ghost">↔ Range${vfFrom!==''?` · ${vfFrom}–${vfTo}`:''}</summary>
+      <span class="rangefields">
+        <input id="vf-from" type="number" min="1" placeholder="from" value="${vfFrom}">
+        <span class="muted">to</span>
+        <input id="vf-to" type="number" min="1" placeholder="to" value="${vfTo}">
+        <button class="btn small ghost" onclick="volApplyRange()">Go</button>
+        ${vfFrom!==''?`<button class="btn small gray" onclick="volApplyRange(true)">Show all</button>`:''}
+      </span></details>
+    </details>
   <div class="card"><h2>${VOL_TAB==='new'?'New volunteer interest':'All existing volunteers'} <span class="badge">${list.length}</span></h2><div id="vol-host"></div></div>`;
   view().innerHTML = h;
   bulkMount('vol', $('vol-host'), list, {externalRange:true, rowFn:v=>volRow(v, histBy[v.person_id]||[]), idOf:v=>v.person_id, personOf:v=>({full_name:v.people?.full_name,phone:v.people?.phone}), aud:'volunteer', assignable:true});
@@ -1801,15 +1803,16 @@ function blApplyRange(ctx, fromId, toId, clear){
 function volApplyRange(clear){ blApplyRange('vol','vf-from','vf-to',clear); }
 // small From–To range block for a unified filters panel
 function rangeBlock(ctx, fromId, toId){
-  const s=BL[ctx]||{}; const from=(s.from!=null)?s.from:'', to=(s.to!=null)?s.to:'';
-  return `<div class="choices" style="gap:6px;margin-top:10px;align-items:center">
-    <span class="muted" style="font-size:.82rem">Show</span>
-    <input id="${fromId}" type="number" min="1" placeholder="from" value="${from}" style="width:74px">
-    <span class="muted">to</span>
-    <input id="${toId}" type="number" min="1" placeholder="to" value="${to}" style="width:74px">
-    <button class="btn small ghost" onclick="blApplyRange('${ctx}','${fromId}','${toId}')">Apply</button>
-    ${from!==''?`<button class="btn small gray" onclick="blApplyRange('${ctx}','${fromId}','${toId}',true)">Show all</button>`:''}
-  </div>`;
+  const s=BL[ctx]||{}; const from=(s.from!=null)?s.from:'', to=(s.to!=null)?s.to:''; const ranged=from!=='';
+  return `<details class="rangetog" ${ranged?'open':''} style="margin-top:10px">
+    <summary class="btn small ghost">↔ Range${ranged?` · ${from}–${to}`:''}</summary>
+    <span class="rangefields">
+      <input id="${fromId}" type="number" min="1" placeholder="from" value="${from}">
+      <span class="muted">to</span>
+      <input id="${toId}" type="number" min="1" placeholder="to" value="${to}">
+      <button class="btn small ghost" onclick="blApplyRange('${ctx}','${fromId}','${toId}')">Go</button>
+      ${ranged?`<button class="btn small gray" onclick="blApplyRange('${ctx}','${fromId}','${toId}',true)">Show all</button>`:''}
+    </span></details>`;
 }
 
 async function viewAttendees(actId, actName){
@@ -1877,7 +1880,6 @@ function volFormHTML(pre){
     '<select id="vf-mode"><option value="both">Online + Offline</option><option value="online">Online only</option><option value="offline">Offline only</option></select>' +
     '<label>Programs done</label><input id="vf-progs" placeholder="e.g. IE Online 2025, BSP">' +
     '<label>Languages</label><input id="vf-lang" placeholder="e.g. Kannada, Tamil, English">' +
-    '<div class="choices" style="margin-top:10px"><button id="vf-space" onclick="this.classList.toggle(\'sel\')">Can offer space</button></div>' +
     '<label>Notes</label><textarea id="vf-notes"></textarea>' +
     '<button class="btn block" onclick="saveVolForm()">Save</button>';
 }
@@ -1886,7 +1888,7 @@ async function saveVolForm(){
   const interests = [...document.querySelectorAll('#vf-int button.sel')].map(b=>b.textContent);
   const row = {full_name:$('vf-name').value, phone:$('vf-phone').value, pincode:$('vf-pin').value,
     kind:'volunteer', interests, preferred_timing:$('vf-timing').value, mode:$('vf-mode').value,
-    can_offer_space:$('vf-space').classList.contains('sel'), source:'paper'};
+    can_offer_space:interests.includes('Can offer space'), source:'paper'};
   if(!row.full_name && !row.phone) return toast('Name or phone required');
   const {error} = await sb.rpc('import_people', {rows:[row]});
   if(error) return toast(error.message);
