@@ -75,6 +75,11 @@ nav button.active .ico{transform:translateY(-2px) scale(1.18)}
 /* section selector (New Meditators / Meditators / Advanced) */
 .section-sel{width:100%;font-weight:800;font-size:1.05rem;padding:12px 14px;border-radius:14px;
   border:1.5px solid var(--line);background-color:transparent;color:var(--ink);margin:8px 0}
+/* section dropdown + Msg + Add on a single row (stays one line on mobile) */
+.ptoolbar{display:flex;align-items:center;gap:7px;flex-wrap:nowrap;margin:8px 0}
+.ptoolbar .section-sel{flex:1;min-width:0;margin:0;font-size:.96rem;padding:11px 30px 11px 12px;background-position:right 8px center}
+.ptoolbar .menu{flex-shrink:0}
+.ptoolbar .menu>summary{white-space:nowrap;padding:11px 12px}
 /* simplified list row: photo + name + compact actions */
 .row.simple{gap:10px}
 .av.avph{display:flex;align-items:center;justify-content:center;font-weight:800;color:var(--accent);
