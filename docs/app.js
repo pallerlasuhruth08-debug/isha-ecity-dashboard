@@ -61,8 +61,21 @@ const CDN = {
   chart:'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js',
   xlsx:'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',
   papa:'https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js',
-  qrcode:'https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js'
+  qrcode:'https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js',
+  autoanimate:'https://cdn.jsdelivr.net/npm/@formkit/auto-animate@0.8.2/index.global.js'
 };
+// shimmer skeleton placeholder shown while a view loads
+function skel(rows){ rows=rows||6;
+  let r=''; for(let i=0;i<rows;i++) r+='<div class="sk-row"><div class="sk-av"></div><div class="sk-lines"><div class="sk-line"></div><div class="sk-line short"></div></div></div>';
+  return `<div class="card sk-card">${r}</div>`;
+}
+// fluid list animation: AutoAnimate if it loaded, otherwise a GPU CSS stagger (always smooth)
+let AA = null;   // auto-animate fn once loaded
+function animateList(host){
+  if(!host) return;
+  if(AA && !host.dataset.aa){ try{ AA(host,{duration:180,easing:'cubic-bezier(.2,.8,.2,1)'}); host.dataset.aa='1'; return; }catch(e){} }
+  if(!AA){ host.classList.add('staggered'); }
+}
 
 /* Session cache: load each dataset once, reuse on tab switches. cacheBust()
    clears it (the Refresh button) so the next view pulls fresh data. */
@@ -160,6 +173,8 @@ async function boot(){
   }
   $('quotebar').classList.remove('hidden');
   $('quotebar').innerHTML = `🪷 <span class="qtext">“${esc(VOL_QUOTE)}”</span> <span class="qexp">tap ›</span>`;
+  // load AutoAnimate (fluid list add/remove); harmless if it fails — lists fall back to a CSS stagger
+  loadScript(CDN.autoanimate).then(()=>{ AA = window.autoAnimate || (window.formkit&&window.formkit.autoAnimate) || null; }).catch(()=>{});
   go('profile');           // land on Profile after the opening quote
   showQuote(true);         // opening Sadhguru photo + volunteering quote
 }
@@ -171,13 +186,23 @@ async function boot(){
 const VOL_QUOTE = 'How deep you touch another life is how rich your life is.';
 const VOL_QUOTE_BY = '— Sadhguru';
 const SPLASH_IMG = 'sadhguru-quote.jpg';
+// animated lotus (pure SVG + CSS — blooms then gently glows; no external/Lottie dependency)
+const LOTUS_SVG = `<svg class="lotus-svg" viewBox="0 0 100 64" width="88" height="56" aria-hidden="true"><g>
+  <ellipse cx="50" cy="44" rx="7" ry="22" fill="#f3e6cf"/>
+  <ellipse cx="50" cy="44" rx="7" ry="22" fill="#efddbf" transform="rotate(34 50 44)"/>
+  <ellipse cx="50" cy="44" rx="7" ry="22" fill="#efddbf" transform="rotate(-34 50 44)"/>
+  <ellipse cx="50" cy="44" rx="6.5" ry="18" fill="#e7cfa6" transform="rotate(66 50 44)"/>
+  <ellipse cx="50" cy="44" rx="6.5" ry="18" fill="#e7cfa6" transform="rotate(-66 50 44)"/>
+  <ellipse cx="50" cy="44" rx="6" ry="13" fill="#dcbf90" transform="rotate(96 50 44)"/>
+  <ellipse cx="50" cy="44" rx="6" ry="13" fill="#dcbf90" transform="rotate(-96 50 44)"/>
+</g></svg>`;
 let QUOTE_T = null;
 function quoteOverlayHTML(splash){
   return `<div class="quote-card">
+    <div class="lotus">${LOTUS_SVG}</div>
     <img src="${SPLASH_IMG}" alt="Sadhguru on volunteering" class="quote-img"
       onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
     <div class="quote-fallback" style="display:none">
-      <div class="ql">🪷</div>
       <blockquote>“${esc(VOL_QUOTE)}”</blockquote>
       <div class="qby">${esc(VOL_QUOTE_BY)}</div>
     </div>
@@ -205,7 +230,7 @@ function dismissQuote(){
    ============================================================ */
 function nameParts(full){ const p=(full||'').trim().split(/\s+/); return {first:p[0]||'', last:p.slice(1).join(' ')}; }
 async function renderProfile(){
-  view().innerHTML = '<div class="empty">Loading…</div>';
+  view().innerHTML = skel(4);
   // link to a people record (for volunteering history) by email then phone
   let person=null;
   if(ME.email){ const {data}=await sb.from('people').select('id,full_name,phone,photo_url').ilike('email', ME.email).limit(1); if(data&&data[0]) person=data[0]; }
@@ -334,8 +359,15 @@ let CURRENT_VIEW = 'today';
 function go(v){
   CURRENT_VIEW = v;
   document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('active', b.dataset.v===v));
-  return ({today:renderToday, people:renderPeople, vols:renderVols,
-    insights:renderInsights, admin:renderAdmin, profile:renderProfile}[v])();
+  const map={today:renderToday, people:renderPeople, vols:renderVols,
+    insights:renderInsights, admin:renderAdmin, profile:renderProfile};
+  const run=()=>{ try{ map[v](); }catch(e){} };
+  // View Transitions API → smooth crossfade between tabs/sections (Chrome).
+  // We don't return the async render promise, so a slow data load can't freeze the transition;
+  // each render paints a shimmer skeleton synchronously, then fills in.
+  if(document.startViewTransition && !matchMedia('(prefers-reduced-motion:reduce)').matches){
+    document.startViewTransition(run);
+  } else { return map[v](); }
 }
 // Tap an Insights number to jump straight to the matching list (optionally pre-filtered).
 function drillTo(v, tab, opt){
@@ -377,7 +409,7 @@ async function fetchDueCalls(){
 }
 
 async function renderToday(){
-  view().innerHTML = '<div class="empty">Loading...</div>';
+  view().innerHTML = skel();
   const {calls, upcoming} = await cached('today', async()=>{
     const calls = await fetchDueCalls();
     let upQ = sb.from('calls')
@@ -549,7 +581,7 @@ const COMMON_TAGS = [
 
 async function renderPeople(tab){
   if(tab) PEOPLE_TAB = tab;
-  view().innerHTML = '<div class="empty">Loading...</div>';
+  view().innerHTML = skel();
 
   // Ashram/SSB volunteers moved to the Volunteers tab.
   if(PEOPLE_TAB==='volunteer_nurture') PEOPLE_TAB = 'new_meditator';
@@ -1078,6 +1110,7 @@ function bulkMount(ctx, host, items, cfg){
     aud:cfg.aud||'nurture', assignable:!!cfg.assignable, external:!!cfg.externalRange,
     bulkActions:cfg.bulkActions||[] };
   blRender(ctx);
+  animateList(host);   // fluid add/remove + entrance for the list
 }
 // compute the visible slice (a From–To window, or everything capped at BL_MAXR)
 function blSlice(ctx){
@@ -1773,7 +1806,7 @@ async function ssbAttach(actId, pid, btn){
 }
 
 async function renderVols(){
-  view().innerHTML = '<div class="empty">Loading...</div>';
+  view().innerHTML = skel();
   const vps = await cached('vols', () => fetchAll(() => sb.from('volunteer_profiles')
     .select('*, people!inner(id, full_name, phone, email, pincode, center_id, ie_date, bsp_date, shoonya_date, samyama_date, guru_puja_date, occupation, gender, date_of_birth, street, city, area, tags, photo_url)')
     .order('updated_at', {ascending:false})));
@@ -2081,7 +2114,7 @@ function openGFormHelp(){
    INSIGHTS
    ============================================================ */
 async function renderInsights(){
-  view().innerHTML = '<div class="empty">Loading...</div>';
+  view().innerHTML = skel();
   // Exclude 'dropped' journeys (e.g. cleared stale backlog) from all insights.
   const [J, C, V] = await cached('insights', ()=>Promise.all([
     fetchAll(()=> sb.from('journeys').select('id, type, status, sadhana_status, center_id, assigned_to').neq('status','dropped')),
@@ -2156,7 +2189,7 @@ async function renderInsights(){
    ============================================================ */
 async function renderAdmin(){
   if(!isCoord()){ view().innerHTML='<div class="empty">Coordinators only.</div>'; return; }
-  view().innerHTML = '<div class="empty">Loading...</div>';
+  view().innerHTML = skel();
   const {profs, acts} = await cached('admin', async()=>{
     const [a,b] = await Promise.all([
       sb.from('profiles').select('*').order('created_at'),
