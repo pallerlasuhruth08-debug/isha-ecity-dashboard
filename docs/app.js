@@ -426,8 +426,8 @@ async function renderPeople(tab){
     ['advanced','⭐ Advanced Programs']
   ];
 
-  const tabBar = `<div class="tabs">${tabDefs.map(([v,l])=>
-    `<button class="${PEOPLE_TAB===v?'active':''}" onclick="renderPeople('${v}')">${l}</button>`).join('')}</div>`;
+  const tabBar = `<select class="section-sel" onchange="renderPeople(this.value)">${tabDefs.map(([v,l])=>
+    `<option value="${v}" ${PEOPLE_TAB===v?'selected':''}>${l}</option>`).join('')}</select>`;
 
   if(PEOPLE_TAB==='new_meditator') await renderNewMeditators(tabBar);
   else if(PEOPLE_TAB==='meditator') await renderMeditatorsList(tabBar);
@@ -565,43 +565,24 @@ async function nmStartCalling(){
 
 function newMeditatorRow(j, vols){
   const p = j.people;
-  const done = (j.calls||[]).filter(c=>c.completed_at).length;
-  const total = (j.calls||[]).length;
-  const tags = (p?.tags||[]).slice(0,3).map(t=>`<span class="badge gray" style="font-size:.7rem">${esc(t)}</span>`).join(' ');
-  const assignee = vols.find(v=>v.id===j.assigned_to);
   const isPending = j.status==='pending';
-  const statusBadge = isPending ? '<span class="badge gray">not calling</span>'
-    : j.status==='completed' ? '<span class="badge green">done</span>'
-    : '<span class="badge">calling</span>';
   const cb = (isCoord() && isPending)
-    ? `<input type="checkbox" class="nm-cb" data-jid="${j.id}" ${NM_SEL.has(j.id)?'checked':''} onchange="nmToggle('${j.id}',this.checked)" style="width:20px;height:20px;flex-shrink:0;margin-right:4px">`
+    ? `<input type="checkbox" class="nm-cb selcb" data-jid="${j.id}" ${NM_SEL.has(j.id)?'checked':''} onchange="nmToggle('${j.id}',this.checked)">`
     : '';
-  const assignSel = (isCoord() && !isPending) ? `<select style="width:auto;font-size:.78rem;padding:4px 6px" onchange="assignJourney('${j.id}', this.value)">
-    <option value="">-- assign --</option>
+  const extra = (isCoord() && !isPending) ? `<select class="actbtn-sel" onchange="assignJourney('${j.id}', this.value)">
+    <option value="">assign…</option>
     ${vols.map(v=>`<option value="${v.id}" ${v.id===j.assigned_to?'selected':''}>${esc(v.full_name||v.email)}</option>`).join('')}
   </select>` : '';
-  const wa = p?.phone ? `https://wa.me/91${p.phone}?text=${encodeURIComponent(WA_MSG.new_meditator(p.full_name.split(' ')[0]))}` : null;
-  const prof = JSON.stringify({n:p?.full_name,ph:p?.phone,email:p?.email,occ:p?.occupation,gender:p?.gender,dob:p?.date_of_birth,area:p?.area,city:p?.city,street:p?.street,pin:p?.pincode,ctr:p?.center_id,ie:p?.ie_date||j.program_date,tags:p?.tags||[],photo:p?.photo_url}).replace(/'/g,"&#39;").replace(/"/g,'&quot;');
-  return `<div class="row">
-    ${cb}
-    ${p?.photo_url?`<img class="av" src="${esc(p.photo_url)}" loading="lazy" alt="" onclick="showPersonProfile(${prof})" onerror="this.style.display='none'">`:''}
-    <div class="grow" style="cursor:pointer" onclick="showPersonProfile(${prof})">
-      <div class="name">${esc(p?.full_name||'?')} ${statusBadge} ${tags}</div>
-      <div class="sub">IE: ${fmtD(p?.ie_date||j.program_date)} - ${centerName(p?.center_id)}${isPending?'':` - calls ${done}/${total}`}
-        ${j.sadhana_status?` - <b>${esc(j.sadhana_status)}</b>`:''}
-        ${assignee?` - ${esc(assignee.full_name||assignee.email)}`:''} <span class="muted" style="font-size:.7rem">· tap for profile</span></div>
-    </div>
-    ${p?.phone?`<a class="iconbtn call" href="tel:+91${p.phone}">Call</a>`:''}
-    ${wa?`<a class="iconbtn wa" href="${wa}" target="_blank">WA</a>`:''}
-    ${assignSel}
-  </div>`;
+  const prof = JSON.stringify({n:p?.full_name,ph:p?.phone,email:p?.email,occ:p?.occupation,gender:p?.gender,dob:p?.date_of_birth,area:p?.area,city:p?.city,street:p?.street,pin:p?.pincode,ctr:p?.center_id,ie:p?.ie_date||j.program_date,tags:p?.tags||[],photo:p?.photo_url});
+  const msg = WA_MSG.new_meditator((p?.full_name||'').split(' ')[0]);
+  return simpleRow({cb, photo:p?.photo_url, name:p?.full_name, onclick:`showPersonProfile(${prof})`, phone:p?.phone, msg, extra});
 }
 
 /* ---- Meditators (ALL is_meditator=true people) ---- */
 let MED_SCOPE_SET=false;
 async function renderMeditatorsList(tabBar){
-  // nurturers land on "My meditators" by default; coordinators see everyone
-  if(!MED_SCOPE_SET){ MED_SCOPE = (ME.role==='nurturer') ? 'mine' : 'all'; MED_SCOPE_SET=true; }
+  // everyone lands on "My meditators" first; "All meditators" is one tap away
+  if(!MED_SCOPE_SET){ MED_SCOPE = 'mine'; MED_SCOPE_SET=true; }
   const f = PF.meditator;
   const centerOpts = `<option value="">All Centers</option>${CENTERS.map(c=>`<option value="${c.id}" ${f.center===c.id?'selected':''}>${c.name}</option>`).join('')}`;
   const tagOpts = `<option value="">All Tags</option>${COMMON_TAGS.map(t=>`<option value="${t}" ${f.tag===t?'selected':''}>${esc(t)}</option>`).join('')}`;
@@ -707,21 +688,33 @@ async function showMedById(id){
   showMeditatorDetail(medProfile(data||p));
 }
 function nurtureById(id){ const p=MED_INDEX[id]; if(p) startNurturing({pid:p.id,name:p.full_name}); }
-function meditatorDetailRow(p){
-  const tags = (p.tags||[]).slice(0,4).map(t=>`<span class="badge gray" style="font-size:.68rem">${esc(t)}</span>`).join(' ');
-  const adv = [p.bsp_date&&`BSP: ${fmtD(p.bsp_date)}`, p.shoonya_date&&`Shoonya:${fmtD(p.shoonya_date)}`, p.samyama_date&&`Samyama:${fmtD(p.samyama_date)}`, p.guru_puja_date&&`Guru Puja:${fmtD(p.guru_puja_date)}`].filter(Boolean).join(' - ');
-  const wa = p.phone ? `https://wa.me/91${p.phone}?text=${encodeURIComponent(WA_MSG.meditator((p.full_name||'').split(' ')[0]))}` : null;
-  const nur = (MED_ASSIGN[p.id]||[]);
-  return `<div class="row">
-    ${p.photo_url?`<img class="av" src="${esc(p.photo_url)}" loading="lazy" alt="" onclick="showMedById('${p.id}')" onerror="this.style.display='none'">`:''}
-    <div class="grow" style="cursor:pointer" onclick="showMedById('${p.id}')">
-      <div class="name">${esc(p.full_name)} ${tags}</div>
-      <div class="sub">IE: ${fmtD(p.ie_date)} - ${centerName(p.center_id)}${adv?' - '+adv:''}${nur.length?` · 👤 ${esc(nur.join(', '))}`:''} <span class="muted" style="font-size:.7rem">· tap for profile</span></div>
+
+// Shared compact list row: photo/initial + name, then Call / Msg / (extra) actions.
+// onclick is the raw JS to open the profile; it's escaped here for a double-quoted attribute.
+function simpleRow(o){
+  const oc = (o.onclick||'').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  const initial = esc((o.name||'?').trim().charAt(0).toUpperCase() || '?');
+  const wa = o.phone ? `https://wa.me/91${o.phone}?text=${encodeURIComponent(o.msg||'')}` : null;
+  const avatar = o.photo
+    ? `<img class="av" src="${esc(o.photo)}" loading="lazy" alt="" onclick="${oc}" onerror="this.style.visibility='hidden'">`
+    : `<div class="av avph" onclick="${oc}">${initial}</div>`;
+  return `<div class="row simple">
+    ${o.cb||''}
+    ${avatar}
+    <div class="grow" style="cursor:pointer" onclick="${oc}"><div class="name">${esc(o.name||'?')}${o.badge?' '+o.badge:''}</div></div>
+    <div class="acts">
+      ${o.phone?`<a class="actbtn call" href="tel:+91${o.phone}">Call</a>`:''}
+      ${wa?`<a class="actbtn msg" href="${wa}" target="_blank">Msg</a>`:''}
+      ${o.extra||''}
     </div>
-    ${p.phone?`<a class="iconbtn call" href="tel:+91${p.phone}">Call</a>`:''}
-    ${wa?`<a class="iconbtn wa" href="${wa}" target="_blank">WA</a>`:''}
-    ${isCoord()?`<button class="btn small ghost" onclick="quickAssign('${p.id}','${esc(p.full_name)}')">Assign</button>`:''}
   </div>`;
+}
+
+function meditatorDetailRow(p){
+  const onclk = `showMedById('${p.id}')`;
+  const msg = WA_MSG.meditator((p.full_name||'').split(' ')[0]);
+  const extra = isCoord() ? `<button class="actbtn assign" onclick="quickAssign('${p.id}','${esc(p.full_name)}')">Assign</button>` : '';
+  return simpleRow({photo:p.photo_url, name:p.full_name, onclick:onclk, phone:p.phone, msg, extra});
 }
 
 // Shared full-profile card (used by New Meditators + Meditators rows)
@@ -1171,37 +1164,20 @@ async function renderAdvancedList(tabBar){
 }
 
 function advCompletedRow(p, col, label){
-  const wa = p.phone ? `https://wa.me/91${p.phone}?text=${encodeURIComponent(WA_MSG.advanced(p.full_name.split(' ')[0]))}` : null;
-  const onclk = `showPersonProfile(${JSON.stringify(personToProfile(p)).replace(/'/g,"&#39;")})`;
-  return `<div class="row">
-    ${p.photo_url?`<img class="av" src="${esc(p.photo_url)}" loading="lazy" alt="" onclick='${onclk}' onerror="this.style.display='none'">`:''}
-    <div class="grow" style="cursor:pointer" onclick='${onclk}'>
-      <div class="name">${esc(p.full_name)}</div>
-      <div class="sub">${esc(label)}: ${fmtD(p[col])} - ${centerName(p.center_id)} <span class="muted" style="font-size:.7rem">· tap for profile</span></div>
-    </div>
-    ${p.phone?`<a class="iconbtn call" href="tel:+91${p.phone}">Call</a>`:''}
-    ${wa?`<a class="iconbtn wa" href="${wa}" target="_blank">WA</a>`:''}
-    ${isCoord()?`<button class="btn small ghost" onclick='startNurturing(${JSON.stringify({pid:p.id,name:p.full_name}).replace(/'/g,"&#39;")})'>Assign</button>`:''}
-  </div>`;
+  const msg = WA_MSG.advanced((p.full_name||'').split(' ')[0]);
+  const onclk = `showPersonProfile(${JSON.stringify(personToProfile(p))})`;
+  const extra = isCoord() ? `<button class="actbtn assign" onclick='startNurturing(${JSON.stringify({pid:p.id,name:p.full_name}).replace(/"/g,'&quot;').replace(/'/g,"&#39;")})'>Assign</button>` : '';
+  return simpleRow({photo:p.photo_url, name:p.full_name, onclick:onclk, phone:p.phone, msg, extra});
 }
 
 function advInterestRow(r, label){
   const p = r.people || {};
-  const wa = p.phone ? `https://wa.me/91${p.phone}?text=${encodeURIComponent('Namaskaram '+(p.full_name||'').split(' ')[0]+' -- You had expressed interest in '+label+'. We would love to help you register. When is a good time to talk?')}` : null;
-  const statusSel = isCoord() ? `<select style="width:auto;font-size:.75rem;padding:4px 6px" onchange="setInterestStatus('${r.id}',this.value)">
+  const msg = 'Namaskaram '+(p.full_name||'').split(' ')[0]+' -- You had expressed interest in '+label+'. We would love to help you register. When is a good time to talk?';
+  const extra = isCoord() ? `<select class="actbtn-sel" onchange="setInterestStatus('${r.id}',this.value)">
     ${['new','contacted','registered','done','dropped'].map(s=>`<option value="${s}" ${r.status===s?'selected':''}>${s}</option>`).join('')}
   </select>` : '';
-  const onclk = `showPersonProfile(${JSON.stringify(personToProfile(p)).replace(/'/g,"&#39;")})`;
-  return `<div class="row">
-    ${p.photo_url?`<img class="av" src="${esc(p.photo_url)}" loading="lazy" alt="" onclick='${onclk}' onerror="this.style.display='none'">`:''}
-    <div class="grow" style="cursor:pointer" onclick='${onclk}'>
-      <div class="name">${esc(p.full_name||'?')} <span class="badge ${r.status==='registered'||r.status==='done'?'green':'gray'}">${esc(r.status)}</span></div>
-      <div class="sub">Interested: ${fmtD(r.interest_date)} - ${centerName(p.center_id)}${r.notes?' - '+esc(r.notes):''} <span class="muted" style="font-size:.7rem">· tap for profile</span></div>
-    </div>
-    ${p.phone?`<a class="iconbtn call" href="tel:+91${p.phone}">Call</a>`:''}
-    ${wa?`<a class="iconbtn wa" href="${wa}" target="_blank">WA</a>`:''}
-    ${statusSel}
-  </div>`;
+  const onclk = `showPersonProfile(${JSON.stringify(personToProfile(p))})`;
+  return simpleRow({photo:p.photo_url, name:p.full_name, onclick:onclk, phone:p.phone, msg, extra});
 }
 
 function openAddInterest(program){
