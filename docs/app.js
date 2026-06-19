@@ -656,8 +656,9 @@ async function renderNewMeditators(tabBar){
   const f = PF.new_meditator;
   const centerOpts = `<option value="">All Centers</option>${CENTERS.map(c=>`<option value="${c.id}" ${f.center===c.id?'selected':''}>${c.name}</option>`).join('')}`;
   const activeF = [f.center,f.dateFrom,f.dateTo,f.search].filter(Boolean).length;
-  // Row 1: section dropdown + Message + Add on one line · filters collapsed by default
-  let h = `<div class="ptoolbar">${tabBar}
+  // Row 1: big section heading · Row 2: Message + Add · filters collapsed by default
+  let h = tabBar;
+  h += `<div class="subbar">
     <details class="menu"><summary class="btn small green">✉️ Msg ▾</summary>
       <div class="menu-pop">
         <button class="btn small green" onclick="newMedMessageAll()">✉️ Message all shown</button>
