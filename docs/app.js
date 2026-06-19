@@ -406,6 +406,7 @@ const personToProfile = p => ({n:p.full_name,ph:p.phone,email:p.email,occ:p.occu
 let CURRENT_VIEW = 'today';
 function go(v){
   CURRENT_VIEW = v;
+  setActionBar('');   // each screen re-populates its own actions (or leaves it hidden)
   document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('active', b.dataset.v===v));
   const map={today:renderToday, people:renderPeople, vols:renderVols,
     insights:renderInsights, admin:renderAdmin, profile:renderProfile};
@@ -434,6 +435,48 @@ function modal(html){
        <button class="x" onclick="closeModal()">x</button>${html}</div></div>`;
 }
 function closeModal(){ $('modal-root').innerHTML=''; }
+
+/* ---------------- Bottom action bar + pill tabs (mobile-clean UI) ---------------- */
+// Fill + show the fixed bottom action bar (above the nav), or hide it when empty.
+function setActionBar(html){
+  const b=$('actionbar'), app=$('app'); if(!b) return;
+  if(html){ b.innerHTML=html; b.classList.remove('hidden'); if(app) app.classList.add('has-actionbar'); }
+  else { b.innerHTML=''; b.classList.add('hidden'); if(app) app.classList.remove('has-actionbar'); }
+}
+// Sticky pill tabs: items=[[value,label],...]; fn=name of function called with the value.
+function pillNav(items, cur, fn){
+  return `<div class="pilltabs">${items.map(([v,l])=>
+    `<button class="${cur===v?'on':''}" onclick="${fn}('${v}')">${l}</button>`).join('')}</div>`;
+}
+// Bottom-sheet style chooser: items=[[label, onclickJS],...] rendered as full-width buttons.
+function actionSheet(title, items){
+  modal(`<h3>${title}</h3>`+items.map(o=>`<button class="btn block" style="margin-top:8px" onclick="${o[1]}">${o[0]}</button>`).join(''));
+}
+// Per-section Message / Add sheets used by the bottom action bar.
+function abMsg(kind){
+  const M={
+    today:['✉️ Message','✉️ Message all (my people)','openMessageAll()','📝 Templates','openTemplates(\'nurture\')'],
+    new_meditator:['✉️ Message','✉️ Message all shown','newMedMessageAll()','📝 Templates','openTemplates(\'new_meditator\')'],
+    meditator:['✉️ Message','✉️ Message all shown','medMessageAll(\'meditator\')','📝 Templates','openTemplates(\'meditator\')'],
+    advanced:['✉️ Message','✉️ Message all shown','openMsgAll(ADV_MSG.aud,ADV_MSG.people,ADV_MSG.title)','📝 Templates','openTemplates(ADV_MSG.aud)'],
+    volunteer:['✉️ Message','✉️ Message all shown','volMessageAll()','📝 Templates','openTemplates(\'volunteer\')']
+  }[kind];
+  if(!M) return;
+  const items=[[M[1],M[2]],[M[3],M[4]]];
+  if(kind==='meditator') items.splice(1,0,['🙏 Satsang invite','medMessageAll(\'satsang\')']);
+  actionSheet(M[0], items);
+}
+function abAdd(kind){
+  if(kind==='people') return actionSheet('＋ Add', [['📥 Import','openImport()'],['➕ Add person','openAddPerson()']]);
+  if(kind==='advanced') return actionSheet('📥 Import', [['From Excel / Sheet','advImport(\'excel\',PF.advanced.program)'],['From paper form','advImport(\'paper\',PF.advanced.program)']]);
+  if(kind==='volunteer') return actionSheet('＋ Add', [['📄 Paper Form (OCR)','openPaperOCR()'],['➕ Add interest','openVolForm()'],['📝 Google Form','openGFormHelp()']]);
+}
+// Standard two-button bar: primary Message + ghost Add/Import (Add hidden for non-coordinators).
+function actionBar(msgKind, addKind, addLabel){
+  const msg = `<button class="btn primary" onclick="abMsg('${msgKind}')">✉️ Message all</button>`;
+  const add = (addKind && isCoord()) ? `<button class="btn ghost" onclick="abAdd('${addKind}')">${addLabel||'＋ Add'}</button>` : '';
+  setActionBar(msg+add);
+}
 
 /* ============================================================
    TODAY -- calls due / overdue
@@ -476,10 +519,7 @@ async function renderToday(){
   DEFAULT_NURTURE_TPL = (await tplsFor('nurture'))[0]?.body || null;
 
   let h = '';
-  h += `<div style="display:flex;gap:8px;margin:6px 0;flex-wrap:wrap">
-    <button class="btn small green" onclick="openMessageAll()">✉️ Message all</button>
-    <button class="btn small ghost" onclick="openTemplates()">📝 Templates</button>
-  </div>`;
+  actionBar('today');   // ✉️ Message all (+ Templates) in the bottom action bar
   if(!calls.length){
     h += `<div class="card"><div class="empty"><div class="empty-anim" id="today-empty"></div>🎉 All caught up — no calls due.</div></div>`;
   } else {
@@ -635,14 +675,11 @@ async function renderPeople(tab){
   // Ashram/SSB volunteers moved to the Volunteers tab.
   if(PEOPLE_TAB==='volunteer_nurture') PEOPLE_TAB = 'new_meditator';
 
-  const tabDefs = [
-    ['new_meditator','🌱 New Meditators'],
+  const tabBar = pillNav([
+    ['new_meditator','🌱 New'],
     ['meditator','🧘 Meditators'],
-    ['advanced','⭐ Advanced Programs']
-  ];
-
-  const tabBar = `<select class="section-sel" onchange="renderPeople(this.value)">${tabDefs.map(([v,l])=>
-    `<option value="${v}" ${PEOPLE_TAB===v?'selected':''}>${l}</option>`).join('')}</select>`;
+    ['advanced','⭐ Advanced']
+  ], PEOPLE_TAB, 'renderPeople');
 
   if(PEOPLE_TAB==='new_meditator') await renderNewMeditators(tabBar);
   else if(PEOPLE_TAB==='meditator') await renderMeditatorsList(tabBar);
@@ -656,20 +693,9 @@ async function renderNewMeditators(tabBar){
   const f = PF.new_meditator;
   const centerOpts = `<option value="">All Centers</option>${CENTERS.map(c=>`<option value="${c.id}" ${f.center===c.id?'selected':''}>${c.name}</option>`).join('')}`;
   const activeF = [f.center,f.dateFrom,f.dateTo,f.search].filter(Boolean).length;
-  // Row 1: big section heading · Row 2: Message + Add · filters collapsed by default
+  // Pills (sticky) on top; Message/Add live in the bottom action bar; filters collapsed by default
   let h = tabBar;
-  h += `<div class="subbar">
-    <details class="menu"><summary class="btn small green">✉️ Msg ▾</summary>
-      <div class="menu-pop">
-        <button class="btn small green" onclick="newMedMessageAll()">✉️ Message all shown</button>
-        <button class="btn small ghost" onclick="openTemplates('new_meditator')">📝 Templates</button>
-      </div></details>
-    ${isCoord()?`<details class="menu"><summary class="btn small ghost">＋ Add ▾</summary>
-      <div class="menu-pop">
-        <button class="btn small ghost" onclick="openImport()">📥 Import</button>
-        <button class="btn small ghost" onclick="openAddPerson()">➕ Add person</button>
-      </div></details>`:''}
-  </div>`;
+  actionBar('new_meditator','people');
   const nmRanged = !!(f.dateFrom||f.dateTo);
   h += `<details class="card vfilters">
     <summary>🔍 Filters &amp; date range${activeF?` <span class="badge">${activeF}</span>`:''}</summary>
@@ -781,22 +807,10 @@ async function renderMeditatorsList(tabBar){
 
   const activeF = [f.center,f.tag,f.dateFrom,f.dateTo,f.search].filter(Boolean).length;
   let h = tabBar;
-  h += `<div class="subbar">
-    <details class="menu"><summary class="btn small green">✉️ Msg ▾</summary>
-      <div class="menu-pop">
-        <button class="btn small green" onclick="medMessageAll('meditator')">✉️ Message all shown</button>
-        <button class="btn small ghost" onclick="medMessageAll('satsang')">🙏 Satsang invite</button>
-        <button class="btn small ghost" onclick="openTemplates('meditator')">📝 Templates</button>
-      </div></details>
-    ${isCoord()?`<details class="menu"><summary class="btn small ghost">＋ Add ▾</summary>
-      <div class="menu-pop">
-        <button class="btn small ghost" onclick="openImport()">📥 Import</button>
-        <button class="btn small ghost" onclick="openAddPerson()">➕ Add person</button>
-      </div></details>`:''}
-    <select class="viewsel" onchange="MED_SCOPE=this.value;MED_SCOPE_SET=true;renderPeople()">
-      <option value="mine" ${MED_SCOPE==='mine'?'selected':''}>🙋 My meditators</option>
-      <option value="all" ${MED_SCOPE==='all'?'selected':''}>🧘 All meditators</option>
-    </select>
+  actionBar('meditator','people');
+  h += `<div class="seg">
+    <button class="${MED_SCOPE==='mine'?'on':''}" onclick="medScope('mine')">🙋 My meditators</button>
+    <button class="${MED_SCOPE==='all'?'on':''}" onclick="medScope('all')">🧘 All meditators</button>
   </div>`;
 
   h += `<details class="card vfilters" ${activeF?'open':''}>
@@ -840,6 +854,7 @@ async function renderMeditatorsList(tabBar){
   bulkMount('med', $('med-host'), rows, {externalRange:true, rowFn:meditatorDetailRow, idOf:p=>p.id, personOf:p=>({full_name:p.full_name,phone:p.phone}), aud:'meditator', assignable:true});
 }
 let MED_ALL = [], MED_SCOPE='all', MED_ASSIGN={}, MY_MED_IDS=new Set();
+function medScope(v){ MED_SCOPE=v; MED_SCOPE_SET=true; renderPeople(); }
 function medFilter(){
   const f = PF.meditator, s = (f.search||'').toLowerCase().trim(), sd = s.replace(/\D/g,'');
   return MED_ALL.filter(p=>{
@@ -1310,27 +1325,17 @@ async function renderAdvancedList(tabBar){
   const tplAud = ctx;
   const activeF = [f.center,f.search].filter(Boolean).length;
   const progEmoji = {bsp:'🌀', shoonya:'🕉️', samyama:'🧘', guru_puja:'🙏'};
-  // Row 1: section dropdown + program · Row 2: view dropdown + Message + Import · Row 3: filters
-  let h = `<div class="ptoolbar">${tabBar}
-      <select style="width:auto;flex-shrink:0" onchange="PF.advanced.program=this.value;renderPeople()">
+  // Pills (sticky) · program + view selectors · Message/Import in the bottom action bar
+  let h = tabBar;
+  h += `<div class="subrow">
+      <select onchange="PF.advanced.program=this.value;renderPeople()">
         ${ADV_PROGS.map(([v,l])=>`<option value="${v}" ${f.program===v?'selected':''}>${progEmoji[v]||''} ${l}</option>`).join('')}</select>
-  </div>`;
-  h += `<div class="subbar oneline">
-      <select style="width:auto" onchange="advSetView(this.value)">
+      <select onchange="advSetView(this.value)">
         <option value="completed_week" ${(f.view==='completed'&&f.window==='week')?'selected':''}>✅ New this week</option>
         <option value="completed_all" ${(f.view==='completed'&&f.window!=='week')?'selected':''}>✅ All</option>
         <option value="interested" ${f.view==='interested'?'selected':''}>✋ Interested</option></select>
-      <details class="menu"><summary class="btn small green">✉️<span class="lbl"> Msg</span> ▾</summary>
-        <div class="menu-pop">
-          <button class="btn small green" onclick="openMsgAll(ADV_MSG.aud,ADV_MSG.people,ADV_MSG.title)">✉️ Message all shown</button>
-          <button class="btn small ghost" onclick="openTemplates('${tplAud}')">📝 Templates</button>
-        </div></details>
-      ${isCoord()?`<details class="menu"><summary class="btn small ghost">📥<span class="lbl"> Import</span> ▾</summary>
-        <div class="menu-pop">
-          <button class="btn small ghost" onclick="advImport('excel','${f.program}')">From Excel / Sheet</button>
-          <button class="btn small ghost" onclick="advImport('paper','${f.program}')">From paper form</button>
-        </div></details>`:''}
   </div>`;
+  actionBar('advanced','advanced','📥 Import');
   h += `<details class="card vfilters" ${activeF?'open':''}>
     <summary>🔍 Filters &amp; range${activeF?` <span class="badge">${activeF}</span>`:''}</summary>
     <input placeholder="🔍 Search name/phone" style="width:100%;margin-top:10px" value="${esc(f.search)}"
@@ -1912,26 +1917,13 @@ async function renderVols(){
 
   VOL_SHOWN = list.map(v=>({full_name:v.people?.full_name, phone:v.people?.phone})).filter(p=>p.phone);
 
-  let h = `<div class="ptoolbar wrap">
-    <select class="section-sel" onchange="volSection(this.value)">
-      <option value="new" ${VOL_TAB==='new'?'selected':''}>✨ New interest (${newCount})</option>
-      <option value="all" ${VOL_TAB==='all'?'selected':''}>🙌 All volunteers (${allCount})</option>
-      <option value="ssbiyc" ${VOL_TAB==='ssbiyc'?'selected':''}>🙏 SSB / IYC</option>
-      <option value="ie_completion" ${VOL_TAB==='ie_completion'?'selected':''}>🪷 IEO Completion (${icvCount})</option>
-    </select>
-    <details class="menu"><summary class="btn small green">✉️ Message ▾</summary>
-      <div class="menu-pop">
-        <button class="btn small green" onclick="volMessageAll()">✉️ Message all shown</button>
-        <button class="btn small ghost" onclick="openTemplates('volunteer')">📝 Templates</button>
-      </div></details>
-    <details class="menu"><summary class="btn small ghost">＋ Add ▾</summary>
-      <div class="menu-pop">
-        <button class="btn small ghost" onclick="openPaperOCR()">📄 Paper Form (OCR)</button>
-        <button class="btn small ghost" onclick="openVolForm()">➕ Add interest</button>
-        <button class="btn small ghost" onclick="openGFormHelp()">📝 Google Form</button>
-        ${SHORTLIST.length?`<button class="btn small green" onclick="shareShortlist()">📤 Share shortlist (${SHORTLIST.length})</button>`:''}
-      </div></details>
-  </div>`;
+  // Sticky pills for the volunteer sub-sections; Message/Add live in the bottom action bar.
+  let h = pillNav([
+    ['new',`✨ New (${newCount})`],
+    ['all',`🙌 All (${allCount})`],
+    ['ssbiyc','🙏 SSB/IYC'],
+    ['ie_completion',`🪷 IEO (${icvCount})`]
+  ], VOL_TAB, 'volSection');
 
   // IE Completion volunteer-interest folder (sorted by IE date, newest first)
   if(VOL_TAB==='ie_completion'){
@@ -1965,6 +1957,7 @@ async function renderVols(){
       <p class="muted" style="font-size:.78rem;margin-bottom:6px">People who ticked "Volunteer" on an IE completion form in Ishangam (Electronic City), segregated by center (from pincode). ${matched}/${rows.length} shown have a synced profile. Newest IE first.</p><div id="icv-host"></div></div>`;
     VOL_SHOWN = rows.map(r=>({full_name:r.full_name, phone:r.phone})).filter(p=>p.phone);
     view().innerHTML = h;
+    actionBar('volunteer');   // Message only (no Add for the IEO completion list)
     bulkMount('icv', $('icv-host'), rows, {pageSize:30, rowFn:r=>icvRow(r, profByPhone[r.phone]), idOf:r=>r.phone, personOf:r=>({full_name:r.full_name,phone:r.phone}), aud:'volunteer', assignable:false});
     return;
   }
@@ -1975,6 +1968,7 @@ async function renderVols(){
     const {acts, counts} = await ssbData();
     h += renderSSBIYCBody(acts, counts);
     view().innerHTML = h;
+    setActionBar('');   // browsing view — no bottom actions
     return;
   }
 
@@ -2017,6 +2011,7 @@ async function renderVols(){
     </details>
   <div class="card"><h2>${VOL_TAB==='new'?'New volunteer interest':'All existing volunteers'} <span class="badge">${list.length}</span></h2><div id="vol-host"></div></div>`;
   view().innerHTML = h;
+  actionBar('volunteer','volunteer');
   bulkMount('vol', $('vol-host'), list, {externalRange:true, rowFn:v=>volRow(v, histBy[v.person_id]||[]), idOf:v=>v.person_id, personOf:v=>({full_name:v.people?.full_name,phone:v.people?.phone}), aud:'volunteer', assignable:true});
 }
 function volSection(v){ if(v==='ssbiyc') SSB_NAV={org:'',type:'',name:'',year:null}; VOL_TAB=v; renderVols(); }
