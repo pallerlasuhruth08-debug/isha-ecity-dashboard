@@ -73,13 +73,19 @@ nav button.active .ico{transform:translateY(-2px) scale(1.18)}
 .iconbtn.call{background:#e6f0fb;color:#1d6fd0}
 .iconbtn.wa{background:#e3f7e9;color:#1faa55}
 /* section selector (New Meditators / Meditators / Advanced) */
-.section-sel{width:100%;font-weight:800;font-size:1.05rem;padding:12px 14px;border-radius:14px;
+/* keep room on the right for the dropdown arrow so it never overlaps the text */
+.section-sel{width:100%;font-weight:800;font-size:1.02rem;padding:12px 36px 12px 14px;border-radius:14px;
   border:1.5px solid var(--line);background-color:transparent;color:var(--ink);margin:8px 0}
 /* section dropdown + Msg + Add on a single row (stays one line on mobile) */
 .ptoolbar{display:flex;align-items:center;gap:7px;flex-wrap:nowrap;margin:8px 0}
-.ptoolbar .section-sel{flex:1;min-width:0;margin:0;font-size:.96rem;padding:11px 30px 11px 12px;background-position:right 8px center}
+.ptoolbar .section-sel{flex:1;min-width:0;margin:0;font-size:.95rem;padding:11px 32px 11px 12px;background-position:right 10px center}
 .ptoolbar .menu{flex-shrink:0}
 .ptoolbar .menu>summary{white-space:nowrap;padding:11px 12px}
+/* secondary toolbar row (Msg / Add / view selector) — wraps cleanly, menus open on-screen */
+.subbar{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin:8px 0}
+.subbar .viewsel{margin:0}
+/* toolbar dropdown menus open right-aligned so they never spill off the screen edge */
+.ptoolbar .menu-pop,.subbar .menu-pop{left:auto;right:0}
 /* simplified list row: photo + name + compact actions */
 .row.simple{gap:10px}
 .av.avph{display:flex;align-items:center;justify-content:center;font-weight:800;color:var(--accent);

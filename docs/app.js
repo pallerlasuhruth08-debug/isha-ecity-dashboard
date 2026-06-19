@@ -21,6 +21,10 @@ const view = () => $('view');
 const esc = s => (s ?? '').toString().replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const fmtD = d => d ? new Date(d).toLocaleDateString('en-IN', {day:'numeric',month:'short',year:'2-digit'}) : '--';
 const today = () => new Date().toISOString().slice(0,10);
+// Tidy a name from form data (ALL CAPS / lower) into clean Title Case for display.
+const cleanName = s => (s||'').toString().trim().toLowerCase()
+  .replace(/\s+/g,' ')
+  .replace(/(^|[\s.'-])([a-z])/g, (m,p,c)=>p+c.toUpperCase());
 
 function toast(m){ const t=$('toast'); t.textContent=m; t.classList.add('show');
   setTimeout(()=>t.classList.remove('show'), 2600); }
@@ -487,7 +491,7 @@ async function renderToday(){
       <div class="acc-body">${dueToday.length?'<div id="today-due-host"></div>':'<div class="empty">Nothing else due today.</div>'}</div></details>`;
   }
   if(upcoming?.length){
-    h += `<details class="acc"><summary>⏭️ Coming up <span class="badge">${upcoming.length}</span></summary><div class="acc-body">` + upcoming.map(c=>
+    h += `<details class="acc" open><summary>⏭️ Coming up <span class="badge">${upcoming.length}</span></summary><div class="acc-body">` + upcoming.map(c=>
       `<div class="row"><div class="grow"><div class="name">${esc(c.journeys.people.full_name)}</div>
        <div class="sub">${JT[c.journeys.type]} - Call ${c.call_no} - due ${fmtD(c.due_date)}</div></div></div>`).join('') + '</div></details>';
   }
@@ -652,14 +656,15 @@ async function renderNewMeditators(tabBar){
   const f = PF.new_meditator;
   const centerOpts = `<option value="">All Centers</option>${CENTERS.map(c=>`<option value="${c.id}" ${f.center===c.id?'selected':''}>${c.name}</option>`).join('')}`;
   const activeF = [f.center,f.dateFrom,f.dateTo,f.search].filter(Boolean).length;
-  // section dropdown + Message + Add all on one row (incl. mobile)
-  let h = `<div class="ptoolbar">${tabBar}
-    <details class="menu"><summary class="btn small green">✉️<span class="lbl"> Msg</span> ▾</summary>
+  // Row 1: section dropdown alone · Row 2: Message + Add · Row 3: filters (open)
+  let h = `<div class="ptoolbar">${tabBar}</div>
+  <div class="subbar">
+    <details class="menu"><summary class="btn small green">✉️ Msg ▾</summary>
       <div class="menu-pop">
         <button class="btn small green" onclick="newMedMessageAll()">✉️ Message all shown</button>
         <button class="btn small ghost" onclick="openTemplates('new_meditator')">📝 Templates</button>
       </div></details>
-    ${isCoord()?`<details class="menu"><summary class="btn small ghost">＋<span class="lbl"> Add</span> ▾</summary>
+    ${isCoord()?`<details class="menu"><summary class="btn small ghost">＋ Add ▾</summary>
       <div class="menu-pop">
         <button class="btn small ghost" onclick="openImport()">📥 Import</button>
         <button class="btn small ghost" onclick="openAddPerson()">➕ Add person</button>
@@ -667,10 +672,10 @@ async function renderNewMeditators(tabBar){
   </div>`;
   h += `<details class="card vfilters" open>
     <summary>🔍 Filters &amp; date range${activeF?` <span class="badge">${activeF}</span>`:''}</summary>
-    <input placeholder="🔍 Search name/phone" style="width:100%;margin-top:10px" value="${esc(f.search)}"
+    <input placeholder="🔍 Search name or phone" style="width:100%;margin-top:10px" value="${esc(f.search)}"
       oninput="PF.new_meditator.search=this.value" onkeydown="if(event.key==='Enter')renderPeople()">
+    <select style="width:100%;margin-top:8px" onchange="PF.new_meditator.center=this.value;renderPeople()">${centerOpts}</select>
     <div class="filterrow">
-      <select onchange="PF.new_meditator.center=this.value;renderPeople()">${centerOpts}</select>
       <span class="daterange" title="IE date range (leave 'to' blank for a single date)">
         <input type="date" value="${f.dateFrom}" onchange="PF.new_meditator.dateFrom=this.value;renderPeople()">
         <span class="sep">to</span>
@@ -772,9 +777,9 @@ async function renderMeditatorsList(tabBar){
   const tagOpts = `<option value="">All Tags</option>${COMMON_TAGS.map(t=>`<option value="${t}" ${f.tag===t?'selected':''}>${esc(t)}</option>`).join('')}`;
 
   const activeF = [f.center,f.tag,f.dateFrom,f.dateTo,f.search].filter(Boolean).length;
-  let h = tabBar;
-  h += `<div style="display:flex;gap:8px;margin:6px 0;flex-wrap:wrap;align-items:center">
-    <details class="menu"><summary class="btn small green">✉️ Message ▾</summary>
+  let h = `<div class="ptoolbar">${tabBar}</div>`;
+  h += `<div class="subbar">
+    <details class="menu"><summary class="btn small green">✉️ Msg ▾</summary>
       <div class="menu-pop">
         <button class="btn small green" onclick="medMessageAll('meditator')">✉️ Message all shown</button>
         <button class="btn small ghost" onclick="medMessageAll('satsang')">🙏 Satsang invite</button>
@@ -1301,17 +1306,18 @@ async function renderAdvancedList(tabBar){
   const ctx = f.view==='completed' ? 'adv_completed' : 'adv_interested';
   const tplAud = ctx;
   const activeF = [f.center,f.search].filter(Boolean).length;
-  let h = tabBar;
   const progEmoji = {bsp:'🌀', shoonya:'🕉️', samyama:'🧘', guru_puja:'🙏'};
-  // primary nav: program + view (+ window), then Message▾ / Import▾ menus
-  h += `<div style="display:flex;gap:8px;margin:6px 0;flex-wrap:wrap;align-items:center">
-      <select style="width:auto" onchange="PF.advanced.program=this.value;renderPeople()">
+  // Row 1: section dropdown + program · Row 2: view dropdown + Message + Import · Row 3: filters
+  let h = `<div class="ptoolbar">${tabBar}
+      <select style="width:auto;flex-shrink:0" onchange="PF.advanced.program=this.value;renderPeople()">
         ${ADV_PROGS.map(([v,l])=>`<option value="${v}" ${f.program===v?'selected':''}>${progEmoji[v]||''} ${l}</option>`).join('')}</select>
+  </div>`;
+  h += `<div class="subbar">
       <select style="width:auto" onchange="advSetView(this.value)">
         <option value="completed_week" ${(f.view==='completed'&&f.window==='week')?'selected':''}>✅ Completed · new this week</option>
         <option value="completed_all" ${(f.view==='completed'&&f.window!=='week')?'selected':''}>✅ Completed · all</option>
         <option value="interested" ${f.view==='interested'?'selected':''}>✋ Interested</option></select>
-      <details class="menu"><summary class="btn small green">✉️ Message ▾</summary>
+      <details class="menu"><summary class="btn small green">✉️ Msg ▾</summary>
         <div class="menu-pop">
           <button class="btn small green" onclick="openMsgAll(ADV_MSG.aud,ADV_MSG.people,ADV_MSG.title)">✉️ Message all shown</button>
           <button class="btn small ghost" onclick="openTemplates('${tplAud}')">📝 Templates</button>
@@ -1637,12 +1643,8 @@ function icvRow(r, prof){
   const onclk = prof ? `showPersonProfile(${JSON.stringify(personToProfile(prof))})` : '';
   // Assign only when a synced profile exists (we need a person id to tag a nurturer)
   const assign = (isCoord() && prof) ? `<button class="actbtn assign" onclick="quickAssign('${prof.id}','${esc(prof.full_name||r.full_name||'')}')">Assign</button>` : '';
-  // status tracking lives in a compact per-row menu so the row stays clean
-  const statusMenu = isCoord() ? `<details class="menu"><summary class="actbtn log">⋯</summary><div class="menu-pop">
-      <label class="muted" style="font-size:.72rem;margin:0">Status: <b>${esc(r.status||'new')}</b></label>
-      <select onchange="setIcvStatus('${r.id}',this.value)">${['new','contacted','active','done','dropped'].map(s=>`<option value="${s}" ${r.status===s?'selected':''}>${s}</option>`).join('')}</select>
-    </div></details>` : '';
-  return simpleRow({photo:prof?.photo_url, name:prof?.full_name||r.full_name, onclick:onclk, phone:ph, msg, extra:assign+statusMenu});
+  // names from the IE completion form can be ALL-CAPS / inconsistent — show clean Title Case
+  return simpleRow({photo:prof?.photo_url, name:cleanName(prof?.full_name||r.full_name), onclick:onclk, phone:ph, msg, extra:assign});
 }
 async function setIcvStatus(id, status){ const {error}=await sb.from('ie_completion_volunteer').update({status}).eq('id', id); toast(error?error.message:'Updated'); }
 
@@ -1947,12 +1949,12 @@ async function renderVols(){
     if(VFILTER.center){ rows = rows.filter(r=>derivedCenter(profByPhone[r.phone])===VFILTER.center); }
     const matched = rows.filter(r=>profByPhone[r.phone]).length;
     h += `<div class="card" style="padding:10px">
-      <div class="choices" style="gap:6px;margin-bottom:8px">
-        <select style="width:auto" onchange="VFILTER.center=this.value;renderVols()">
+      <div class="filterrow" style="margin-top:0">
+        <select style="flex:0 0 auto" onchange="VFILTER.center=this.value;renderVols()">
           <option value="">All centers</option>${CENTERS.map(c=>`<option value="${c.id}" ${VFILTER.center===c.id?'selected':''}>${c.name}</option>`).join('')}</select>
+        <input placeholder="🔍 Search name or phone" style="flex:1;min-width:150px" value="${esc(VFILTER.search||'')}"
+          oninput="VFILTER.search=this.value" onkeydown="if(event.key==='Enter')renderVols()">
       </div>
-      <input placeholder="Search name/phone" style="width:100%" value="${esc(VFILTER.search||'')}"
-        oninput="VFILTER.search=this.value" onkeydown="if(event.key==='Enter')renderVols()">
     </div>`;
     h += `<div class="card"><h2>🪷 IEO Completion Form — Volunteer Interest <span class="badge">${rows.length}</span></h2>
       <p class="muted" style="font-size:.78rem;margin-bottom:6px">People who ticked "Volunteer" on an IE completion form in Ishangam (Electronic City), segregated by center (from pincode). ${matched}/${rows.length} shown have a synced profile. Newest IE first.</p><div id="icv-host"></div></div>`;
