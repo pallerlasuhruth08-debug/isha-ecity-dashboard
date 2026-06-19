@@ -188,7 +188,7 @@ async function boot(){
       adminBtn.innerHTML='<span class="ico">🙏</span><span>Profile</span>'; }
   }
   $('quotebar').classList.remove('hidden');
-  $('quotebar').innerHTML = `<span class="qlotus">${LOTUS_MINI}</span><span class="qtext">“${esc(VOL_QUOTE)}”</span><span class="qexp">tap ›</span>`;
+  $('quotebar').innerHTML = `<span class="qlotus">${LOTUS_MINI}</span><span class="qtext">“${esc(VOL_QUOTE)}” <span class="qby">— Sadhguru</span></span><span class="qexp">tap ›</span>`;
   // load AutoAnimate (fluid list add/remove); harmless if it fails — lists fall back to a CSS stagger
   loadScript(CDN.autoanimate).then(()=>{ AA = window.autoAnimate || (window.formkit&&window.formkit.autoAnimate) || null; }).catch(()=>{});
   loadScript(CDN.lottie).then(()=>{ LOTTIE = window.lottie||null; }).catch(()=>{});
@@ -254,7 +254,7 @@ function dismissQuote(){
 }
 // lotus loader — plays the lotus-blooming video on a loop while loading
 const LOTUS_LOADER = `<div class="lotus-loader">
-  <video class="ll-video" src="lotus-loom.mp4" autoplay loop muted playsinline preload="auto"
+  <video class="ll-video" src="lotus-loom.mp4?v=41" autoplay loop muted playsinline preload="auto"
     onerror="this.closest('.lotus-loader').classList.add('ll-fallback')"></video></div>`;
 // quick celebratory lotus + check pulse on a successful action
 function celebrate(label){
@@ -483,7 +483,7 @@ async function renderToday(){
       h += `<details class="acc" open><summary>⚠️ Overdue <span class="badge red">${overdue.length}</span></summary>
         <div class="acc-body"><div id="today-od-host"></div></div></details>`;
     }
-    h += `<details class="acc" ${overdue.length?'':'open'}><summary>📞 Due today <span class="badge">${dueToday.length}</span></summary>
+    h += `<details class="acc" open><summary>📞 Due today <span class="badge">${dueToday.length}</span></summary>
       <div class="acc-body">${dueToday.length?'<div id="today-due-host"></div>':'<div class="empty">Nothing else due today.</div>'}</div></details>`;
   }
   if(upcoming?.length){
@@ -654,12 +654,12 @@ async function renderNewMeditators(tabBar){
   const activeF = [f.center,f.dateFrom,f.dateTo,f.search].filter(Boolean).length;
   // section dropdown + Message + Add all on one row (incl. mobile)
   let h = `<div class="ptoolbar">${tabBar}
-    <details class="menu"><summary class="btn small green">✉️ Msg ▾</summary>
+    <details class="menu"><summary class="btn small green">✉️<span class="lbl"> Msg</span> ▾</summary>
       <div class="menu-pop">
         <button class="btn small green" onclick="newMedMessageAll()">✉️ Message all shown</button>
         <button class="btn small ghost" onclick="openTemplates('new_meditator')">📝 Templates</button>
       </div></details>
-    ${isCoord()?`<details class="menu"><summary class="btn small ghost">＋ Add ▾</summary>
+    ${isCoord()?`<details class="menu"><summary class="btn small ghost">＋<span class="lbl"> Add</span> ▾</summary>
       <div class="menu-pop">
         <button class="btn small ghost" onclick="openImport()">📥 Import</button>
         <button class="btn small ghost" onclick="openAddPerson()">➕ Add person</button>
@@ -669,16 +669,17 @@ async function renderNewMeditators(tabBar){
     <summary>🔍 Filters &amp; date range${activeF?` <span class="badge">${activeF}</span>`:''}</summary>
     <input placeholder="🔍 Search name/phone" style="width:100%;margin-top:10px" value="${esc(f.search)}"
       oninput="PF.new_meditator.search=this.value" onkeydown="if(event.key==='Enter')renderPeople()">
-    <div class="choices" style="flex-wrap:wrap;gap:6px;margin-top:8px;align-items:center">
-      <select style="width:auto" onchange="PF.new_meditator.center=this.value;renderPeople()">${centerOpts}</select>
-      <input type="date" title="IE date from (or single date)" value="${f.dateFrom}"
-        onchange="PF.new_meditator.dateFrom=this.value;renderPeople()" style="width:130px">
-      <input type="date" title="IE date to (leave blank for a single date)" value="${f.dateTo}"
-        onchange="PF.new_meditator.dateTo=this.value;renderPeople()" style="width:130px">
-      <button class="btn small ghost" onclick="renderPeople()">Search</button>
+    <div class="filterrow">
+      <select onchange="PF.new_meditator.center=this.value;renderPeople()">${centerOpts}</select>
+      <span class="daterange" title="IE date range (leave 'to' blank for a single date)">
+        <input type="date" value="${f.dateFrom}" onchange="PF.new_meditator.dateFrom=this.value;renderPeople()">
+        <span class="sep">to</span>
+        <input type="date" value="${f.dateTo}" onchange="PF.new_meditator.dateTo=this.value;renderPeople()">
+      </span>
+      <button class="btn small green" onclick="renderPeople()">Search</button>
       ${activeF?`<button class="btn small gray" onclick="PF.new_meditator.dateFrom='';PF.new_meditator.dateTo='';PF.new_meditator.search='';PF.new_meditator.center='';renderPeople()">Clear</button>`:''}
     </div>
-    <p class="muted" style="font-size:.76rem;margin-top:6px">Pick an IE date (or a from–to range) to load new meditators for that period — or search by name/phone.</p>
+    <p class="muted" style="font-size:.76rem;margin-top:8px">Pick an IE date (or a from–to range) to load new meditators for that period — or search by name/phone.</p>
   </details>`;
 
   // Date-gate: load nothing until a date (or search) is chosen — keeps it fast.
@@ -794,15 +795,14 @@ async function renderMeditatorsList(tabBar){
     <summary>🔍 Filters &amp; range${activeF?` <span class="badge">${activeF}</span>`:''}</summary>
     <input id="med-search" placeholder="🔍 Search by name or phone" style="width:100%;margin-top:10px" value="${esc(f.search)}"
       oninput="PF.meditator.search=this.value;medSearchLive()">
-    <div class="choices" style="flex-wrap:wrap;gap:6px;margin-top:8px">
-      <select style="width:auto" onchange="PF.meditator.center=this.value;renderPeople()">
-        ${centerOpts}</select>
-      <select style="width:auto" onchange="PF.meditator.tag=this.value;renderPeople()">
-        ${tagOpts}</select>
-      <input type="date" title="IE date from" value="${f.dateFrom}"
-        onchange="PF.meditator.dateFrom=this.value;renderPeople()" style="width:130px">
-      <input type="date" title="IE date to" value="${f.dateTo}"
-        onchange="PF.meditator.dateTo=this.value;renderPeople()" style="width:130px">
+    <div class="filterrow">
+      <select onchange="PF.meditator.center=this.value;renderPeople()">${centerOpts}</select>
+      <select onchange="PF.meditator.tag=this.value;renderPeople()">${tagOpts}</select>
+      <span class="daterange" title="IE date range">
+        <input type="date" value="${f.dateFrom}" onchange="PF.meditator.dateFrom=this.value;renderPeople()">
+        <span class="sep">to</span>
+        <input type="date" value="${f.dateTo}" onchange="PF.meditator.dateTo=this.value;renderPeople()">
+      </span>
       ${activeF?`<button class="btn small gray" onclick="PF.meditator={center:'',tag:'',dateFrom:'',dateTo:'',search:''};renderPeople()">Clear filters</button>`:''}
     </div>
     ${rangeBlock('med','med-from','med-to')}
@@ -1907,19 +1907,19 @@ async function renderVols(){
 
   VOL_SHOWN = list.map(v=>({full_name:v.people?.full_name, phone:v.people?.phone})).filter(p=>p.phone);
 
-  let h = `<div style="display:flex;gap:8px;margin:6px 0;flex-wrap:wrap;align-items:center">
-    <select onchange="volSection(this.value)" style="width:auto;font-weight:700;min-width:180px">
+  let h = `<div class="ptoolbar">
+    <select class="section-sel" onchange="volSection(this.value)">
       <option value="new" ${VOL_TAB==='new'?'selected':''}>✨ New interest (${newCount})</option>
       <option value="all" ${VOL_TAB==='all'?'selected':''}>🙌 All volunteers (${allCount})</option>
       <option value="ssbiyc" ${VOL_TAB==='ssbiyc'?'selected':''}>🙏 SSB / IYC</option>
       <option value="ie_completion" ${VOL_TAB==='ie_completion'?'selected':''}>🪷 IEO Completion (${icvCount})</option>
     </select>
-    <details class="menu"><summary class="btn small green">✉️ Message ▾</summary>
+    <details class="menu"><summary class="btn small green">✉️<span class="lbl"> Msg</span> ▾</summary>
       <div class="menu-pop">
         <button class="btn small green" onclick="volMessageAll()">✉️ Message all shown</button>
         <button class="btn small ghost" onclick="openTemplates('volunteer')">📝 Templates</button>
       </div></details>
-    <details class="menu"><summary class="btn small ghost">＋ Add ▾</summary>
+    <details class="menu"><summary class="btn small ghost">＋<span class="lbl"> Add</span> ▾</summary>
       <div class="menu-pop">
         <button class="btn small ghost" onclick="openPaperOCR()">📄 Paper Form (OCR)</button>
         <button class="btn small ghost" onclick="openVolForm()">➕ Add interest</button>
@@ -1979,7 +1979,7 @@ async function renderVols(){
     <summary>🔍 Filters &amp; range${activeF?` <span class="badge">${activeF}</span>`:''}</summary>
     <input placeholder="🔍 Search name or phone" style="width:100%;margin-top:10px" value="${esc(VFILTER.search||'')}"
       oninput="VFILTER.search=this.value" onkeydown="if(event.key==='Enter')renderVols()">
-    <div class="choices" style="flex-wrap:wrap;gap:6px;margin-top:8px">
+    <div class="filterrow">
       <select style="width:auto" onchange="VFILTER.center=this.value;renderVols()">
         <option value="">All centers</option>${CENTERS.map(c=>`<option value="${c.id}" ${VFILTER.center===c.id?'selected':''}>${c.name}</option>`).join('')}</select>
       <select style="width:auto" onchange="VFILTER.activity=this.value;VFILTER.event='';renderVols()">

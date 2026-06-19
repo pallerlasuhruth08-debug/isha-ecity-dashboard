@@ -103,6 +103,11 @@ nav button.active .ico{transform:translateY(-2px) scale(1.18)}
   .acts{gap:5px}
   .actbtn{padding:7px 9px;font-size:.8rem;min-height:36px}
   .av,.av.avph{width:34px;height:34px}
+  /* keep the toolbar on one row but give the section name room: collapse Msg/Add to icons */
+  .ptoolbar{gap:6px}
+  .ptoolbar .menu>summary .lbl{display:none}
+  .ptoolbar .menu>summary{padding:11px 10px}
+  .ptoolbar .section-sel{font-size:.9rem;padding:11px 26px 11px 10px}
 }
 /* bulk select + pagination */
 .selrow{display:flex;align-items:center;gap:8px}
@@ -112,18 +117,19 @@ nav button.active .ico{transform:translateY(-2px) scale(1.18)}
 .bulkbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 10px;margin-bottom:6px;
   position:sticky;top:0;z-index:6;background:var(--card);border:1px solid var(--line);border-radius:12px;
   transition:background .2s,border-color .2s,box-shadow .2s}
-.bulkbar.active{background:var(--accent-soft);border-color:var(--accent);box-shadow:var(--shadow)}
+/* selecting stays neutral — no orange wash; the checkbox itself shows what's picked */
+.bulkbar.active{background:var(--card);border-color:var(--line);box-shadow:var(--shadow)}
 .bulkbar .selall{display:flex;align-items:center;gap:7px;font-size:.85rem;font-weight:700;cursor:pointer}
 .bulkbar .selall input{width:18px;height:18px;accent-color:var(--accent)}
-.bulkbar .selcount{font-size:.8rem;font-weight:800;color:var(--accent);background:#fff;
-  padding:3px 12px;border-radius:99px;border:1px solid var(--accent);white-space:nowrap}
+.bulkbar .selcount{font-size:.8rem;font-weight:800;color:var(--muted);background:#fff;
+  padding:3px 12px;border-radius:99px;border:1px solid var(--line);white-space:nowrap}
 .bulkbar .bulkacts{display:inline-flex;gap:8px;flex-wrap:wrap;align-items:center;animation:fadein .2s ease both}
 @keyframes fadein{from{opacity:0;transform:translateY(-3px)}to{opacity:1;transform:none}}
-/* sideways range: chip + fields expand to the right (inline), never drop downward */
-.rangetog{display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;list-style:none}
+/* range: its own line so it never overlaps the select-bar / filter controls */
+.rangetog{display:flex;align-items:center;gap:8px;flex-wrap:wrap;list-style:none;margin:6px 0}
 .rangetog>summary{list-style:none;cursor:pointer;flex-shrink:0}
 .rangetog>summary::-webkit-details-marker{display:none}
-.rangetog .rangefields{display:none;align-items:center;gap:6px}
+.rangetog .rangefields{display:none;align-items:center;gap:6px;flex-wrap:wrap}
 .rangetog[open] .rangefields{display:inline-flex;animation:fadein .18s ease both}
 .rangetog .rangefields input{width:70px;padding:8px 10px}
 .pager{display:flex;align-items:center;justify-content:center;gap:14px;padding:10px 4px;color:var(--muted);font-size:.85rem;flex-wrap:wrap}
@@ -245,7 +251,7 @@ html{scroll-behavior:smooth}
 @keyframes viewfade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
 .row,.selrow{transition:background .15s}
 .selrow{border-radius:10px;padding:2px 4px}
-.selrow:has(.selcb:checked){background:var(--accent-soft)}
+/* no orange tint on a ticked row — selection stays neutral */
 .actbtn,.viewsel,.section-sel,select,.menu-pop{transition:background .15s,border-color .15s,box-shadow .15s,transform .12s}
 .iconbtn,.btn{transition:transform .12s,box-shadow .12s,background .12s}
 .iconbtn:active,.btn:active{transform:scale(.96)}
@@ -274,7 +280,14 @@ html{scroll-behavior:smooth}
 #quotebar:active{transform:scale(.99)}
 #quotebar .qlotus{flex-shrink:0;display:flex;align-items:center}
 #quotebar .qtext{flex:1;min-width:0;font-style:italic;line-height:1.35}   /* full quote — wraps, never truncated */
+#quotebar .qby{flex-shrink:0;font-size:.78rem;font-weight:700;font-style:normal;opacity:.92;white-space:nowrap;align-self:flex-end}
 #quotebar .qexp{opacity:.8;font-size:.78rem;white-space:nowrap;align-self:flex-start;margin-top:2px}
+/* tidy filter row: clean wrap, grouped date range, never clumsy/overlapping */
+.filterrow{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:8px}
+.filterrow > select{width:auto;flex:0 1 auto}
+.filterrow .daterange{display:inline-flex;align-items:center;gap:6px;flex-wrap:nowrap}
+.filterrow .daterange input[type="date"]{width:140px}
+.filterrow .daterange .sep{color:var(--muted);font-size:.8rem}
 .lotus-mini{filter:drop-shadow(0 0 5px rgba(246,234,212,.5));animation:lotusGlow 3s ease-in-out infinite}
 .lotus-mini g{transform-box:fill-box;transform-origin:center bottom;animation:lotusBloom 1s cubic-bezier(.2,.8,.2,1) both}
 /* profile */
