@@ -73,12 +73,16 @@ nav button.active .ico{transform:translateY(-2px) scale(1.18)}
 .iconbtn.call{background:#e6f0fb;color:#1d6fd0}
 .iconbtn.wa{background:#e3f7e9;color:#1faa55}
 /* section selector (New Meditators / Meditators / Advanced) */
-/* keep room on the right for the dropdown arrow so it never overlaps the text */
-.section-sel{width:100%;font-weight:800;font-size:1.02rem;padding:12px 36px 12px 14px;border-radius:14px;
+/* big, bold section heading dropdown; room on the right so the arrow never overlaps the text */
+.section-sel{width:100%;font-weight:800;font-size:1.16rem;padding:13px 38px 13px 15px;border-radius:14px;
   border:1.5px solid var(--line);background-color:transparent;color:var(--ink);margin:8px 0}
-/* section dropdown + Msg + Add on a single row (stays one line on mobile) */
+/* section dropdown + Msg + Add on a single row */
 .ptoolbar{display:flex;align-items:center;gap:7px;flex-wrap:nowrap;margin:8px 0}
-.ptoolbar .section-sel{flex:1;min-width:0;margin:0;font-size:.95rem;padding:11px 32px 11px 12px;background-position:right 10px center}
+.ptoolbar .section-sel{flex:1;min-width:0;margin:0;font-size:1rem;padding:11px 32px 11px 12px;background-position:right 10px center}
+/* wrapping variant: when the dropdown + buttons can't share a row, buttons wrap to the next line
+   (full text labels, no truncation or overlap) instead of being squeezed */
+.ptoolbar.wrap{flex-wrap:wrap}
+.ptoolbar.wrap .section-sel{flex:1 1 100%;font-size:1.1rem}
 .ptoolbar .menu{flex-shrink:0}
 .ptoolbar .menu>summary{white-space:nowrap;padding:11px 12px}
 /* secondary toolbar row (Msg / Add / view selector) — wraps cleanly, menus open on-screen */

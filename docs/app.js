@@ -779,7 +779,7 @@ async function renderMeditatorsList(tabBar){
   const tagOpts = `<option value="">All Tags</option>${COMMON_TAGS.map(t=>`<option value="${t}" ${f.tag===t?'selected':''}>${esc(t)}</option>`).join('')}`;
 
   const activeF = [f.center,f.tag,f.dateFrom,f.dateTo,f.search].filter(Boolean).length;
-  let h = `<div class="ptoolbar">${tabBar}</div>`;
+  let h = tabBar;
   h += `<div class="subbar">
     <details class="menu"><summary class="btn small green">✉️ Msg ▾</summary>
       <div class="menu-pop">
@@ -1911,19 +1911,19 @@ async function renderVols(){
 
   VOL_SHOWN = list.map(v=>({full_name:v.people?.full_name, phone:v.people?.phone})).filter(p=>p.phone);
 
-  let h = `<div class="ptoolbar">
-    <select class="section-sel" style="flex:0 1 auto;width:auto;max-width:55%" onchange="volSection(this.value)">
+  let h = `<div class="ptoolbar wrap">
+    <select class="section-sel" onchange="volSection(this.value)">
       <option value="new" ${VOL_TAB==='new'?'selected':''}>✨ New interest (${newCount})</option>
       <option value="all" ${VOL_TAB==='all'?'selected':''}>🙌 All volunteers (${allCount})</option>
       <option value="ssbiyc" ${VOL_TAB==='ssbiyc'?'selected':''}>🙏 SSB / IYC</option>
       <option value="ie_completion" ${VOL_TAB==='ie_completion'?'selected':''}>🪷 IEO Completion (${icvCount})</option>
     </select>
-    <details class="menu"><summary class="btn small green">✉️<span class="lbl"> Msg</span> ▾</summary>
+    <details class="menu"><summary class="btn small green">✉️ Message ▾</summary>
       <div class="menu-pop">
         <button class="btn small green" onclick="volMessageAll()">✉️ Message all shown</button>
         <button class="btn small ghost" onclick="openTemplates('volunteer')">📝 Templates</button>
       </div></details>
-    <details class="menu"><summary class="btn small ghost">＋<span class="lbl"> Add</span> ▾</summary>
+    <details class="menu"><summary class="btn small ghost">＋ Add ▾</summary>
       <div class="menu-pop">
         <button class="btn small ghost" onclick="openPaperOCR()">📄 Paper Form (OCR)</button>
         <button class="btn small ghost" onclick="openVolForm()">➕ Add interest</button>
