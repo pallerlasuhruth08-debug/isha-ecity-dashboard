@@ -484,14 +484,14 @@ async function renderToday(){
     h += `<div class="card"><div class="empty"><div class="empty-anim" id="today-empty"></div>🎉 All caught up — no calls due.</div></div>`;
   } else {
     if(overdue.length){
-      h += `<details class="acc" open><summary>⚠️ Overdue <span class="badge red">${overdue.length}</span></summary>
+      h += `<details class="acc"><summary>⚠️ Overdue <span class="badge red">${overdue.length}</span></summary>
         <div class="acc-body"><div id="today-od-host"></div></div></details>`;
     }
-    h += `<details class="acc" open><summary>📞 Due today <span class="badge">${dueToday.length}</span></summary>
+    h += `<details class="acc"><summary>📞 Due today <span class="badge">${dueToday.length}</span></summary>
       <div class="acc-body">${dueToday.length?'<div id="today-due-host"></div>':'<div class="empty">Nothing else due today.</div>'}</div></details>`;
   }
   if(upcoming?.length){
-    h += `<details class="acc" open><summary>⏭️ Coming up <span class="badge">${upcoming.length}</span></summary><div class="acc-body">` + upcoming.map(c=>
+    h += `<details class="acc"><summary>⏭️ Coming up <span class="badge">${upcoming.length}</span></summary><div class="acc-body">` + upcoming.map(c=>
       `<div class="row"><div class="grow"><div class="name">${esc(c.journeys.people.full_name)}</div>
        <div class="sub">${JT[c.journeys.type]} - Call ${c.call_no} - due ${fmtD(c.due_date)}</div></div></div>`).join('') + '</div></details>';
   }
@@ -656,9 +656,8 @@ async function renderNewMeditators(tabBar){
   const f = PF.new_meditator;
   const centerOpts = `<option value="">All Centers</option>${CENTERS.map(c=>`<option value="${c.id}" ${f.center===c.id?'selected':''}>${c.name}</option>`).join('')}`;
   const activeF = [f.center,f.dateFrom,f.dateTo,f.search].filter(Boolean).length;
-  // Row 1: section dropdown alone · Row 2: Message + Add · Row 3: filters (open)
-  let h = `<div class="ptoolbar">${tabBar}</div>
-  <div class="subbar">
+  // Row 1: section dropdown + Message + Add on one line · filters collapsed by default
+  let h = `<div class="ptoolbar">${tabBar}
     <details class="menu"><summary class="btn small green">✉️ Msg ▾</summary>
       <div class="menu-pop">
         <button class="btn small green" onclick="newMedMessageAll()">✉️ Message all shown</button>
@@ -670,17 +669,20 @@ async function renderNewMeditators(tabBar){
         <button class="btn small ghost" onclick="openAddPerson()">➕ Add person</button>
       </div></details>`:''}
   </div>`;
-  h += `<details class="card vfilters" open>
+  const nmRanged = !!(f.dateFrom||f.dateTo);
+  h += `<details class="card vfilters">
     <summary>🔍 Filters &amp; date range${activeF?` <span class="badge">${activeF}</span>`:''}</summary>
     <input placeholder="🔍 Search name or phone" style="width:100%;margin-top:10px" value="${esc(f.search)}"
       oninput="PF.new_meditator.search=this.value" onkeydown="if(event.key==='Enter')renderPeople()">
-    <select style="width:100%;margin-top:8px" onchange="PF.new_meditator.center=this.value;renderPeople()">${centerOpts}</select>
     <div class="filterrow">
-      <span class="daterange" title="IE date range (leave 'to' blank for a single date)">
-        <input type="date" value="${f.dateFrom}" onchange="PF.new_meditator.dateFrom=this.value;renderPeople()">
-        <span class="sep">to</span>
-        <input type="date" value="${f.dateTo}" onchange="PF.new_meditator.dateTo=this.value;renderPeople()">
-      </span>
+      <select onchange="PF.new_meditator.center=this.value;renderPeople()">${centerOpts}</select>
+      <details class="rangetog" ${nmRanged?'open':''}>
+        <summary class="btn small ghost">↔ IE date range${nmRanged?` · ${f.dateFrom||'…'}–${f.dateTo||'…'}`:''}</summary>
+        <span class="rangefields">
+          <input type="date" style="width:140px" value="${f.dateFrom}" onchange="PF.new_meditator.dateFrom=this.value;renderPeople()">
+          <span class="sep">to</span>
+          <input type="date" style="width:140px" value="${f.dateTo}" onchange="PF.new_meditator.dateTo=this.value;renderPeople()">
+        </span></details>
       <button class="btn small green" onclick="renderPeople()">Search</button>
       ${activeF?`<button class="btn small gray" onclick="PF.new_meditator.dateFrom='';PF.new_meditator.dateTo='';PF.new_meditator.search='';PF.new_meditator.center='';renderPeople()">Clear</button>`:''}
     </div>
@@ -1312,17 +1314,17 @@ async function renderAdvancedList(tabBar){
       <select style="width:auto;flex-shrink:0" onchange="PF.advanced.program=this.value;renderPeople()">
         ${ADV_PROGS.map(([v,l])=>`<option value="${v}" ${f.program===v?'selected':''}>${progEmoji[v]||''} ${l}</option>`).join('')}</select>
   </div>`;
-  h += `<div class="subbar">
+  h += `<div class="subbar oneline">
       <select style="width:auto" onchange="advSetView(this.value)">
-        <option value="completed_week" ${(f.view==='completed'&&f.window==='week')?'selected':''}>✅ Completed · new this week</option>
-        <option value="completed_all" ${(f.view==='completed'&&f.window!=='week')?'selected':''}>✅ Completed · all</option>
+        <option value="completed_week" ${(f.view==='completed'&&f.window==='week')?'selected':''}>✅ New this week</option>
+        <option value="completed_all" ${(f.view==='completed'&&f.window!=='week')?'selected':''}>✅ All</option>
         <option value="interested" ${f.view==='interested'?'selected':''}>✋ Interested</option></select>
-      <details class="menu"><summary class="btn small green">✉️ Msg ▾</summary>
+      <details class="menu"><summary class="btn small green">✉️<span class="lbl"> Msg</span> ▾</summary>
         <div class="menu-pop">
           <button class="btn small green" onclick="openMsgAll(ADV_MSG.aud,ADV_MSG.people,ADV_MSG.title)">✉️ Message all shown</button>
           <button class="btn small ghost" onclick="openTemplates('${tplAud}')">📝 Templates</button>
         </div></details>
-      ${isCoord()?`<details class="menu"><summary class="btn small ghost">📥 Import ▾</summary>
+      ${isCoord()?`<details class="menu"><summary class="btn small ghost">📥<span class="lbl"> Import</span> ▾</summary>
         <div class="menu-pop">
           <button class="btn small ghost" onclick="advImport('excel','${f.program}')">From Excel / Sheet</button>
           <button class="btn small ghost" onclick="advImport('paper','${f.program}')">From paper form</button>
@@ -1910,7 +1912,7 @@ async function renderVols(){
   VOL_SHOWN = list.map(v=>({full_name:v.people?.full_name, phone:v.people?.phone})).filter(p=>p.phone);
 
   let h = `<div class="ptoolbar">
-    <select class="section-sel" onchange="volSection(this.value)">
+    <select class="section-sel" style="flex:0 1 auto;width:auto;max-width:55%" onchange="volSection(this.value)">
       <option value="new" ${VOL_TAB==='new'?'selected':''}>✨ New interest (${newCount})</option>
       <option value="all" ${VOL_TAB==='all'?'selected':''}>🙌 All volunteers (${allCount})</option>
       <option value="ssbiyc" ${VOL_TAB==='ssbiyc'?'selected':''}>🙏 SSB / IYC</option>
@@ -1948,14 +1950,16 @@ async function renderVols(){
     if(VFILTER.search){ const s=VFILTER.search.toLowerCase(); rows = rows.filter(r=>r.full_name?.toLowerCase().includes(s)||r.phone?.includes(s)); }
     if(VFILTER.center){ rows = rows.filter(r=>derivedCenter(profByPhone[r.phone])===VFILTER.center); }
     const matched = rows.filter(r=>profByPhone[r.phone]).length;
-    h += `<div class="card" style="padding:10px">
-      <div class="filterrow" style="margin-top:0">
+    const icvActiveF = [VFILTER.center, VFILTER.search].filter(Boolean).length;
+    h += `<details class="card vfilters"${icvActiveF?' open':''}>
+      <summary>🔍 Filters${icvActiveF?` <span class="badge">${icvActiveF}</span>`:''}</summary>
+      <div class="filterrow">
         <select style="flex:0 0 auto" onchange="VFILTER.center=this.value;renderVols()">
           <option value="">All centers</option>${CENTERS.map(c=>`<option value="${c.id}" ${VFILTER.center===c.id?'selected':''}>${c.name}</option>`).join('')}</select>
         <input placeholder="🔍 Search name or phone" style="flex:1;min-width:150px" value="${esc(VFILTER.search||'')}"
           oninput="VFILTER.search=this.value" onkeydown="if(event.key==='Enter')renderVols()">
       </div>
-    </div>`;
+    </details>`;
     h += `<div class="card"><h2>🪷 IEO Completion Form — Volunteer Interest <span class="badge">${rows.length}</span></h2>
       <p class="muted" style="font-size:.78rem;margin-bottom:6px">People who ticked "Volunteer" on an IE completion form in Ishangam (Electronic City), segregated by center (from pincode). ${matched}/${rows.length} shown have a synced profile. Newest IE first.</p><div id="icv-host"></div></div>`;
     VOL_SHOWN = rows.map(r=>({full_name:r.full_name, phone:r.phone})).filter(p=>p.phone);

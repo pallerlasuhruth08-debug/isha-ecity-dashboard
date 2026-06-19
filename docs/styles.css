@@ -84,6 +84,11 @@ nav button.active .ico{transform:translateY(-2px) scale(1.18)}
 /* secondary toolbar row (Msg / Add / view selector) — wraps cleanly, menus open on-screen */
 .subbar{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin:8px 0}
 .subbar .viewsel{margin:0}
+/* one-line variant (Advanced view + Msg + Import): stay on a single row */
+.subbar.oneline{flex-wrap:nowrap}
+.subbar.oneline > select{flex:1;min-width:0}
+.subbar.oneline .menu{flex-shrink:0}
+.subbar.oneline .menu>summary{white-space:nowrap}
 /* toolbar dropdown menus open right-aligned so they never spill off the screen edge */
 .ptoolbar .menu-pop,.subbar .menu-pop{left:auto;right:0}
 /* simplified list row: photo + name + compact actions */
@@ -101,8 +106,8 @@ nav button.active .ico{transform:translateY(-2px) scale(1.18)}
 .actbtn.assign{background:var(--accent-soft);color:var(--accent)}
 .actbtn.log{background:#efece6;color:var(--ink)}
 /* compact View ▾ scope dropdown, sits inline with Message/Add menus */
-.viewsel{font-weight:700;font-size:.92rem;padding:9px 12px;border-radius:11px;border:1.5px solid var(--line);
-  background-color:transparent;color:var(--accent);min-height:40px;cursor:pointer;width:auto}
+.viewsel{font-weight:700;font-size:.92rem;padding:9px 30px 9px 12px;border-radius:11px;border:1.5px solid var(--line);
+  background-color:transparent;color:var(--accent);min-height:40px;cursor:pointer;width:auto;background-position:right 9px center}
 .actbtn-sel{font-size:.8rem;padding:7px 26px 7px 8px;border-radius:10px;border:1px solid var(--line);
   background-color:transparent;color:var(--ink);max-width:140px}
 @media(max-width:430px){
@@ -111,9 +116,11 @@ nav button.active .ico{transform:translateY(-2px) scale(1.18)}
   .av,.av.avph{width:34px;height:34px}
   /* keep the toolbar on one row but give the section name room: collapse Msg/Add to icons */
   .ptoolbar{gap:6px}
-  .ptoolbar .menu>summary .lbl{display:none}
+  .ptoolbar .menu>summary .lbl,.subbar.oneline .menu>summary .lbl{display:none}
   .ptoolbar .menu>summary{padding:11px 10px}
   .ptoolbar .section-sel{font-size:.9rem;padding:11px 26px 11px 10px}
+  .subbar.oneline{gap:6px}
+  .subbar.oneline .menu>summary{padding:9px 9px}
 }
 /* bulk select + pagination */
 .selrow{display:flex;align-items:center;gap:8px}
