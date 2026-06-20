@@ -337,8 +337,8 @@ async function pfHistory(){
     .filter(r=>r.date).sort((a,b)=>String(b.date).localeCompare(String(a.date)));
   host.dataset.loaded='1';
   host.innerHTML = rows.length
-    ? `<p class="muted" style="font-size:.8rem;margin:2px 2px 8px">${rows.length} activit${rows.length===1?'y':'ies'}</p>`+
-      rows.map(r=>`<div class="row simple"><div class="grow"><div class="name">${esc(r.name)}</div><div class="sub">${centerName(r.center)} · ${fmtD(r.date)}</div></div></div>`).join('')
+    ? `<p class="muted" style="font-size:.8rem;margin:2px 2px 10px">${rows.length} activit${rows.length===1?'y':'ies'}</p>`+
+      `<div class="timeline">`+rows.map(r=>`<div class="tl"><div class="t">${esc(r.name)}</div><div class="d">${centerName(r.center)} · ${fmtD(r.date)}</div></div>`).join('')+`</div>`
     : '<div class="empty">No volunteering activities recorded yet.</div>';
 }
 function pickPhoto(){
@@ -520,6 +520,12 @@ async function renderToday(){
 
   let h = '';
   actionBar('today');   // ✉️ Message all (+ Templates) in the bottom action bar
+  // glanceable KPI tiles
+  h += `<div class="kpis">
+    <div class="kpi warn"><div class="n">${dueToday.length}</div><div class="l">Due today</div></div>
+    <div class="kpi accent"><div class="n">${overdue.length}</div><div class="l">Overdue</div></div>
+    <div class="kpi good"><div class="n">${(upcoming||[]).length}</div><div class="l">Coming up</div></div>
+  </div>`;
   if(!calls.length){
     h += `<div class="card"><div class="empty"><div class="empty-anim" id="today-empty"></div>🎉 All caught up — no calls due.</div></div>`;
   } else {
@@ -786,14 +792,14 @@ async function nmStartConfirm(ctx){
 function newMeditatorRow(j){
   const p = j.people;
   const isPending = j.status==='pending';
-  // small status badge so pending vs calling vs done is clear (the bulk checkbox handles selection)
-  const badge = isPending ? '<span class="badge gray">not calling</span>'
-    : j.status==='completed' ? '<span class="badge green">done</span>'
-    : '<span class="badge">calling</span>';
+  // status + center chips so pending/calling/done and location read at a glance
+  const statusChip = isPending ? chip('not calling','warn')
+    : j.status==='completed' ? chip('done','good') : chip('calling','accent');
+  const chips = statusChip + (p ? chip('🏢 '+centerName(derivedCenter(p))) : '') + (p?.ie_date?chip('🪷 IE '+fmtD(p.ie_date)):'');
   const extra = (isCoord() && p?.id) ? `<button class="actbtn assign" onclick="quickAssign('${p.id}','${esc(p.full_name||'')}')">Assign</button>` : '';
   const prof = JSON.stringify({n:p?.full_name,ph:p?.phone,email:p?.email,occ:p?.occupation,gender:p?.gender,dob:p?.date_of_birth,area:p?.area,city:p?.city,street:p?.street,pin:p?.pincode,ctr:p?.center_id,ie:p?.ie_date||j.program_date,tags:p?.tags||[],photo:p?.photo_url});
   const msg = WA_MSG.new_meditator((p?.full_name||'').split(' ')[0]);
-  return simpleRow({photo:p?.photo_url, name:p?.full_name, badge, onclick:`showPersonProfile(${prof})`, phone:p?.phone, msg, extra});
+  return simpleRow({photo:p?.photo_url, name:p?.full_name, chips, onclick:`showPersonProfile(${prof})`, phone:p?.phone, msg, extra});
 }
 
 /* ---- Meditators (ALL is_meditator=true people) ---- */
@@ -906,26 +912,31 @@ function simpleRow(o){
   const avatar = o.photo
     ? `<img class="av" src="${esc(o.photo)}" loading="lazy" alt="" ${clickAttr} onerror="this.style.visibility='hidden'">`
     : `<div class="av avph" ${clickAttr}>${initial}</div>`;
-  return `<div class="row simple">
+  // card row: avatar · name + chips/sub · round Call/Message + any extra action
+  return `<div class="row simple card">
     ${o.cb||''}
     ${avatar}
     <div class="grow" style="${cur};min-width:0" ${clickAttr}>
       <div class="name">${esc(o.name||'?')}${o.badge?' '+o.badge:''}</div>
-      ${o.sub?`<div class="sub">${o.sub}</div>`:''}
+      ${o.chips?`<div class="chips">${o.chips}</div>`:(o.sub?`<div class="sub">${o.sub}</div>`:'')}
     </div>
     <div class="acts">
-      ${o.phone?`<a class="actbtn call" href="tel:+91${o.phone}">Call</a>`:''}
-      ${wa?`<a class="actbtn msg" href="${wa}" target="_blank">Msg</a>`:''}
+      ${o.phone?`<a class="ib call" href="tel:+91${o.phone}" aria-label="Call">📞</a>`:''}
+      ${wa?`<a class="ib msg" href="${wa}" target="_blank" aria-label="Message">💬</a>`:''}
       ${o.extra||''}
     </div>
   </div>`;
 }
+// small status/meta chip used inside card rows
+const chip = (t,c)=>`<span class="chip${c?' '+c:''}">${esc(t)}</span>`;
 
 function meditatorDetailRow(p){
   const onclk = `showMedById('${p.id}')`;
   const msg = WA_MSG.meditator((p.full_name||'').split(' ')[0]);
+  const adv=[p.bsp_date&&'BSP',p.shoonya_date&&'Shoonya',p.samyama_date&&'Samyama',p.guru_puja_date&&'Guru Puja'].filter(Boolean);
+  const chips = chip('🏢 '+centerName(p.center_id)) + (p.ie_date?chip('🪷 IE '+fmtD(p.ie_date)):'') + adv.map(a=>chip('⭐ '+a,'accent')).join('');
   const extra = isCoord() ? `<button class="actbtn assign" onclick="quickAssign('${p.id}','${esc(p.full_name)}')">Assign</button>` : '';
-  return simpleRow({photo:p.photo_url, name:p.full_name, onclick:onclk, phone:p.phone, msg, extra});
+  return simpleRow({photo:p.photo_url, name:p.full_name, chips, onclick:onclk, phone:p.phone, msg, extra});
 }
 
 // Shared full-profile card (used by New Meditators + Meditators rows)
@@ -1381,18 +1392,20 @@ async function renderAdvancedList(tabBar){
 function advCompletedRow(p, col, label){
   const msg = WA_MSG.advanced((p.full_name||'').split(' ')[0]);
   const onclk = `showPersonProfile(${JSON.stringify(personToProfile(p))})`;
+  const chips = chip('⭐ '+label,'accent') + (p[col]?chip('✅ '+fmtD(p[col]),'good'):'') + (p.center_id?chip('🏢 '+centerName(p.center_id)):'');
   const extra = isCoord() ? `<button class="actbtn assign" onclick='startNurturing(${JSON.stringify({pid:p.id,name:p.full_name}).replace(/"/g,'&quot;').replace(/'/g,"&#39;")})'>Assign</button>` : '';
-  return simpleRow({photo:p.photo_url, name:p.full_name, onclick:onclk, phone:p.phone, msg, extra});
+  return simpleRow({photo:p.photo_url, name:p.full_name, chips, onclick:onclk, phone:p.phone, msg, extra});
 }
 
 function advInterestRow(r, label){
   const p = r.people || {};
   const msg = 'Namaskaram '+(p.full_name||'').split(' ')[0]+' -- You had expressed interest in '+label+'. We would love to help you register. When is a good time to talk?';
+  const chips = chip('✋ '+label,'accent') + (r.status?chip(r.status):'');
   const extra = isCoord() ? `<select class="actbtn-sel" onchange="setInterestStatus('${r.id}',this.value)">
     ${['new','contacted','registered','done','dropped'].map(s=>`<option value="${s}" ${r.status===s?'selected':''}>${s}</option>`).join('')}
   </select>` : '';
   const onclk = `showPersonProfile(${JSON.stringify(personToProfile(p))})`;
-  return simpleRow({photo:p.photo_url, name:p.full_name, onclick:onclk, phone:p.phone, msg, extra});
+  return simpleRow({photo:p.photo_url, name:p.full_name, chips, onclick:onclk, phone:p.phone, msg, extra});
 }
 
 function openAddInterest(program){
@@ -1652,7 +1665,8 @@ function icvRow(r, prof){
   // Assign only when a synced profile exists (we need a person id to tag a nurturer)
   const assign = (isCoord() && prof) ? `<button class="actbtn assign" onclick="quickAssign('${prof.id}','${esc(prof.full_name||r.full_name||'')}')">Assign</button>` : '';
   // names from the IE completion form can be ALL-CAPS / inconsistent — show clean Title Case
-  return simpleRow({photo:prof?.photo_url, name:cleanName(prof?.full_name||r.full_name), onclick:onclk, phone:ph, msg, extra:assign});
+  const chips = chip('🪷 IEO interest','accent') + (prof?chip('🏢 '+centerName(derivedCenter(prof))):chip('no synced profile','warn'));
+  return simpleRow({photo:prof?.photo_url, name:cleanName(prof?.full_name||r.full_name), chips, onclick:onclk, phone:ph, msg, extra:assign});
 }
 async function setIcvStatus(id, status){ const {error}=await sb.from('ie_completion_volunteer').update({status}).eq('id', id); toast(error?error.message:'Updated'); }
 
@@ -2065,8 +2079,9 @@ function volRow(v, hist){
   const p = v.people;
   const msg = `Namaskaram ${(p.full_name||'').split(' ')[0]} -- There's a volunteering opportunity at Isha ${centerName(derivedCenter(p))} that matches your interest${v.interests?.length?' in '+v.interests[0]:''}. Would you like to join?`;
   const onclk = `showVolProfile(${JSON.stringify({p:personToProfile(p),id:p.id,interests:v.interests||[],mode:v.mode,space:v.can_offer_space,screened:v.screened,h:hist.slice(0,15)})})`;
+  const chips = (v.interests||[]).slice(0,2).map(i=>chip('🤝 '+i,'accent')).join('') + chip('🏢 '+centerName(derivedCenter(p))) + (v.can_offer_space?chip('🏠 space','good'):'');
   const extra = isCoord() ? `<button class="actbtn assign" onclick="quickAssign('${p.id}','${esc(p.full_name)}')">Assign</button>` : '';
-  return simpleRow({photo:p.photo_url, name:p.full_name, onclick:onclk, phone:p.phone, msg, extra});
+  return simpleRow({photo:p.photo_url, name:p.full_name, chips, onclick:onclk, phone:p.phone, msg, extra});
 }
 function showVolProfile(d){
   const interests = (d.interests||[]).length ? `<p>🤝 Interests: ${(d.interests).map(esc).join(', ')}</p>` : '';

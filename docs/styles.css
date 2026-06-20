@@ -64,6 +64,41 @@ nav button.active .ico{transform:translateY(-2px) scale(1.18)}
 /* extra bottom room so list rows clear the action bar + nav when the bar is showing */
 #app.has-actionbar{padding-bottom:184px}
 
+/* ---- card rows + chips + round actions (applied to every list) ---- */
+.row.simple.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:11px 12px;
+  margin-bottom:10px;box-shadow:var(--shadow)}
+.row.simple.card:hover{background:var(--card)}
+.chips{display:flex;gap:5px;margin-top:5px;flex-wrap:wrap}
+.chip{font-size:.7rem;font-weight:700;padding:3px 9px;border-radius:99px;background:#f1ece3;color:var(--muted);white-space:nowrap}
+.chip.good{background:#e3f7e9;color:var(--good)}
+.chip.warn{background:#fbe6e4;color:var(--warn)}
+.chip.accent{background:var(--accent-soft);color:var(--accent)}
+/* round quick-action buttons (Call / Message) */
+.ib{width:42px;height:42px;border-radius:12px;border:none;display:flex;align-items:center;justify-content:center;
+  font-size:1.1rem;cursor:pointer;text-decoration:none;flex-shrink:0;transition:transform .12s}
+.ib:active{transform:scale(.92)}
+.ib.call{background:#e6f0fb}
+.ib.msg{background:#e3f7e9}
+/* glanceable KPI tiles */
+.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin:6px 0 12px}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:13px 8px;text-align:center;box-shadow:var(--shadow)}
+.kpi .n{font-size:1.5rem;font-weight:800;line-height:1;color:var(--ink)}
+.kpi .l{font-size:.68rem;color:var(--muted);margin-top:4px;font-weight:600}
+.kpi.good .n{color:var(--good)} .kpi.warn .n{color:var(--warn)} .kpi.accent .n{color:var(--accent)}
+/* progress bar */
+.prog{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:12px;box-shadow:var(--shadow)}
+.prog .prow{display:flex;justify-content:space-between;font-size:.82rem;font-weight:700;margin-bottom:8px}
+.bar{height:10px;background:#eee2d3;border-radius:99px;overflow:hidden}
+.bar i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),var(--accent-2));border-radius:99px}
+/* volunteering journey timeline (Profile) */
+.timeline{position:relative;padding-left:22px}
+.timeline::before{content:'';position:absolute;left:6px;top:4px;bottom:4px;width:2px;background:var(--line)}
+.tl{position:relative;margin-bottom:14px}
+.tl::before{content:'';position:absolute;left:-19px;top:3px;width:11px;height:11px;border-radius:50%;
+  background:var(--accent);border:2px solid #fff;box-shadow:0 0 0 2px var(--accent-soft)}
+.tl .t{font-weight:700;font-size:.96rem}
+.tl .d{font-size:.78rem;color:var(--muted);margin-top:2px}
+
 /* cards & lists */
 .card{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);
   padding:16px;margin:12px 0;animation:pop .25s ease both}
