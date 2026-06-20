@@ -1062,8 +1062,8 @@ function renderMessageAll(){
   h += MSG_PEOPLE.length ? MSG_PEOPLE.map(p=>{
       const wa=`https://wa.me/91${p.phone}?text=${encodeURIComponent(applyTpl(t.body,p.full_name))}`;
       return `<div class="row"><div class="grow"><div class="name">${esc(p.full_name||'?')}</div><div class="sub">${esc(p.phone||'')}</div></div>
-        <a class="iconbtn call" href="tel:+91${p.phone}">Call</a>
-        <a class="iconbtn wa" href="${wa}" target="_blank" onclick="this.closest('.row').style.opacity='.45'">WA</a></div>`;
+        <a class="ib call" href="tel:+91${p.phone}" aria-label="Call">📞</a>
+        <a class="ib msg" href="${wa}" target="_blank" aria-label="Message" onclick="this.closest('.row').style.opacity='.45'">💬</a></div>`;
     }).join('') : '<div class="empty">No one with a phone number here.</div>';
   h += '</div>';
   modal(h);
@@ -1524,8 +1524,8 @@ function journeyRow(j, vols){
         ${j.sadhana_status?` - <b>${esc(j.sadhana_status)}</b>`:''}
         ${assignee?` - ${esc(assignee.full_name||assignee.email)}`:''}</div>
     </div>
-    ${p?.phone?`<a class="iconbtn call" href="tel:+91${p.phone}">Call</a>`:''}
-    ${wa?`<a class="iconbtn wa" href="${wa}" target="_blank">WA</a>`:''}
+    ${p?.phone?`<a class="ib call" href="tel:+91${p.phone}" aria-label="Call">📞</a>`:''}
+    ${wa?`<a class="ib msg" href="${wa}" target="_blank" aria-label="Message">💬</a>`:''}
     ${assignSel}
   </div>`;
 }
@@ -2310,7 +2310,7 @@ async function renderAdmin(){
       '<div class="name">' + esc(p.full_name||p.email) + '</div>' +
       '<div class="sub">' + roleLabel(p.role) + ' · ' + centerName(p.center_id) + '</div></div>' +
     '<div class="acts">' +
-    (p.phone?'<a class="actbtn msg" href="https://wa.me/91' + p.phone + '?text=' + encodeURIComponent('Namaskaram - Gentle reminder: you have nurturing calls due on the dashboard. Please take a look when you can!') + '" target="_blank">Msg</a>':'') +
+    (p.phone?'<a class="ib msg" href="https://wa.me/91' + p.phone + '?text=' + encodeURIComponent('Namaskaram - Gentle reminder: you have nurturing calls due on the dashboard. Please take a look when you can!') + '" target="_blank" aria-label="Message">💬</a>':'') +
     (isAdmin()?
       '<details class="menu"><summary class="actbtn assign">Edit ▾</summary><div class="menu-pop">' +
         '<label class="muted" style="font-size:.72rem;margin:0">Role</label>' +
