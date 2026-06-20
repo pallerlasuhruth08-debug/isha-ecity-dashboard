@@ -471,11 +471,18 @@ function abAdd(kind){
   if(kind==='advanced') return actionSheet('📥 Import', [['From Excel / Sheet','advImport(\'excel\',PF.advanced.program)'],['From paper form','advImport(\'paper\',PF.advanced.program)']]);
   if(kind==='volunteer') return actionSheet('＋ Add', [['📄 Paper Form (OCR)','openPaperOCR()'],['➕ Add interest','openVolForm()'],['📝 Google Form','openGFormHelp()']]);
 }
-// Standard two-button bar: primary Message + ghost Add/Import (Add hidden for non-coordinators).
-function actionBar(msgKind, addKind, addLabel){
+// Bottom bar: primary Message + (Assign selected) + Add/Import (Assign/Add only for coordinators).
+function actionBar(msgKind, addKind, addLabel, assignCtx){
   const msg = `<button class="btn primary" onclick="abMsg('${msgKind}')">✉️ Message all</button>`;
+  const asg = (assignCtx && isCoord()) ? `<button class="btn ghost" onclick="bulkAssignFromBar('${assignCtx}')">👤 Assign</button>` : '';
   const add = (addKind && isCoord()) ? `<button class="btn ghost" onclick="abAdd('${addKind}')">${addLabel||'＋ Add'}</button>` : '';
-  setActionBar(msg+add);
+  setActionBar(msg+asg+add);
+}
+// Assign the currently-ticked people (from the selectable list) to a nurturer.
+function bulkAssignFromBar(ctx){
+  const s=BL[ctx];
+  if(!s || !s.sel.size) return toast('Tick people first, then tap Assign');
+  blAssign(ctx);
 }
 
 /* ============================================================
@@ -796,10 +803,10 @@ function newMeditatorRow(j){
   const statusChip = isPending ? chip('not calling','warn')
     : j.status==='completed' ? chip('done','good') : chip('calling','accent');
   const chips = statusChip + (p ? chip('🏢 '+centerName(derivedCenter(p))) : '') + (p?.ie_date?chip('🪷 IE '+fmtD(p.ie_date)):'');
-  const extra = (isCoord() && p?.id) ? `<button class="actbtn assign" onclick="quickAssign('${p.id}','${esc(p.full_name||'')}')">Assign</button>` : '';
   const prof = JSON.stringify({n:p?.full_name,ph:p?.phone,email:p?.email,occ:p?.occupation,gender:p?.gender,dob:p?.date_of_birth,area:p?.area,city:p?.city,street:p?.street,pin:p?.pincode,ctr:p?.center_id,ie:p?.ie_date||j.program_date,tags:p?.tags||[],photo:p?.photo_url});
   const msg = WA_MSG.new_meditator((p?.full_name||'').split(' ')[0]);
-  return simpleRow({photo:p?.photo_url, name:p?.full_name, chips, onclick:`showPersonProfile(${prof})`, phone:p?.phone, msg, extra});
+  // (assigning a caller happens in "Start calling"); no per-row Assign
+  return simpleRow({photo:p?.photo_url, name:p?.full_name, chips, onclick:`showPersonProfile(${prof})`, phone:p?.phone, msg});
 }
 
 /* ---- Meditators (ALL is_meditator=true people) ---- */
@@ -813,7 +820,7 @@ async function renderMeditatorsList(tabBar){
 
   const activeF = [f.center,f.tag,f.dateFrom,f.dateTo,f.search].filter(Boolean).length;
   let h = tabBar;
-  actionBar('meditator','people');
+  actionBar('meditator','people',null,'med');
   h += `<div class="seg">
     <button class="${MED_SCOPE==='mine'?'on':''}" onclick="medScope('mine')">🙋 My meditators</button>
     <button class="${MED_SCOPE==='all'?'on':''}" onclick="medScope('all')">🧘 All meditators</button>
@@ -858,6 +865,8 @@ async function renderMeditatorsList(tabBar){
   h += `<div class="card"><h2>${MED_SCOPE==='mine'?'🙋 My meditators':'🧘 Meditators'} <span class="badge" id="med-count">${rows.length}</span></h2><div id="med-host"></div></div>`;
   view().innerHTML = h;
   bulkMount('med', $('med-host'), rows, {externalRange:true, rowFn:meditatorDetailRow, idOf:p=>p.id, personOf:p=>({full_name:p.full_name,phone:p.phone}), aud:'meditator', assignable:true});
+  // big unfiltered list (e.g. All meditators) → start with a light first window so mobile stays smooth
+  if(!activeF && rows.length>BL_MAXR && BL.med.from==null){ BL.med.from=1; BL.med.to=60; blRender('med'); }
 }
 let MED_ALL = [], MED_SCOPE='all', MED_ASSIGN={}, MY_MED_IDS=new Set();
 function medScope(v){ MED_SCOPE=v; MED_SCOPE_SET=true; renderPeople(); }
@@ -935,8 +944,8 @@ function meditatorDetailRow(p){
   const msg = WA_MSG.meditator((p.full_name||'').split(' ')[0]);
   const adv=[p.bsp_date&&'BSP',p.shoonya_date&&'Shoonya',p.samyama_date&&'Samyama',p.guru_puja_date&&'Guru Puja'].filter(Boolean);
   const chips = chip('🏢 '+centerName(p.center_id)) + (p.ie_date?chip('🪷 IE '+fmtD(p.ie_date)):'') + adv.map(a=>chip('⭐ '+a,'accent')).join('');
-  const extra = isCoord() ? `<button class="actbtn assign" onclick="quickAssign('${p.id}','${esc(p.full_name)}')">Assign</button>` : '';
-  return simpleRow({photo:p.photo_url, name:p.full_name, chips, onclick:onclk, phone:p.phone, msg, extra});
+  // Assign moved to the bottom action bar (tick people → Assign); keeps rows clean
+  return simpleRow({photo:p.photo_url, name:p.full_name, chips, onclick:onclk, phone:p.phone, msg});
 }
 
 // Shared full-profile card (used by New Meditators + Meditators rows)
@@ -1182,7 +1191,7 @@ async function quickAssignSave(medId, medName){
    cfg = { rowFn, idOf, personOf, aud, assignable, pageSize }
    ============================================================ */
 const BL = {};
-const BL_MAXR = 500;   // safety cap on how many rows render at once
+const BL_MAXR = 150;   // safety cap on how many (card) rows render at once — keeps mobile smooth
 function bulkMount(ctx, host, items, cfg){
   const prev = BL[ctx];
   BL[ctx] = { items, host, from:(prev?prev.from:null), to:(prev?prev.to:null),
@@ -1346,7 +1355,7 @@ async function renderAdvancedList(tabBar){
         <option value="completed_all" ${(f.view==='completed'&&f.window!=='week')?'selected':''}>✅ All</option>
         <option value="interested" ${f.view==='interested'?'selected':''}>✋ Interested</option></select>
   </div>`;
-  actionBar('advanced','advanced','📥 Import');
+  actionBar('advanced','advanced','📥 Import', f.view==='completed'?'adv_completed':null);
   h += `<details class="card vfilters" ${activeF?'open':''}>
     <summary>🔍 Filters &amp; range${activeF?` <span class="badge">${activeF}</span>`:''}</summary>
     <input placeholder="🔍 Search name/phone" style="width:100%;margin-top:10px" value="${esc(f.search)}"
@@ -1393,8 +1402,8 @@ function advCompletedRow(p, col, label){
   const msg = WA_MSG.advanced((p.full_name||'').split(' ')[0]);
   const onclk = `showPersonProfile(${JSON.stringify(personToProfile(p))})`;
   const chips = chip('⭐ '+label,'accent') + (p[col]?chip('✅ '+fmtD(p[col]),'good'):'') + (p.center_id?chip('🏢 '+centerName(p.center_id)):'');
-  const extra = isCoord() ? `<button class="actbtn assign" onclick='startNurturing(${JSON.stringify({pid:p.id,name:p.full_name}).replace(/"/g,'&quot;').replace(/'/g,"&#39;")})'>Assign</button>` : '';
-  return simpleRow({photo:p.photo_url, name:p.full_name, chips, onclick:onclk, phone:p.phone, msg, extra});
+  // Assign moved to the bottom action bar
+  return simpleRow({photo:p.photo_url, name:p.full_name, chips, onclick:onclk, phone:p.phone, msg});
 }
 
 function advInterestRow(r, label){
@@ -2025,8 +2034,10 @@ async function renderVols(){
     </details>
   <div class="card"><h2>${VOL_TAB==='new'?'New volunteer interest':'All existing volunteers'} <span class="badge">${list.length}</span></h2><div id="vol-host"></div></div>`;
   view().innerHTML = h;
-  actionBar('volunteer','volunteer');
+  actionBar('volunteer','volunteer',null,'vol');
   bulkMount('vol', $('vol-host'), list, {externalRange:true, rowFn:v=>volRow(v, histBy[v.person_id]||[]), idOf:v=>v.person_id, personOf:v=>({full_name:v.people?.full_name,phone:v.people?.phone}), aud:'volunteer', assignable:true});
+  // light first window for very long volunteer lists
+  if(list.length>BL_MAXR && BL.vol.from==null){ BL.vol.from=1; BL.vol.to=60; blRender('vol'); }
 }
 function volSection(v){ if(v==='ssbiyc') SSB_NAV={org:'',type:'',name:'',year:null}; VOL_TAB=v; renderVols(); }
 // generic external From–To applier (reused by Meditators / Advanced / Volunteers filter panels)
@@ -2080,8 +2091,8 @@ function volRow(v, hist){
   const msg = `Namaskaram ${(p.full_name||'').split(' ')[0]} -- There's a volunteering opportunity at Isha ${centerName(derivedCenter(p))} that matches your interest${v.interests?.length?' in '+v.interests[0]:''}. Would you like to join?`;
   const onclk = `showVolProfile(${JSON.stringify({p:personToProfile(p),id:p.id,interests:v.interests||[],mode:v.mode,space:v.can_offer_space,screened:v.screened,h:hist.slice(0,15)})})`;
   const chips = (v.interests||[]).slice(0,2).map(i=>chip('🤝 '+i,'accent')).join('') + chip('🏢 '+centerName(derivedCenter(p))) + (v.can_offer_space?chip('🏠 space','good'):'');
-  const extra = isCoord() ? `<button class="actbtn assign" onclick="quickAssign('${p.id}','${esc(p.full_name)}')">Assign</button>` : '';
-  return simpleRow({photo:p.photo_url, name:p.full_name, chips, onclick:onclk, phone:p.phone, msg, extra});
+  // Assign moved to the bottom action bar
+  return simpleRow({photo:p.photo_url, name:p.full_name, chips, onclick:onclk, phone:p.phone, msg});
 }
 function showVolProfile(d){
   const interests = (d.interests||[]).length ? `<p>🤝 Interests: ${(d.interests).map(esc).join(', ')}</p>` : '';
