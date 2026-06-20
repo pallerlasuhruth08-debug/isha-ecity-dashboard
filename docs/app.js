@@ -1197,7 +1197,7 @@ function bulkMount(ctx, host, items, cfg){
   BL[ctx] = { items, host, from:(prev?prev.from:null), to:(prev?prev.to:null),
     sel:(prev&&prev.sel)||new Set(), rowFn:cfg.rowFn, idOf:cfg.idOf, personOf:cfg.personOf,
     aud:cfg.aud||'nurture', assignable:!!cfg.assignable, external:!!cfg.externalRange,
-    bulkActions:cfg.bulkActions||[] };
+    bulkActions:cfg.bulkActions||[], assignIds:cfg.assignIds||null };
   blRender(ctx);
   animateList(host);   // fluid add/remove + entrance for the list
 }
@@ -1272,8 +1272,12 @@ function blMessage(ctx){ const s=BL[ctx];
   const people=s.items.filter(it=>s.sel.has(s.idOf(it))).map(s.personOf).filter(p=>p&&p.phone);
   if(!people.length) return toast('No phone numbers in selection');
   openMsgAll(s.aud, people, 'Message selected ('+people.length+')'); }
+// resolve the selected rows to actual person (meditator) ids — most lists are already
+// keyed by person id, but some (e.g. the phone-keyed IEO list) map via assignIds().
+function blAssignTargets(s){ return s.assignIds ? s.assignIds(s.sel) : [...s.sel]; }
 async function blAssign(ctx){
-  const s=BL[ctx]; const ids=[...s.sel]; if(!ids.length) return;
+  const s=BL[ctx]; const ids=blAssignTargets(s);
+  if(!ids.length) return toast(s.assignIds ? 'Selected people don\'t have a synced profile yet — can\'t assign' : 'Tick people first');
   const nurturers = await cached('nurturers', ()=>fetchAll(()=>sb.from('nurturers').select('id,full_name,phone,profile_id')));
   const profs = (await sb.from('profiles').select('id,full_name,email,role').eq('active',true).in('role',['nurturer','sector_nurturer','center_coordinator','admin'])).data||[];
   const linked=new Set(nurturers.filter(n=>n.profile_id).map(n=>n.profile_id));
@@ -1286,7 +1290,7 @@ async function blAssign(ctx){
     <button class="btn block" style="margin-top:12px" onclick="blAssignSave('${ctx}')">Assign to ${ids.length} people</button>`);
 }
 async function blAssignSave(ctx){
-  const s=BL[ctx]; const ids=[...s.sel]; const v=($('ba-sel')||{}).value||''; if(!v) return;
+  const s=BL[ctx]; const ids=blAssignTargets(s); const v=($('ba-sel')||{}).value||''; if(!v) return;
   const [t,id]=v.split(':'); let nid;
   if(t==='n') nid=id;
   else { const ex=(await sb.from('nurturers').select('id').eq('profile_id',id).limit(1)).data;
@@ -1655,6 +1659,7 @@ async function runImport(){
 const INTERESTS = ['Online Calling','Online Operations','Offline Programs','Sadhguru Sannidhi','E-Media','Promotions','Devi Seva','Event Setup','Cooking/Annadanam','Transport','Can offer space'];
 let VFILTER = {center:'', interest:'', mode:'', timing:'', space:false, activity:'', event:''};
 let VOL_SHOWN = [];   // people currently shown in the active volunteer tab (for Message all)
+let ICV_PROF = {};    // IEO completion: phone -> synced people profile (for bulk-assign)
 function volMessageAll(){ if(!VOL_SHOWN.length) return toast('No one with a phone in this list'); openMsgAll('volunteer', VOL_SHOWN, 'Message volunteers'); }
 const ssbEventNames = () => { const c=ssbCatalog(); return [...new Set([...(c.SSB?.event||[]), ...(c.IYC?.event||[])])]; };
 let SHORTLIST = [];
@@ -1671,11 +1676,10 @@ function icvRow(r, prof){
   const ph = r.phone;
   const msg = 'Namaskaram '+((r.full_name||'').split(' ')[0])+' -- You had expressed interest to volunteer when you completed Inner Engineering. We would love to have you involved at Isha Electronic City. When is a good time to talk?';
   const onclk = prof ? `showPersonProfile(${JSON.stringify(personToProfile(prof))})` : '';
-  // Assign only when a synced profile exists (we need a person id to tag a nurturer)
-  const assign = (isCoord() && prof) ? `<button class="actbtn assign" onclick="quickAssign('${prof.id}','${esc(prof.full_name||r.full_name||'')}')">Assign</button>` : '';
-  // names from the IE completion form can be ALL-CAPS / inconsistent — show clean Title Case
+  // names from the IE completion form can be ALL-CAPS / inconsistent — show clean Title Case;
+  // assignment is done from the bottom action bar (only synced-profile rows get assigned)
   const chips = chip('🪷 IEO interest','accent') + (prof?chip('🏢 '+centerName(derivedCenter(prof))):chip('no synced profile','warn'));
-  return simpleRow({photo:prof?.photo_url, name:cleanName(prof?.full_name||r.full_name), chips, onclick:onclk, phone:ph, msg, extra:assign});
+  return simpleRow({photo:prof?.photo_url, name:cleanName(prof?.full_name||r.full_name), chips, onclick:onclk, phone:ph, msg});
 }
 async function setIcvStatus(id, status){ const {error}=await sb.from('ie_completion_volunteer').update({status}).eq('id', id); toast(error?error.message:'Updated'); }
 
@@ -1979,9 +1983,12 @@ async function renderVols(){
     h += `<div class="card"><h2>🪷 IEO Completion Form — Volunteer Interest <span class="badge">${rows.length}</span></h2>
       <p class="muted" style="font-size:.78rem;margin-bottom:6px">People who ticked "Volunteer" on an IE completion form in Ishangam (Electronic City), segregated by center (from pincode). ${matched}/${rows.length} shown have a synced profile. Newest IE first.</p><div id="icv-host"></div></div>`;
     VOL_SHOWN = rows.map(r=>({full_name:r.full_name, phone:r.phone})).filter(p=>p.phone);
+    ICV_PROF = profByPhone;   // phone -> people profile, used to resolve bulk-assign targets
     view().innerHTML = h;
-    actionBar('volunteer');   // Message only (no Add for the IEO completion list)
-    bulkMount('icv', $('icv-host'), rows, {pageSize:30, rowFn:r=>icvRow(r, profByPhone[r.phone]), idOf:r=>r.phone, personOf:r=>({full_name:r.full_name,phone:r.phone}), aud:'volunteer', assignable:false});
+    actionBar('volunteer', null, null, 'icv');   // Message + Assign selected (no Add)
+    bulkMount('icv', $('icv-host'), rows, {pageSize:30, rowFn:r=>icvRow(r, profByPhone[r.phone]), idOf:r=>r.phone, personOf:r=>({full_name:r.full_name,phone:r.phone}), aud:'volunteer', assignable:true,
+      // only rows with a synced profile can be assigned — map selected phones -> person ids
+      assignIds:(sel)=>[...sel].map(ph=>(ICV_PROF[ph]||{}).id).filter(Boolean)});
     return;
   }
 
