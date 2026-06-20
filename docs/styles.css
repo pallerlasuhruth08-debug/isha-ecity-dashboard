@@ -52,6 +52,8 @@ nav button.active .ico{transform:translateY(-2px) scale(1.18)}
 .seg button.on{background:#fff;color:var(--accent);box-shadow:var(--shadow)}
 .subrow{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0}
 .subrow > select{flex:1;min-width:0}
+/* small top-of-list ＋ Add (coordinators) */
+.addrow{display:flex;justify-content:flex-end;margin:6px 0 2px}
 /* fixed bottom action bar, sits just above the main nav */
 .actionbar{position:fixed;left:0;right:0;bottom:calc(58px + env(safe-area-inset-bottom));z-index:45;
   display:flex;gap:10px;padding:10px 14px;background:linear-gradient(0deg,var(--bg),rgba(250,246,240,.94));

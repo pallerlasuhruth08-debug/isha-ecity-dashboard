@@ -484,6 +484,10 @@ function bulkAssignFromBar(ctx){
   if(!s || !s.sel.size) return toast('Tick people first, then tap Assign');
   blAssign(ctx);
 }
+// Small top-of-list "＋ Add" (coordinators only) — opens the Import / Add-person sheet.
+function addBtnRow(kind, label){
+  return isCoord() ? `<div class="addrow"><button class="btn small ghost" onclick="abAdd('${kind}')">${label||'＋ Add'}</button></div>` : '';
+}
 
 /* ============================================================
    TODAY -- calls due / overdue
@@ -526,7 +530,6 @@ async function renderToday(){
   DEFAULT_NURTURE_TPL = (await tplsFor('nurture'))[0]?.body || null;
 
   let h = '';
-  actionBar('today');   // ✉️ Message all (+ Templates) in the bottom action bar
   // glanceable KPI tiles
   h += `<div class="kpis">
     <div class="kpi warn"><div class="n">${dueToday.length}</div><div class="l">Due today</div></div>
@@ -706,9 +709,8 @@ async function renderNewMeditators(tabBar){
   const f = PF.new_meditator;
   const centerOpts = `<option value="">All Centers</option>${CENTERS.map(c=>`<option value="${c.id}" ${f.center===c.id?'selected':''}>${c.name}</option>`).join('')}`;
   const activeF = [f.center,f.dateFrom,f.dateTo,f.search].filter(Boolean).length;
-  // Pills (sticky) on top; Message/Add live in the bottom action bar; filters collapsed by default
-  let h = tabBar;
-  actionBar('new_meditator','people');
+  // Pills on top; actions appear when you tick people; coordinators get a small ＋ Add
+  let h = tabBar + addBtnRow('people');
   const nmRanged = !!(f.dateFrom||f.dateTo);
   h += `<details class="card vfilters">
     <summary>🔍 Filters &amp; date range${activeF?` <span class="badge">${activeF}</span>`:''}</summary>
@@ -764,8 +766,14 @@ async function renderNewMeditators(tabBar){
   view().innerHTML = h;
   nmMount(rows);
 }
-function nmMountCfg(){ return {externalRange:false, rowFn:newMeditatorRow, idOf:j=>j.id, personOf:j=>({full_name:j.people?.full_name,phone:j.people?.phone}), aud:'new_meditator', assignable:false, bulkActions: isCoord()?[{label:'📞 Start calling', fn:'nmStartSelected'}]:[]}; }
-function nmMount(rows){ bulkMount('newmed', $('nm-host'), rows, nmMountCfg()); }
+let NM_PID = {};   // New Meditators: journey id -> person id (for selection-based Assign)
+function nmMount(rows){
+  NM_PID = {}; rows.forEach(j=>{ if(j.people?.id) NM_PID[j.id]=j.people.id; });
+  bulkMount('newmed', $('nm-host'), rows, {externalRange:false, rowFn:newMeditatorRow, idOf:j=>j.id,
+    personOf:j=>({full_name:j.people?.full_name,phone:j.people?.phone}), aud:'new_meditator',
+    assignable:isCoord(), assignIds:(sel)=>[...sel].map(jid=>NM_PID[jid]).filter(Boolean),
+    bulkActions: isCoord()?[{label:'📞 Start calling', fn:'nmStartSelected'}]:[]});
+}
 
 let NEWMED_PEOPLE=[];
 function newMedMessageAll(){ if(!NEWMED_PEOPLE.length) return toast('No new meditators with phone numbers in view'); openMsgAll('new_meditator', NEWMED_PEOPLE, 'Message new meditators'); }
@@ -819,8 +827,7 @@ async function renderMeditatorsList(tabBar){
   const tagOpts = `<option value="">All Tags</option>${COMMON_TAGS.map(t=>`<option value="${t}" ${f.tag===t?'selected':''}>${esc(t)}</option>`).join('')}`;
 
   const activeF = [f.center,f.tag,f.dateFrom,f.dateTo,f.search].filter(Boolean).length;
-  let h = tabBar;
-  actionBar('meditator','people',null,'med');
+  let h = tabBar + addBtnRow('people');
   h += `<div class="seg">
     <button class="${MED_SCOPE==='mine'?'on':''}" onclick="medScope('mine')">🙋 My meditators</button>
     <button class="${MED_SCOPE==='all'?'on':''}" onclick="medScope('all')">🧘 All meditators</button>
@@ -1359,7 +1366,7 @@ async function renderAdvancedList(tabBar){
         <option value="completed_all" ${(f.view==='completed'&&f.window!=='week')?'selected':''}>✅ All</option>
         <option value="interested" ${f.view==='interested'?'selected':''}>✋ Interested</option></select>
   </div>`;
-  actionBar('advanced','advanced','📥 Import', f.view==='completed'?'adv_completed':null);
+  h += addBtnRow('advanced','📥 Import');
   h += `<details class="card vfilters" ${activeF?'open':''}>
     <summary>🔍 Filters &amp; range${activeF?` <span class="badge">${activeF}</span>`:''}</summary>
     <input placeholder="🔍 Search name/phone" style="width:100%;margin-top:10px" value="${esc(f.search)}"
@@ -1985,7 +1992,6 @@ async function renderVols(){
     VOL_SHOWN = rows.map(r=>({full_name:r.full_name, phone:r.phone})).filter(p=>p.phone);
     ICV_PROF = profByPhone;   // phone -> people profile, used to resolve bulk-assign targets
     view().innerHTML = h;
-    actionBar('volunteer', null, null, 'icv');   // Message + Assign selected (no Add)
     bulkMount('icv', $('icv-host'), rows, {pageSize:30, rowFn:r=>icvRow(r, profByPhone[r.phone]), idOf:r=>r.phone, personOf:r=>({full_name:r.full_name,phone:r.phone}), aud:'volunteer', assignable:true,
       // only rows with a synced profile can be assigned — map selected phones -> person ids
       assignIds:(sel)=>[...sel].map(ph=>(ICV_PROF[ph]||{}).id).filter(Boolean)});
@@ -2003,6 +2009,7 @@ async function renderVols(){
   }
 
   // (Recent Events moved to the Admin tab — managed there by Sector Nurturers / Admin.)
+  h += addBtnRow('volunteer');
 
   const activeF = [VFILTER.center,VFILTER.activity,VFILTER.interest,VFILTER.mode,VFILTER.timing,VFILTER.search].filter(Boolean).length;
   const vfFrom = (BL.vol&&BL.vol.from!=null)?BL.vol.from:'', vfTo = (BL.vol&&BL.vol.to!=null)?BL.vol.to:'';
@@ -2041,7 +2048,6 @@ async function renderVols(){
     </details>
   <div class="card"><h2>${VOL_TAB==='new'?'New volunteer interest':'All existing volunteers'} <span class="badge">${list.length}</span></h2><div id="vol-host"></div></div>`;
   view().innerHTML = h;
-  actionBar('volunteer','volunteer',null,'vol');
   bulkMount('vol', $('vol-host'), list, {externalRange:true, rowFn:v=>volRow(v, histBy[v.person_id]||[]), idOf:v=>v.person_id, personOf:v=>({full_name:v.people?.full_name,phone:v.people?.phone}), aud:'volunteer', assignable:true});
   // light first window for very long volunteer lists
   if(list.length>BL_MAXR && BL.vol.from==null){ BL.vol.from=1; BL.vol.to=60; blRender('vol'); }
@@ -2346,6 +2352,18 @@ async function renderAdmin(){
 
   if(isAdmin()){
     const pm = SETTINGS.pincode_map||{};
+    // 🏢 Centers manager — add a center by name (+ optional pincodes)
+    const pinCount = cid => Object.values(pm).filter(v=>v===cid).length;
+    h += '<details class="acc"><summary>🏢 Centers</summary><div class="acc-body">' +
+      '<table class="mini"><tr><th>Center</th><th>Pincodes</th></tr>' +
+      CENTERS.map(c=>'<tr><td>' + esc(c.name) + '</td><td>' + pinCount(c.id) + '</td></tr>').join('') + '</table>' +
+      '<div style="margin-top:10px">' +
+        '<label>New center name</label><input id="nc-name" placeholder="e.g. Begur">' +
+        '<label>Pincodes for this center (optional · comma-separated)</label>' +
+        '<input id="nc-pins" placeholder="560068, 560100" inputmode="numeric">' +
+        '<button class="btn block" style="margin-top:8px" onclick="addCenter()">➕ Add center</button>' +
+        '<p class="muted" style="font-size:.74rem;margin-top:6px">After adding, map more pincodes below. People are matched to a center by their pincode.</p>' +
+      '</div></div></details>';
     h += '<details class="acc"><summary>📍 Pincode → Center map</summary><div class="acc-body">' +
       '<table class="mini"><tr><th>Pincode</th><th>Center</th><th></th></tr>' +
       Object.entries(pm).map(([pin,cid])=>'<tr><td>' + pin + '</td><td>' + centerName(cid) + '</td>' +
@@ -2380,6 +2398,24 @@ async function setActive(id, val){
   const {error} = await sb.from('profiles').update({active:val}).eq('id', id);
   if(error) return toast(error.message);
   toast(val?'Activated':'Deactivated'); renderAdmin();
+}
+async function addCenter(){
+  const name = ($('nc-name').value||'').trim(); if(!name) return toast('Enter a center name');
+  const id = name.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'');
+  if(!id) return toast('Please use letters/numbers in the name');
+  if(CENTERS_ALL.some(c=>c.id===id)) return toast('A center like that already exists');
+  const {error} = await sb.from('centers').insert({id, name});
+  if(error) return toast(error.message);
+  // optional pincodes → map them to the new center
+  const pins = ($('nc-pins').value||'').split(/[\s,]+/).map(s=>s.trim()).filter(s=>/^\d{6}$/.test(s));
+  if(pins.length){
+    const pm = {...(SETTINGS.pincode_map||{})}; pins.forEach(p=>pm[p]=id);
+    const r = await sb.from('settings').update({value:pm}).eq('key','pincode_map');
+    if(!r.error) SETTINGS.pincode_map = pm;
+  }
+  const {data:cen} = await sb.from('centers').select('*');
+  CENTERS_ALL = cen||[]; CENTERS = (cen||[]).filter(c=>c.id!=='unassigned' && c.id!=='all');
+  toast('Center added'); celebrate('Center added 🏢'); renderAdmin();
 }
 async function addPin(){
   const pin = $('pin-new').value.trim(); if(!/^\d{6}$/.test(pin)) return toast('Enter a 6-digit pincode');
