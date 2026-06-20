@@ -484,9 +484,10 @@ function bulkAssignFromBar(ctx){
   if(!s || !s.sel.size) return toast('Tick people first, then tap Assign');
   blAssign(ctx);
 }
-// Small top-of-list "＋ Add" (coordinators only) — opens the Import / Add-person sheet.
-function addBtnRow(kind, label){
-  return isCoord() ? `<div class="addrow"><button class="btn small ghost" onclick="abAdd('${kind}')">${label||'＋ Add'}</button></div>` : '';
+// "＋ Add" / "📥 Import" button (coordinators only), rendered INSIDE the Filters summary row
+// (right-aligned). stopPropagation so tapping it doesn't toggle the filters panel.
+function addBtn(kind, label){
+  return isCoord() ? `<button class="btn small ghost addbtn" onclick="event.preventDefault();event.stopPropagation();abAdd('${kind}')">${label||'＋ Add'}</button>` : '';
 }
 
 /* ============================================================
@@ -709,11 +710,11 @@ async function renderNewMeditators(tabBar){
   const f = PF.new_meditator;
   const centerOpts = `<option value="">All Centers</option>${CENTERS.map(c=>`<option value="${c.id}" ${f.center===c.id?'selected':''}>${c.name}</option>`).join('')}`;
   const activeF = [f.center,f.dateFrom,f.dateTo,f.search].filter(Boolean).length;
-  // Pills on top; actions appear when you tick people; coordinators get a small ＋ Add
-  let h = tabBar + addBtnRow('people');
+  // Pills on top; actions appear when you tick people; ＋ Add sits in the filters header
+  let h = tabBar;
   const nmRanged = !!(f.dateFrom||f.dateTo);
   h += `<details class="card vfilters">
-    <summary>🔍 Filters &amp; date range${activeF?` <span class="badge">${activeF}</span>`:''}</summary>
+    <summary>🔍 Filters &amp; date range${activeF?` <span class="badge">${activeF}</span>`:''}${addBtn('people')}</summary>
     <input placeholder="🔍 Search name or phone" style="width:100%;margin-top:10px" value="${esc(f.search)}"
       oninput="PF.new_meditator.search=this.value" onkeydown="if(event.key==='Enter')renderPeople()">
     <div class="filterrow">
@@ -827,14 +828,14 @@ async function renderMeditatorsList(tabBar){
   const tagOpts = `<option value="">All Tags</option>${COMMON_TAGS.map(t=>`<option value="${t}" ${f.tag===t?'selected':''}>${esc(t)}</option>`).join('')}`;
 
   const activeF = [f.center,f.tag,f.dateFrom,f.dateTo,f.search].filter(Boolean).length;
-  let h = tabBar + addBtnRow('people');
+  let h = tabBar;
   h += `<div class="seg">
     <button class="${MED_SCOPE==='mine'?'on':''}" onclick="medScope('mine')">🙋 My meditators</button>
     <button class="${MED_SCOPE==='all'?'on':''}" onclick="medScope('all')">🧘 All meditators</button>
   </div>`;
 
   h += `<details class="card vfilters" ${activeF?'open':''}>
-    <summary>🔍 Filters &amp; range${activeF?` <span class="badge">${activeF}</span>`:''}</summary>
+    <summary>🔍 Filters &amp; range${activeF?` <span class="badge">${activeF}</span>`:''}${addBtn('people')}</summary>
     <input id="med-search" placeholder="🔍 Search by name or phone" style="width:100%;margin-top:10px" value="${esc(f.search)}"
       oninput="PF.meditator.search=this.value;medSearchLive()">
     <div class="filterrow">
@@ -1366,9 +1367,8 @@ async function renderAdvancedList(tabBar){
         <option value="completed_all" ${(f.view==='completed'&&f.window!=='week')?'selected':''}>✅ All</option>
         <option value="interested" ${f.view==='interested'?'selected':''}>✋ Interested</option></select>
   </div>`;
-  h += addBtnRow('advanced','📥 Import');
   h += `<details class="card vfilters" ${activeF?'open':''}>
-    <summary>🔍 Filters &amp; range${activeF?` <span class="badge">${activeF}</span>`:''}</summary>
+    <summary>🔍 Filters &amp; range${activeF?` <span class="badge">${activeF}</span>`:''}${addBtn('advanced','📥 Import')}</summary>
     <input placeholder="🔍 Search name/phone" style="width:100%;margin-top:10px" value="${esc(f.search)}"
       oninput="PF.advanced.search=this.value" onkeydown="if(event.key==='Enter')renderPeople()">
     <div class="choices" style="flex-wrap:wrap;gap:6px;margin-top:8px;align-items:center">
@@ -2009,12 +2009,10 @@ async function renderVols(){
   }
 
   // (Recent Events moved to the Admin tab — managed there by Sector Nurturers / Admin.)
-  h += addBtnRow('volunteer');
-
   const activeF = [VFILTER.center,VFILTER.activity,VFILTER.interest,VFILTER.mode,VFILTER.timing,VFILTER.search].filter(Boolean).length;
   const vfFrom = (BL.vol&&BL.vol.from!=null)?BL.vol.from:'', vfTo = (BL.vol&&BL.vol.to!=null)?BL.vol.to:'';
   h += `<details class="card vfilters" ${activeF||vfFrom!==''?'open':''}>
-    <summary>🔍 Filters &amp; range${activeF?` <span class="badge">${activeF}</span>`:''}</summary>
+    <summary>🔍 Filters &amp; range${activeF?` <span class="badge">${activeF}</span>`:''}${addBtn('volunteer')}</summary>
     <input placeholder="🔍 Search name or phone" style="width:100%;margin-top:10px" value="${esc(VFILTER.search||'')}"
       oninput="VFILTER.search=this.value" onkeydown="if(event.key==='Enter')renderVols()">
     <div class="filterrow">
