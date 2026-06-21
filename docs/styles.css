@@ -179,7 +179,12 @@ nav button.active .ico{transform:translateY(-2px) scale(1.18)}
 .row.simple{gap:10px}
 .av.avph{display:flex;align-items:center;justify-content:center;font-weight:800;color:var(--accent);
   background:var(--accent-soft);font-size:1rem;cursor:pointer}
-.row.simple .name{overflow-wrap:anywhere;word-break:break-word;line-height:1.25}
+.row.simple .name{overflow-wrap:anywhere;word-break:normal;line-height:1.3}
+/* full-width control row under a card's name (e.g. status dropdown) */
+.rowfoot{margin-top:7px}
+.footlabel{display:flex;align-items:center;gap:8px;font-size:.76rem;color:var(--muted);font-weight:700}
+.statussel{flex:1;min-width:0;font-size:.86rem;padding:9px 30px 9px 11px;border-radius:10px;
+  border:1.5px solid var(--line);background-color:transparent;color:var(--ink);text-transform:capitalize}
 .acts{display:flex;align-items:center;gap:6px;flex-shrink:0}
 .actbtn{border:none;border-radius:10px;padding:10px 13px;font-size:.86rem;font-weight:700;cursor:pointer;
   text-decoration:none;display:inline-flex;align-items:center;justify-content:center;min-height:38px;

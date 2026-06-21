@@ -1086,6 +1086,7 @@ function simpleRow(o){
     <div class="grow" style="${cur};min-width:0" ${clickAttr}>
       <div class="name">${esc(o.name||'?')}${o.badge?' '+o.badge:''}</div>
       ${o.chips?`<div class="chips">${o.chips}</div>`:(o.sub?`<div class="sub">${o.sub}</div>`:'')}
+      ${o.foot?`<div class="rowfoot">${o.foot}</div>`:''}
     </div>
     <div class="acts">
       ${o.phone?`<a class="ib call" href="tel:+91${o.phone}" aria-label="Call">📞</a>`:''}
@@ -1564,12 +1565,14 @@ function advCompletedRow(p, col, label){
 function advInterestRow(r, label){
   const p = r.people || {};
   const msg = 'Namaskaram '+(p.full_name||'').split(' ')[0]+' -- You had expressed interest in '+label+'. We would love to help you register. When is a good time to talk?';
-  const chips = chip('✋ '+label,'accent') + (r.status?chip(r.status):'');
-  const extra = isCoord() ? `<select class="actbtn-sel" onchange="setInterestStatus('${r.id}',this.value)">
+  const chips = chip('✋ '+label,'accent');
+  // status dropdown sits on its own full-width line (foot) so the name never gets squeezed
+  const foot = isCoord() ? `<label class="footlabel">Status
+    <select class="statussel" onchange="setInterestStatus('${r.id}',this.value)">
     ${['new','contacted','registered','done','dropped'].map(s=>`<option value="${s}" ${r.status===s?'selected':''}>${s}</option>`).join('')}
-  </select>` : '';
+    </select></label>` : (r.status?chip(r.status):'');
   const onclk = `showPersonProfile(${JSON.stringify(personToProfile(p))})`;
-  return simpleRow({photo:p.photo_url, name:p.full_name, chips, onclick:onclk, phone:p.phone, msg, extra});
+  return simpleRow({photo:p.photo_url, name:p.full_name, chips, foot, onclick:onclk, phone:p.phone, msg});
 }
 
 function openAddInterest(program){
