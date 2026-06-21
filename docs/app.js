@@ -1285,7 +1285,7 @@ async function assignNurturer(medId, nurturerId, btn){
   const {error} = await sb.from('nurturer_assignments').upsert({meditator_id:medId, nurturer_id:nurturerId, assigned_by:ME.id},{onConflict:'meditator_id,nurturer_id',ignoreDuplicates:true});
   if(error) return toast(error.message);
   if(btn){ btn.textContent='Assigned'; btn.disabled=true; btn.classList.remove('green'); btn.classList.add('gray'); }
-  cacheBust(); toast('Assigned'); celebrate('Assigned 🙏');
+  cacheBust(); toast('Assigned 🙏');
 }
 async function createNurturerAssign(medId){
   const name = ($('an-name').value||'').trim(); if(!name) return toast('Name required');
@@ -1446,8 +1446,7 @@ function blAssignSave(ctx){
   const [t,id]=v.split(':');
   // ---- optimistic: confirm + clear selection instantly; queue the assignment (sends now if online) ----
   closeModal();
-  toast(navigator.onLine===false ? 'Assigned offline — will sync' : 'Assigned '+ids.length+' people');
-  celebrate('Assigned '+ids.length+' 🙏');
+  toast(navigator.onLine===false ? 'Assigned offline — will sync 🙏' : 'Assigned '+ids.length+' 🙏');
   if(BL[ctx]){ BL[ctx].sel.clear(); try{ blRender(ctx); }catch(e){} }
   outboxEnqueue({ kind:'assign', ts:Date.now(), data:{ meditatorIds:ids, sel:{type:t, id}, by:ME.id } });
   flushOutbox();
