@@ -2363,12 +2363,14 @@ async function renderAdmin(){
         '<p class="muted" style="font-size:.74rem;margin-top:6px">After adding, map more pincodes below. People are matched to a center by their pincode.</p>' +
       '</div></div></details>';
     h += '<details class="acc"><summary>📍 Pincode → Center map</summary><div class="acc-body">' +
+      '<p class="muted" style="font-size:.78rem;margin-bottom:6px">Change a pincode\'s center inline, or add new ones below (one or many, comma-separated).</p>' +
       '<table class="mini"><tr><th>Pincode</th><th>Center</th><th></th></tr>' +
-      Object.entries(pm).map(([pin,cid])=>'<tr><td>' + pin + '</td><td>' + centerName(cid) + '</td>' +
+      Object.entries(pm).sort((a,b)=>a[0].localeCompare(b[0])).map(([pin,cid])=>'<tr><td>' + pin + '</td><td>' +
+        '<select onchange="setPinCenter(\'' + pin + '\',this.value)">' + CENTERS.map(c=>'<option value="' + c.id + '"' + (c.id===cid?' selected':'') + '>' + c.name + '</option>').join('') + '</select></td>' +
         '<td><button class="btn small gray" onclick="delPin(\'' + pin + '\')">Remove</button></td></tr>').join('') + '</table>' +
-      '<div style="display:flex;gap:8px;margin-top:8px">' +
-        '<input id="pin-new" placeholder="560xxx" inputmode="numeric" style="flex:1">' +
-        '<select id="pin-center" style="flex:1">' + CENTERS.map(c=>'<option value="' + c.id + '">' + c.name + '</option>').join('') + '</select>' +
+      '<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">' +
+        '<input id="pin-new" placeholder="560068, 560100" inputmode="numeric" style="flex:1;min-width:140px">' +
+        '<select id="pin-center" style="flex:1;min-width:120px">' + CENTERS.map(c=>'<option value="' + c.id + '">' + c.name + '</option>').join('') + '</select>' +
         '<button class="btn small" onclick="addPin()">Add</button></div></div></details>';
     const rc = SETTINGS.reminder_config||{};
     h += '<details class="acc"><summary>🔔 Reminder settings</summary><div class="acc-body">' +
@@ -2415,12 +2417,22 @@ async function addCenter(){
   CENTERS_ALL = cen||[]; CENTERS = (cen||[]).filter(c=>c.id!=='unassigned' && c.id!=='all');
   toast('Center added'); celebrate('Center added 🏢'); renderAdmin();
 }
-async function addPin(){
-  const pin = $('pin-new').value.trim(); if(!/^\d{6}$/.test(pin)) return toast('Enter a 6-digit pincode');
-  const pm = {...(SETTINGS.pincode_map||{}), [pin]:$('pin-center').value};
+// reassign a pincode's center inline
+async function setPinCenter(pin, cid){
+  const pm = {...(SETTINGS.pincode_map||{}), [pin]:cid};
   const {error} = await sb.from('settings').update({value:pm}).eq('key','pincode_map');
   if(error) return toast(error.message);
-  SETTINGS.pincode_map = pm; renderAdmin(); toast('Added');
+  SETTINGS.pincode_map = pm; toast(pin+' → '+centerName(cid));
+}
+async function addPin(){
+  const pins = ($('pin-new').value||'').split(/[\s,]+/).map(s=>s.trim()).filter(Boolean);
+  const valid = pins.filter(p=>/^\d{6}$/.test(p));
+  if(!valid.length) return toast('Enter one or more 6-digit pincodes');
+  const cid = $('pin-center').value;
+  const pm = {...(SETTINGS.pincode_map||{})}; valid.forEach(p=>pm[p]=cid);
+  const {error} = await sb.from('settings').update({value:pm}).eq('key','pincode_map');
+  if(error) return toast(error.message);
+  SETTINGS.pincode_map = pm; renderAdmin(); toast('Added '+valid.length+' pincode'+(valid.length>1?'s':'')+' → '+centerName(cid));
 }
 async function delPin(pin){
   const pm = {...(SETTINGS.pincode_map||{})}; delete pm[pin];
