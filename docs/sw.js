@@ -3,7 +3,7 @@
    - caches Supabase REST GETs so the last-seen data shows with no signal
    - never caches writes (POST/PATCH/DELETE) — those always go to the network
    Bump CACHE on each deploy to invalidate old assets. */
-const CACHE = 'ecity-v57';
+const CACHE = 'ecity-v58';
 const SHELL = ['./', './index.html', './manifest.webmanifest',
   './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
 

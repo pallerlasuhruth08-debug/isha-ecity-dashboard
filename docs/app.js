@@ -685,6 +685,12 @@ async function renderToday(){
   if(!calls.length){
     h += `<div class="card"><div class="empty"><div class="empty-anim" id="today-empty"></div>🎉 All caught up — no calls due.</div></div>`;
   } else {
+    // ⭐ Start here — the most urgent calls first (most-overdue, then due today)
+    const priority = overdue.concat(dueToday).slice(0,3);
+    if(priority.length){
+      h += `<div class="starthere"><div class="sect">⭐ Start here · your most urgent ${priority.length===1?'call':priority.length+' calls'}</div>`
+        + priority.map(callRow).join('') + `</div>`;
+    }
     if(overdue.length){
       h += `<details class="acc"><summary>⚠️ Overdue <span class="badge red">${overdue.length}</span></summary>
         <div class="acc-body"><div id="today-od-host"></div></div></details>`;
