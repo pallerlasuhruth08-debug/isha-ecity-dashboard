@@ -182,6 +182,30 @@ async function sendOp(op){
       reachability:d.reach, sadhana_status:d.status, remarks:d.remarks, logged_by:d.loggedBy }); if(error) throw error; }
     if(d.callId){ const {error} = await sb.from('calls').update({ completed_at:new Date(d.ts||Date.now()).toISOString(),
       reachability:d.reach, sadhana_status:d.status, remarks:d.remarks, logged_by:d.loggedBy }).eq('id', d.callId); if(error) throw error; }
+    return;
+  }
+  if(op.kind==='assign'){
+    const d = op.data; let nid;
+    if(d.sel.type==='n') nid = d.sel.id;                 // existing nurturer chosen directly
+    else {                                               // a profile/app-user → ensure a nurturer row exists
+      const ex = (await sb.from('nurturers').select('id').eq('profile_id', d.sel.id).limit(1)).data;
+      if(ex && ex[0]) nid = ex[0].id;
+      else {
+        const p = (await sb.from('profiles').select('full_name,email,phone').eq('id', d.sel.id).single()).data;
+        const ins = await sb.from('nurturers').insert({ full_name:(p&&(p.full_name||p.email))||'Nurturer', phone:(p&&p.phone)||null, profile_id:d.sel.id, source:'login' }).select('id').single();
+        if(ins.error) throw ins.error; nid = ins.data.id;
+      }
+    }
+    const rows = (d.meditatorIds||[]).map(mid=>({ meditator_id:mid, nurturer_id:nid, assigned_by:d.by }));
+    for(let i=0;i<rows.length;i+=200){
+      const r = await sb.from('nurturer_assignments').upsert(rows.slice(i,i+200),{onConflict:'meditator_id,nurturer_id',ignoreDuplicates:true}).select('id');
+      if(r.error) throw r.error;
+    }
+    return;
+  }
+  if(op.kind==='status'){
+    const d = op.data; const {error} = await sb.from(d.table).update({ status:d.status }).eq('id', d.id);
+    if(error) throw error; return;
   }
   // unknown kinds are simply dropped by the caller
 }
@@ -1417,28 +1441,16 @@ async function blAssign(ctx){
     <label>Nurturer</label><select id="ba-sel">${opts.map(o=>`<option value="${o.v}">${esc(o.label)}</option>`).join('')}</select>
     <button class="btn block" style="margin-top:12px" onclick="blAssignSave('${ctx}')">Assign to ${ids.length} people</button>`);
 }
-async function blAssignSave(ctx){
+function blAssignSave(ctx){
   const s=BL[ctx]; const ids=blAssignTargets(s); const v=($('ba-sel')||{}).value||''; if(!v) return;
-  const [t,id]=v.split(':'); let nid;
-  if(t==='n') nid=id;
-  else { const ex=(await sb.from('nurturers').select('id').eq('profile_id',id).limit(1)).data;
-    if(ex&&ex[0]) nid=ex[0].id;
-    else { const p=(await sb.from('profiles').select('full_name,email,phone').eq('id',id).single()).data;
-      const ins=await sb.from('nurturers').insert({full_name:p.full_name||p.email,phone:p.phone||null,profile_id:id,source:'login'}).select('id').single();
-      if(ins.error) return toast(ins.error.message); nid=ins.data.id; } }
-  const rows=ids.map(mid=>({meditator_id:mid,nurturer_id:nid,assigned_by:ME.id}));
-  const chunk=(a,n)=>{const o=[];for(let i=0;i<a.length;i+=n)o.push(a.slice(i,i+n));return o;};
-  // ---- optimistic: confirm + clear selection instantly, write in the background ----
-  closeModal(); toast('Assigned '+ids.length+' people'); celebrate('Assigned '+ids.length+' 🙏');
+  const [t,id]=v.split(':');
+  // ---- optimistic: confirm + clear selection instantly; queue the assignment (sends now if online) ----
+  closeModal();
+  toast(navigator.onLine===false ? 'Assigned offline — will sync' : 'Assigned '+ids.length+' people');
+  celebrate('Assigned '+ids.length+' 🙏');
   if(BL[ctx]){ BL[ctx].sel.clear(); try{ blRender(ctx); }catch(e){} }
-  (async()=>{
-    try{
-      for(const b of chunk(rows,200)){
-        const r=await sb.from('nurturer_assignments').upsert(b,{onConflict:'meditator_id,nurturer_id',ignoreDuplicates:true}).select('id');
-        if(r.error) throw r.error;
-      }
-    }catch(e){ toast('Assign failed — please retry'); }
-  })();
+  outboxEnqueue({ kind:'assign', ts:Date.now(), data:{ meditatorIds:ids, sel:{type:t, id}, by:ME.id } });
+  flushOutbox();
 }
 
 async function startNurturing(d){
@@ -1575,9 +1587,10 @@ async function saveAddInterest(program){
   if(data?.error) return toast(data.error);
   closeModal(); toast('Interest saved'); renderPeople();
 }
-async function setInterestStatus(id, status){
-  const {error} = await sb.from('advanced_interest').update({status}).eq('id', id);
-  toast(error?error.message:'Updated');
+function setInterestStatus(id, status){
+  outboxEnqueue({ kind:'status', ts:Date.now(), data:{ table:'advanced_interest', id, status } });
+  toast(navigator.onLine===false ? 'Saved offline — will sync' : 'Updated');
+  flushOutbox();
 }
 function advImport(kind, program){
   if(kind==='paper') return openAddInterest(program);
@@ -1815,7 +1828,7 @@ function icvRow(r, prof){
   const chips = chip('🪷 IEO interest','accent') + (prof?chip('🏢 '+centerName(derivedCenter(prof))):chip('no synced profile','warn'));
   return simpleRow({photo:prof?.photo_url, name:cleanName(prof?.full_name||r.full_name), chips, onclick:onclk, phone:ph, msg});
 }
-async function setIcvStatus(id, status){ const {error}=await sb.from('ie_completion_volunteer').update({status}).eq('id', id); toast(error?error.message:'Updated'); }
+function setIcvStatus(id, status){ outboxEnqueue({ kind:'status', ts:Date.now(), data:{ table:'ie_completion_volunteer', id, status } }); toast(navigator.onLine===false?'Saved offline — will sync':'Updated'); flushOutbox(); }
 
 /* ============================================================
    SSB / IYC volunteering browser  (Org -> Type -> Name -> Year -> people)
