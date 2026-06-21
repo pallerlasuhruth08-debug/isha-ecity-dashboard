@@ -62,6 +62,12 @@ nav button.active .ico{transform:translateY(-2px) scale(1.18)}
 #ptr.armed{background:var(--accent);color:#fff}
 #ptr.spinning .ptr-spin{display:inline-block;animation:ptrspin .7s linear infinite}
 @keyframes ptrspin{to{transform:rotate(360deg)}}
+/* offline / pending-sync status strip (sits just above the bottom nav) */
+#netbar{position:fixed;left:0;right:0;bottom:calc(56px + env(safe-area-inset-bottom));z-index:70;display:none;
+  text-align:center;font-size:.8rem;font-weight:700;padding:7px 10px;background:#4a3a2a;color:#fdf6ee;
+  box-shadow:0 -2px 10px rgba(80,55,25,.12)}
+#netbar.show{display:block;animation:fadein .2s ease both}
+#netbar.offline{background:var(--warn)}
 /* fixed bottom action bar, sits just above the main nav */
 .actionbar{position:fixed;left:0;right:0;bottom:calc(58px + env(safe-area-inset-bottom));z-index:45;
   display:flex;gap:10px;padding:10px 14px;background:linear-gradient(0deg,var(--bg),rgba(250,246,240,.94));

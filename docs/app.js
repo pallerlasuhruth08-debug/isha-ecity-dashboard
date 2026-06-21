@@ -161,6 +161,66 @@ function initPullToRefresh(){
     else reset();
   });
 }
+
+/* ---------------- Offline write-queue ----------------
+   Call logs made with no signal are saved to a local outbox and sent
+   automatically when the connection returns (or on next app open). */
+const OUTBOX_KEY = 'ecity_outbox';
+let FLUSHING = false, QUEUE_INIT = false;
+function outboxLoad(){ try{ return JSON.parse(localStorage.getItem(OUTBOX_KEY)||'[]'); }catch(e){ return []; } }
+function outboxSave(q){ try{ localStorage.setItem(OUTBOX_KEY, JSON.stringify(q)); }catch(e){} netbarUpdate(); }
+function outboxEnqueue(op){
+  const q = outboxLoad();
+  op.id = op.id || (crypto.randomUUID ? crypto.randomUUID() : String(Date.now())+Math.random());
+  op.tries = 0;
+  q.push(op); outboxSave(q);
+}
+async function sendOp(op){
+  if(op.kind==='call_log'){
+    const d = op.data;
+    if(d.jid){ const {error} = await sb.from('call_logs').insert({ journey_id:d.jid, person_id:d.pid||null, call_id:d.callId||null,
+      reachability:d.reach, sadhana_status:d.status, remarks:d.remarks, logged_by:d.loggedBy }); if(error) throw error; }
+    if(d.callId){ const {error} = await sb.from('calls').update({ completed_at:new Date(d.ts||Date.now()).toISOString(),
+      reachability:d.reach, sadhana_status:d.status, remarks:d.remarks, logged_by:d.loggedBy }).eq('id', d.callId); if(error) throw error; }
+  }
+  // unknown kinds are simply dropped by the caller
+}
+async function flushOutbox(){
+  if(FLUSHING) return;
+  let q = outboxLoad();
+  if(!q.length){ netbarUpdate(); return; }
+  if(typeof navigator!=='undefined' && navigator.onLine===false){ netbarUpdate(); return; }
+  FLUSHING = true; netbarUpdate();
+  let sent = 0;
+  while(q.length){
+    const op = q[0];
+    try{ await sendOp(op); q.shift(); sent++; outboxSave(q); }
+    catch(e){
+      op.tries = (op.tries||0)+1;
+      if(op.tries >= 6){ q.shift(); outboxSave(q); toast('Couldn’t sync one update — please re-log it'); continue; }
+      outboxSave(q); break;   // network issue — stop, retry on next online/interval
+    }
+  }
+  FLUSHING = false; netbarUpdate();
+  if(sent && !outboxLoad().length) toast('Synced '+sent+' offline '+(sent>1?'updates':'update')+' ✓');
+}
+// thin status strip (offline / pending-sync), above the bottom nav
+function netbarUpdate(){
+  let b = document.getElementById('netbar');
+  if(!b){ b = document.createElement('div'); b.id='netbar'; document.body.appendChild(b); }
+  const n = outboxLoad().length;
+  const offline = (typeof navigator!=='undefined' && navigator.onLine===false);
+  if(offline){ b.textContent = '📴 Offline'+(n?(' · '+n+' to sync'):' · changes will sync'); b.className='show offline'; }
+  else if(n){ b.textContent = FLUSHING ? ('↻ Syncing '+n+'…') : ('⏳ '+n+' waiting to sync'); b.className='show'; }
+  else { b.className=''; }
+}
+function initQueue(){
+  if(QUEUE_INIT) return; QUEUE_INIT = true;
+  window.addEventListener('online', flushOutbox);
+  window.addEventListener('offline', netbarUpdate);
+  setInterval(flushOutbox, 20000);
+  netbarUpdate(); flushOutbox();
+}
 async function refreshNow(){ const a=document.querySelector('.avatar'); if(a) a.open=false; const y=window.scrollY; cacheBust(); toast('Refreshing...'); await go(CURRENT_VIEW||'today'); window.scrollTo(0,y); toast('Up to date'); }
 // shrink the header once the user scrolls a little
 window.addEventListener('scroll', ()=>{ const hb=document.getElementById('topbar'); if(hb) hb.classList.toggle('slim', window.scrollY>40); }, {passive:true});
@@ -233,6 +293,7 @@ async function boot(){
   if(land==='admin' && !isCoord()) land='profile';
   if(!['today','people','vols','insights','admin','profile'].includes(land)) land='profile';
   initPullToRefresh();
+  initQueue();             // offline write-queue: sync pending call logs when signal returns
   go(land);
   showQuote(true);         // opening Sadhguru photo + volunteering quote
 }
@@ -699,28 +760,17 @@ async function saveLog(close){
   const status = LOG.reach==='answered' ? LOG.status : null;
   const callId = LOG.id, jid = LOG.jid, pid = LOG.pid;
   LOG_LAST = { reach: LOG.reach, status, remarks };   // snapshot before the form resets
-  // ---- optimistic: drop this call from Today instantly, then save in the background ----
+  // ---- optimistic: drop this call from Today instantly; queue the save (sends now if online) ----
   if(callId && CACHE.today && Array.isArray(CACHE.today.calls)){
     CACHE.today = {...CACHE.today, calls: CACHE.today.calls.filter(c=>c.id!==callId)};
   }
-  toast('Saved!'); celebrate('Call logged 🙏');
+  outboxEnqueue({ kind:'call_log', ts:Date.now(),
+    data:{ jid, pid, callId, reach:LOG_LAST.reach, status:LOG_LAST.status, remarks:LOG_LAST.remarks, loggedBy:ME.id } });
+  toast(navigator.onLine===false ? 'Saved offline — will sync' : 'Saved!');
+  celebrate('Call logged 🙏');
   if(close){ closeModal(); if(CURRENT_VIEW==='today') renderToday(); }
   else { openLog({...LOG, id:null, reach:null, status:null}); }  // reopen: history grows, fresh ad-hoc log
-  (async()=>{
-    try{
-      if(jid){
-        const {error} = await sb.from('call_logs').insert({
-          journey_id: jid, person_id: pid||null, call_id: callId||null,
-          reachability: LOG_LAST.reach, sadhana_status: LOG_LAST.status, remarks: LOG_LAST.remarks, logged_by: ME.id });
-        if(error) throw error;
-      }
-      if(callId){
-        const {error} = await sb.from('calls').update({ completed_at:new Date().toISOString(), reachability:LOG_LAST.reach,
-          sadhana_status:LOG_LAST.status, remarks:LOG_LAST.remarks, logged_by:ME.id }).eq('id', callId);
-        if(error) throw error;
-      }
-    }catch(e){ toast('Save failed — restoring'); cacheBust(); if(CURRENT_VIEW==='today') renderToday(); }
-  })();
+  flushOutbox();
 }
 let LOG_LAST = {};
 
