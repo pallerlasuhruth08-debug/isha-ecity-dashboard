@@ -54,6 +54,14 @@ nav button.active .ico{transform:translateY(-2px) scale(1.18)}
 .subrow > select{flex:1;min-width:0}
 /* ＋ Add / 📥 Import sitting at the right of the Filters header row */
 .vfilters summary .addbtn{margin-left:auto;flex-shrink:0}
+/* pull-to-refresh indicator */
+#ptr{position:fixed;top:0;left:0;right:0;margin:0 auto;width:46px;height:46px;border-radius:50%;z-index:80;
+  background:var(--card);box-shadow:var(--shadow-lg);display:flex;align-items:center;justify-content:center;
+  color:var(--accent);font-size:1.5rem;transform:translateY(-60px);transition:opacity .15s;opacity:0;pointer-events:none}
+#ptr.show{opacity:1}
+#ptr.armed{background:var(--accent);color:#fff}
+#ptr.spinning .ptr-spin{display:inline-block;animation:ptrspin .7s linear infinite}
+@keyframes ptrspin{to{transform:rotate(360deg)}}
 /* fixed bottom action bar, sits just above the main nav */
 .actionbar{position:fixed;left:0;right:0;bottom:calc(58px + env(safe-area-inset-bottom));z-index:45;
   display:flex;gap:10px;padding:10px 14px;background:linear-gradient(0deg,var(--bg),rgba(250,246,240,.94));

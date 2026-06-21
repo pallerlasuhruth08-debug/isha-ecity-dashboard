@@ -131,6 +131,36 @@ function mountList(host, items, rowFn, batch=80){
   let guard = 0;
   while(n < items.length && document.body.offsetHeight <= window.innerHeight + 1200 && guard++ < 80) chunk();
 }
+
+/* ---------------- Pull-to-refresh (native gesture at top of any list) ---------------- */
+let PTR_INIT = false;
+function initPullToRefresh(){
+  if(PTR_INIT) return; PTR_INIT = true;
+  let ind = document.getElementById('ptr');
+  if(!ind){ ind = document.createElement('div'); ind.id='ptr'; ind.innerHTML='<span class="ptr-spin">↻</span>'; document.body.appendChild(ind); }
+  let startY=0, pulling=false, dist=0, armed=false;
+  const TH = 72;
+  const reset = ()=>{ ind.style.transform='translateY(-60px)'; ind.classList.remove('show','armed','spinning'); };
+  window.addEventListener('touchstart', (e)=>{
+    const appEl=$('app');
+    if(window.scrollY>0 || document.querySelector('.modal-bg') || !appEl || appEl.classList.contains('hidden')){ pulling=false; return; }
+    startY=e.touches[0].clientY; pulling=true; armed=false; dist=0;
+  }, {passive:true});
+  window.addEventListener('touchmove', (e)=>{
+    if(!pulling) return;
+    dist = e.touches[0].clientY - startY;
+    if(dist<=0 || window.scrollY>0){ reset(); armed=false; return; }
+    e.preventDefault();                              // rubber-band only while pulling down at the very top
+    const pull = Math.min(dist*0.5, 80);
+    ind.style.transform='translateY('+(pull-60)+'px)'; ind.classList.add('show');
+    armed = dist>TH; ind.classList.toggle('armed', armed);
+  }, {passive:false});
+  window.addEventListener('touchend', ()=>{
+    if(!pulling) return; pulling=false;
+    if(armed){ ind.classList.add('spinning'); Promise.resolve(refreshNow()).finally(reset); }
+    else reset();
+  });
+}
 async function refreshNow(){ const a=document.querySelector('.avatar'); if(a) a.open=false; const y=window.scrollY; cacheBust(); toast('Refreshing...'); await go(CURRENT_VIEW||'today'); window.scrollTo(0,y); toast('Up to date'); }
 // shrink the header once the user scrolls a little
 window.addEventListener('scroll', ()=>{ const hb=document.getElementById('topbar'); if(hb) hb.classList.toggle('slim', window.scrollY>40); }, {passive:true});
@@ -196,7 +226,14 @@ async function boot(){
   // load AutoAnimate (fluid list add/remove); harmless if it fails — lists fall back to a CSS stagger
   loadScript(CDN.autoanimate).then(()=>{ AA = window.autoAnimate || (window.formkit&&window.formkit.autoAnimate) || null; }).catch(()=>{});
   loadScript(CDN.lottie).then(()=>{ LOTTIE = window.lottie||null; }).catch(()=>{});
-  go('profile');           // land on Profile after the opening quote
+  // resume where the user left off (last tab + filters), falling back to Profile
+  const st = restoreUIState();
+  let land = (st && st.view) || 'profile';
+  if(land==='vols' && !isCoord()) land='profile';
+  if(land==='admin' && !isCoord()) land='profile';
+  if(!['today','people','vols','insights','admin','profile'].includes(land)) land='profile';
+  initPullToRefresh();
+  go(land);
   showQuote(true);         // opening Sadhguru photo + volunteering quote
 }
 /* ============================================================
@@ -404,16 +441,39 @@ const personToProfile = p => ({n:p.full_name,ph:p.phone,email:p.email,occ:p.occu
 
 /* ---------------- NAV ---------------- */
 let CURRENT_VIEW = 'today';
+const SCROLL_BY_VIEW = {};   // remember scroll position per view
+// persist the last view / sub-tabs / filters so we resume exactly where we left off
+const UI_STATE_KEY = 'ecity_ui_state';
+function saveUIState(){
+  try{ localStorage.setItem(UI_STATE_KEY, JSON.stringify({
+    view: CURRENT_VIEW, peopleTab: PEOPLE_TAB, volTab: VOL_TAB, medScope: MED_SCOPE,
+    pf: PF, vfilter: VFILTER, scroll: SCROLL_BY_VIEW
+  })); }catch(e){}
+}
+function restoreUIState(){
+  let st; try{ st = JSON.parse(localStorage.getItem(UI_STATE_KEY)||'{}'); }catch(e){ st={}; }
+  if(!st || typeof st!=='object') return null;
+  if(st.peopleTab) PEOPLE_TAB = st.peopleTab;
+  if(st.volTab) VOL_TAB = st.volTab;
+  if(st.medScope){ MED_SCOPE = st.medScope; MED_SCOPE_SET = true; }
+  if(st.pf) Object.keys(PF).forEach(k=>{ if(st.pf[k]) Object.assign(PF[k], st.pf[k]); });
+  if(st.vfilter) Object.assign(VFILTER, st.vfilter);
+  if(st.scroll) Object.assign(SCROLL_BY_VIEW, st.scroll);
+  return st;
+}
 function go(v){
+  if(CURRENT_VIEW) SCROLL_BY_VIEW[CURRENT_VIEW] = window.scrollY;   // remember where we were
   CURRENT_VIEW = v;
   setActionBar('');   // each screen re-populates its own actions (or leaves it hidden)
   document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('active', b.dataset.v===v));
   const map={today:renderToday, people:renderPeople, vols:renderVols,
     insights:renderInsights, admin:renderAdmin, profile:renderProfile};
   const run=()=>{ try{ map[v](); }catch(e){} };
+  saveUIState();
+  // restore the scroll position for this view once its content has had a moment to paint
+  const y = SCROLL_BY_VIEW[v];
+  if(y) setTimeout(()=>{ try{ window.scrollTo(0, y); }catch(e){} }, 280);
   // View Transitions API → smooth crossfade between tabs/sections (Chrome).
-  // We don't return the async render promise, so a slow data load can't freeze the transition;
-  // each render paints a shimmer skeleton synchronously, then fills in.
   if(document.startViewTransition && !matchMedia('(prefers-reduced-motion:reduce)').matches){
     document.startViewTransition(run);
   } else { return map[v](); }
@@ -637,22 +697,32 @@ async function saveLog(close){
   if(!LOG.reach) return toast('Select reachability');
   const remarks = $('lg-remarks').value || null;
   const status = LOG.reach==='answered' ? LOG.status : null;
-  // append-only history (never overwrites earlier logs)
-  if(LOG.jid){
-    const {error} = await sb.from('call_logs').insert({
-      journey_id: LOG.jid, person_id: LOG.pid||null, call_id: LOG.id||null,
-      reachability: LOG.reach, sadhana_status: status, remarks, logged_by: ME.id });
-    if(error) return toast(error.message);
-  }
-  // also complete the scheduled call (keeps Today behaviour + latest status for insights)
-  if(LOG.id){
-    await sb.from('calls').update({ completed_at:new Date().toISOString(), reachability:LOG.reach,
-      sadhana_status:status, remarks, logged_by:ME.id }).eq('id', LOG.id);
+  const callId = LOG.id, jid = LOG.jid, pid = LOG.pid;
+  LOG_LAST = { reach: LOG.reach, status, remarks };   // snapshot before the form resets
+  // ---- optimistic: drop this call from Today instantly, then save in the background ----
+  if(callId && CACHE.today && Array.isArray(CACHE.today.calls)){
+    CACHE.today = {...CACHE.today, calls: CACHE.today.calls.filter(c=>c.id!==callId)};
   }
   toast('Saved!'); celebrate('Call logged 🙏');
-  if(close){ closeModal(); renderToday(); }
+  if(close){ closeModal(); if(CURRENT_VIEW==='today') renderToday(); }
   else { openLog({...LOG, id:null, reach:null, status:null}); }  // reopen: history grows, fresh ad-hoc log
+  (async()=>{
+    try{
+      if(jid){
+        const {error} = await sb.from('call_logs').insert({
+          journey_id: jid, person_id: pid||null, call_id: callId||null,
+          reachability: LOG_LAST.reach, sadhana_status: LOG_LAST.status, remarks: LOG_LAST.remarks, logged_by: ME.id });
+        if(error) throw error;
+      }
+      if(callId){
+        const {error} = await sb.from('calls').update({ completed_at:new Date().toISOString(), reachability:LOG_LAST.reach,
+          sadhana_status:LOG_LAST.status, remarks:LOG_LAST.remarks, logged_by:ME.id }).eq('id', callId);
+        if(error) throw error;
+      }
+    }catch(e){ toast('Save failed — restoring'); cacheBust(); if(CURRENT_VIEW==='today') renderToday(); }
+  })();
 }
+let LOG_LAST = {};
 
 /* ============================================================
    PEOPLE -- 4 tabs
@@ -1308,10 +1378,17 @@ async function blAssignSave(ctx){
       if(ins.error) return toast(ins.error.message); nid=ins.data.id; } }
   const rows=ids.map(mid=>({meditator_id:mid,nurturer_id:nid,assigned_by:ME.id}));
   const chunk=(a,n)=>{const o=[];for(let i=0;i<a.length;i+=n)o.push(a.slice(i,i+n));return o;};
-  let ok=0;
-  for(const b of chunk(rows,200)){ const r=await sb.from('nurturer_assignments').upsert(b,{onConflict:'meditator_id,nurturer_id',ignoreDuplicates:true}).select('id'); if(r.error) return toast(r.error.message); ok+=(r.data?r.data.length:0); }
-  cacheBust(); closeModal(); toast('Assigned '+ids.length+' people'); celebrate('Assigned '+ids.length+' 🙏'); BL[ctx].sel.clear();
-  if(CURRENT_VIEW) go(CURRENT_VIEW);
+  // ---- optimistic: confirm + clear selection instantly, write in the background ----
+  closeModal(); toast('Assigned '+ids.length+' people'); celebrate('Assigned '+ids.length+' 🙏');
+  if(BL[ctx]){ BL[ctx].sel.clear(); try{ blRender(ctx); }catch(e){} }
+  (async()=>{
+    try{
+      for(const b of chunk(rows,200)){
+        const r=await sb.from('nurturer_assignments').upsert(b,{onConflict:'meditator_id,nurturer_id',ignoreDuplicates:true}).select('id');
+        if(r.error) throw r.error;
+      }
+    }catch(e){ toast('Assign failed — please retry'); }
+  })();
 }
 
 async function startNurturing(d){
