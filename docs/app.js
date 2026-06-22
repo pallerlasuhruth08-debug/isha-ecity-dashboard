@@ -812,7 +812,7 @@ let PEOPLE_TAB = 'new_meditator';
 // Per-tab filter state
 const PF = {
   new_meditator: { center:'', status:'pending', dateFrom:'', dateTo:'', search:'' },
-  meditator:     { center:'', tag:'', dateFrom:'', dateTo:'', search:'' },
+  meditator:     { center:'', tag:'', recency:'', dateFrom:'', dateTo:'', search:'' },
   advanced:      { program:'bsp', view:'completed', window:'week', center:'', search:'' },
   volunteer_nurture: { center:'', search:'' }
 };
@@ -823,6 +823,8 @@ const ADV_PROGS = [
   ['samyama','Samyama','samyama_date'], ['guru_puja','Guru Puja','guru_puja_date']
 ];
 const advSync = () => SETTINGS.advanced_sync || {go_live_date:today(), last_sync_date:today(), prev_sync_date:today()};
+// ISO yyyy-mm-dd for N months before today — powers the "last 1/3 months" recency filters (synced from AppSheet)
+function monthsAgoISO(n){ const d=new Date(); d.setMonth(d.getMonth()-n); return d.toISOString().slice(0,10); }
 
 // New-meditator selection (nurturer chooses who to start calling)
 const NM_SEL = new Set();
@@ -977,7 +979,7 @@ async function renderMeditatorsList(tabBar){
   const centerOpts = `<option value="">All Centers</option>${CENTERS.map(c=>`<option value="${c.id}" ${f.center===c.id?'selected':''}>${c.name}</option>`).join('')}`;
   const tagOpts = `<option value="">All Tags</option>${COMMON_TAGS.map(t=>`<option value="${t}" ${f.tag===t?'selected':''}>${esc(t)}</option>`).join('')}`;
 
-  const activeF = [f.center,f.tag,f.dateFrom,f.dateTo,f.search].filter(Boolean).length;
+  const activeF = [f.center,f.tag,f.recency,f.dateFrom,f.dateTo,f.search].filter(Boolean).length;
   let h = tabBar;
   h += `<div class="seg">
     <button class="${MED_SCOPE==='mine'?'on':''}" onclick="medScope('mine')">🙋 My meditators</button>
@@ -991,12 +993,16 @@ async function renderMeditatorsList(tabBar){
     <div class="filterrow">
       <select onchange="PF.meditator.center=this.value;renderPeople()">${centerOpts}</select>
       <select onchange="PF.meditator.tag=this.value;renderPeople()">${tagOpts}</select>
+      <select title="Recent activity (synced from AppSheet)" onchange="PF.meditator.recency=this.value;renderPeople()">
+        <option value="">Any activity</option>
+        <option value="active1" ${f.recency==='active1'?'selected':''}>🧘 Active ≤ 1 month</option>
+        <option value="satsang3" ${f.recency==='satsang3'?'selected':''}>🪷 Satsang ≤ 3 months</option></select>
       <span class="daterange" title="IE date range">
         <input type="date" value="${f.dateFrom}" onchange="PF.meditator.dateFrom=this.value;renderPeople()">
         <span class="sep">to</span>
         <input type="date" value="${f.dateTo}" onchange="PF.meditator.dateTo=this.value;renderPeople()">
       </span>
-      ${activeF?`<button class="btn small gray" onclick="PF.meditator={center:'',tag:'',dateFrom:'',dateTo:'',search:''};renderPeople()">Clear filters</button>`:''}
+      ${activeF?`<button class="btn small gray" onclick="PF.meditator={center:'',tag:'',recency:'',dateFrom:'',dateTo:'',search:''};renderPeople()">Clear filters</button>`:''}
     </div>
     ${rangeBlock('med','med-from','med-to')}
   </details>`;
@@ -1006,7 +1012,7 @@ async function renderMeditatorsList(tabBar){
   // Slim columns for the list; the full profile (address/occupation/etc.) is
   // loaded on demand when a row is tapped (keeps this big fetch light).
   const all = await cached('people_all', () => fetchAll(() => sb.from('people')
-    .select('id,full_name,phone,center_id,ie_date,bsp_date,shoonya_date,samyama_date,guru_puja_date,tags,photo_url')
+    .select('id,full_name,phone,center_id,ie_date,bsp_date,shoonya_date,samyama_date,guru_puja_date,last_satsang_date,last_active_date,tags,photo_url')
     .eq('is_meditator', true).order('ie_date', {ascending:false})));
   MED_INDEX = {}; all.forEach(p=>MED_INDEX[p.id]=p);
   MED_ALL = all;
@@ -1036,6 +1042,8 @@ function medFilter(){
     if(f.tag && !(p.tags||[]).includes(f.tag)) return false;
     if(f.dateFrom && !(p.ie_date && p.ie_date>=f.dateFrom)) return false;
     if(f.dateTo && !(p.ie_date && p.ie_date<=f.dateTo)) return false;
+    if(f.recency==='active1' && !(p.last_active_date && p.last_active_date>=monthsAgoISO(1))) return false;
+    if(f.recency==='satsang3' && !(p.last_satsang_date && p.last_satsang_date>=monthsAgoISO(3))) return false;
     if(s && !((p.full_name||'').toLowerCase().includes(s) || (sd && (p.phone||'').includes(sd)))) return false;
     return true;
   });
@@ -1487,7 +1495,7 @@ async function saveNurturing(pid){
 let ADV_MSG = {aud:'adv_completed', people:[], title:''};
 function advSetView(v){
   if(v==='interested'){ PF.advanced.view='interested'; }
-  else { PF.advanced.view='completed'; PF.advanced.window = (v==='completed_week')?'week':'all'; }
+  else { PF.advanced.view='completed'; PF.advanced.window = (v==='completed_week')?'week':(v==='completed_3mo')?'3mo':'all'; }
   renderPeople();
 }
 async function renderAdvancedList(tabBar){
@@ -1509,7 +1517,8 @@ async function renderAdvancedList(tabBar){
         ${ADV_PROGS.map(([v,l])=>`<option value="${v}" ${f.program===v?'selected':''}>${progEmoji[v]||''} ${l}</option>`).join('')}</select>
       <select onchange="advSetView(this.value)">
         <option value="completed_week" ${(f.view==='completed'&&f.window==='week')?'selected':''}>✅ New this week</option>
-        <option value="completed_all" ${(f.view==='completed'&&f.window!=='week')?'selected':''}>✅ All</option>
+        <option value="completed_3mo" ${(f.view==='completed'&&f.window==='3mo')?'selected':''}>✅ Last 3 months</option>
+        <option value="completed_all" ${(f.view==='completed'&&f.window!=='week'&&f.window!=='3mo')?'selected':''}>✅ All</option>
         <option value="interested" ${f.view==='interested'?'selected':''}>✋ Interested</option></select>
   </div>`;
   h += `<details class="card vfilters" ${activeF?'open':''}>
@@ -1526,7 +1535,7 @@ async function renderAdvancedList(tabBar){
   if(f.view === 'completed'){
     h += `<p class="muted" style="font-size:.78rem;margin:6px 2px">Completed ${esc(label)} from Ishangam · last synced <b>${fmtD(sync.last_sync_date)}</b>.
       ${isCoord()?`<button class="btn small ghost" onclick="markSynced()" style="margin-left:6px">🔄 I synced today</button>`:''}</p>`;
-    const winStart = f.window==='week' ? sync.prev_sync_date : null;   // 'all' = every completer, any date
+    const winStart = f.window==='week' ? sync.prev_sync_date : f.window==='3mo' ? monthsAgoISO(3) : null;   // 'all' = every completer, any date
     // fetch ALL completers for this program ONCE (cached); window/center/search filter client-side for instant switching
     const all = await cached('adv_comp_'+f.program, ()=>fetchAll(() => sb.from('people')
       .select(`id, full_name, phone, center_id, tags, photo_url, ${col}`)
