@@ -661,7 +661,7 @@ async function renderToday(){
   const {calls, upcoming} = await cached('today', async()=>{
     const calls = await fetchDueCalls();
     let upQ = sb.from('calls')
-      .select('id, call_no, due_date, journeys!inner(type, assigned_to, status, people(full_name))')
+      .select('id, call_no, due_date, journeys!inner(type, assigned_to, status, people(id, full_name, phone))')
       .is('completed_at', null).gt('due_date', today()).eq('journeys.status','active')
       .order('due_date').limit(8);
     if(ME.role==='nurturer') upQ = upQ.eq('journeys.assigned_to', ME.id);
@@ -699,9 +699,11 @@ async function renderToday(){
       <div class="acc-body">${dueToday.length?'<div id="today-due-host"></div>':'<div class="empty">Nothing else due today.</div>'}</div></details>`;
   }
   if(upcoming?.length){
-    h += `<details class="acc"><summary>⏭️ Coming up <span class="badge">${upcoming.length}</span></summary><div class="acc-body">` + upcoming.map(c=>
-      `<div class="row"><div class="grow"><div class="name">${esc(c.journeys.people.full_name)}</div>
-       <div class="sub">${JT[c.journeys.type]} - Call ${c.call_no} - due ${fmtD(c.due_date)}</div></div></div>`).join('') + '</div></details>';
+    h += `<details class="acc"><summary>⏭️ Coming up <span class="badge">${upcoming.length}</span></summary><div class="acc-body">` + upcoming.map(c=>{
+      const pp=c.journeys.people;
+      return simpleRow({name:pp.full_name, phone:pp.phone, sub:`${JT[c.journeys.type]} · Call ${c.call_no} · due ${fmtD(c.due_date)}`,
+        onclick:`openPersonById('${pp.id}',${JSON.stringify(pp.full_name||'').replace(/'/g,"&#39;")})`});
+    }).join('') + '</div></details>';
   }
   view().innerHTML = h;
   if(!calls.length) playLottie($('today-empty'), 'lottie/empty.json');   // animated empty state if file present
@@ -723,7 +725,9 @@ function callRow(c){
   const msg = DEFAULT_NURTURE_TPL ? applyTpl(DEFAULT_NURTURE_TPL, p.full_name)
                                   : decorateMsg((WA_MSG[j.type]||WA_MSG.meditator)(first0), first0);
   const log = `<button class="actbtn log" onclick='openLog(${JSON.stringify({id:c.id,call_no:c.call_no,jtype:j.type,name:p.full_name,jid:j.id,pid:p.id}).replace(/"/g,'&quot;').replace(/'/g,"&#39;")})'>Log</button>`;
-  return simpleRow({name:p.full_name, phone:p.phone, msg, extra:log});
+  // tapping the name/avatar opens the full profile so the caller can see who they're calling
+  const onclk = `openPersonById('${p.id}',${JSON.stringify(p.full_name||'').replace(/'/g,"&#39;")})`;
+  return simpleRow({name:p.full_name, phone:p.phone, msg, onclick:onclk, extra:log});
 }
 
 /* ---- call logging ---- */
@@ -1135,6 +1139,14 @@ function profileBody(d){
 }
 function showPersonProfile(d){
   modal(`<h3>${esc(d.n)}</h3>${profileBody(d)}`);
+}
+// open a full profile from just a person id (used by Today's call rows, which carry only id/name/phone)
+async function openPersonById(pid, fallbackName){
+  if(!pid) return;
+  modal(`<h3>${esc(fallbackName||'Loading…')}</h3><div class="empty">Loading profile…</div>`);
+  const {data} = await sb.from('people').select('*').eq('id', pid).maybeSingle();
+  if(data) showPersonProfile(personToProfile(data));
+  else toast('Profile not found');
 }
 function openPhoto(src){
   if(!src) return;
