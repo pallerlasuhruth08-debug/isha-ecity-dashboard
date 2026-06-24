@@ -2580,18 +2580,30 @@ async function addCenter(){
   if(pins.length){
     const pm = {...(SETTINGS.pincode_map||{})}; pins.forEach(p=>pm[p]=id);
     const r = await sb.from('settings').update({value:pm}).eq('key','pincode_map');
-    if(!r.error) SETTINGS.pincode_map = pm;
+    if(!r.error){ SETTINGS.pincode_map = pm; await restampPins(pins, id); }
   }
   const {data:cen} = await sb.from('centers').select('*');
   CENTERS_ALL = cen||[]; CENTERS = (cen||[]).filter(c=>c.id!=='unassigned' && c.id!=='all');
   toast('Center added'); celebrate('Center added 🏢'); renderAdmin();
+}
+// Push a pincode→center change onto existing people (front→back sync).
+// A DB trigger also enforces this on every future insert/update, so syncs/imports stay correct.
+async function restampPins(pins, cid){
+  const valid = (pins||[]).map(p=>String(p).trim()).filter(p=>/^\d{6}$/.test(p));
+  if(!valid.length) return 0;
+  const {count, error} = await sb.from('people').update({center_id:cid}, {count:'exact'}).in('pincode', valid);
+  if(error){ toast('People update failed: '+error.message); return 0; }
+  cacheBust();   // drop cached lists so centers re-read correctly on next render
+  return count||0;
 }
 // reassign a pincode's center inline
 async function setPinCenter(pin, cid){
   const pm = {...(SETTINGS.pincode_map||{}), [pin]:cid};
   const {error} = await sb.from('settings').update({value:pm}).eq('key','pincode_map');
   if(error) return toast(error.message);
-  SETTINGS.pincode_map = pm; toast(pin+' → '+centerName(cid));
+  SETTINGS.pincode_map = pm;
+  const n = await restampPins([pin], cid);
+  toast(pin+' → '+centerName(cid)+(n?` · ${n} ${n===1?'person':'people'} moved`:''));
 }
 async function addPin(){
   const pins = ($('pin-new').value||'').split(/[\s,]+/).map(s=>s.trim()).filter(Boolean);
@@ -2601,7 +2613,10 @@ async function addPin(){
   const pm = {...(SETTINGS.pincode_map||{})}; valid.forEach(p=>pm[p]=cid);
   const {error} = await sb.from('settings').update({value:pm}).eq('key','pincode_map');
   if(error) return toast(error.message);
-  SETTINGS.pincode_map = pm; renderAdmin(); toast('Added '+valid.length+' pincode'+(valid.length>1?'s':'')+' → '+centerName(cid));
+  SETTINGS.pincode_map = pm;
+  const n = await restampPins(valid, cid);
+  toast('Added '+valid.length+' pincode'+(valid.length>1?'s':'')+' → '+centerName(cid)+(n?` · ${n} moved`:''));
+  renderAdmin();
 }
 async function delPin(pin){
   const pm = {...(SETTINGS.pincode_map||{})}; delete pm[pin];
