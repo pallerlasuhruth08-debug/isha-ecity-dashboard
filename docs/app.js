@@ -2770,6 +2770,7 @@ async function renderCampaigns(){
         <button class="btn small ghost" onclick="openCampaign('${c.id}')">✏️ Edit</button>
         <button class="btn small green" onclick="campMembers('${c.id}')">👥 Add members</button>
         <button class="btn small gray" onclick="campSetStatus('${c.id}','${c.status==='active'?'paused':'active'}')">${c.status==='active'?'⏸ Pause':'▶ Resume'}</button>
+        <button class="btn small gray" onclick="campDelete('${c.id}',${JSON.stringify(c.name).replace(/"/g,'&quot;')})">🗑 Delete</button>
       </div></div>`;
   }).join('') || '<div class="empty">No campaigns yet — create your first.</div>';
   h += `<button class="btn ghost block" style="margin-top:10px" onclick="go('admin')">← Back to Admin</button>`;
@@ -2862,15 +2863,22 @@ async function campMembers(id){
   const existing = await fetchAll(()=>sb.from('journeys').select('person_id').eq('campaign_id',id));
   const have = new Set((existing||[]).map(j=>j.person_id));
   const toAdd = ids.filter(x=>!have.has(x));
-  CAMP_ADD = {id, toAdd};
+  CAMP_ADD = {id, toAdd, have};
   const profs = await cached('camp_profs', ()=>fetchAll(()=>sb.from('profiles').select('id,full_name,email,role,active').eq('active',true)));
   const callerOpts = (profs||[]).map(p=>`<option value="${p.id}" ${p.id===ME.id?'selected':''}>${esc(p.full_name||p.email)} · ${roleLabel(p.role)}</option>`).join('');
   modal(`<h3>Add members — ${esc(c.name)}</h3>
-    <p class="muted">Segment matches <b>${ids.length}</b> meditators · <b>${toAdd.length}</b> new (not already in this campaign).</p>
     <label>Assign calls to</label>
     <select id="cm-asg">${callerOpts || `<option value="${ME.id}">${esc(ME.full_name||ME.email)}</option>`}</select>
-    <button class="btn block green" style="margin-top:12px" onclick="campAdd('${id}')" ${toAdd.length?'':'disabled'}>Add ${toAdd.length} &amp; create call tasks</button>
-    <p class="muted" style="font-size:.74rem;margin-top:8px">Re-run anytime to pick up new matches as weekly syncs bring in fresh data. People already in the campaign are skipped.</p>`);
+    <div class="card" style="padding:10px;margin-top:12px">
+      <div class="name">⚙️ Auto from filter</div>
+      <p class="muted" style="font-size:.82rem;margin:4px 0 8px">Segment matches <b>${ids.length}</b> meditators · <b>${toAdd.length}</b> new (already-added are skipped).</p>
+      <button class="btn block green" onclick="campAdd('${id}')" ${toAdd.length?'':'disabled'}>Add ${toAdd.length} &amp; create call tasks</button>
+    </div>
+    <div class="card" style="padding:10px;margin-top:10px">
+      <div class="name">🔍 Add specific people</div>
+      <input id="cm-search" placeholder="Search name or phone…" oninput="campSearch('${id}')" style="width:100%;margin-top:6px">
+      <div id="cm-results" class="muted" style="font-size:.82rem;margin-top:8px">Type at least 2 characters…</div>
+    </div>`);
 }
 
 async function campAdd(id){
@@ -2888,6 +2896,48 @@ async function campAdd(id){
   closeModal();
   toast(err ? ('Added '+added+' · '+err) : ('Added '+added+' members — call tasks created 🙏'));
   renderCampaigns();
+}
+
+// manual member add — live search of meditators by name/phone
+let CAMP_SEARCH_T=null;
+function campSearch(id){
+  clearTimeout(CAMP_SEARCH_T);
+  CAMP_SEARCH_T = setTimeout(async()=>{
+    const host = $('cm-results'); if(!host) return;
+    const s = ($('cm-search').value||'').trim();
+    if(s.length<2){ host.innerHTML='Type at least 2 characters…'; return; }
+    host.innerHTML='Searching…';
+    const d = s.replace(/\D/g,'');
+    let q = sb.from('people').select('id,full_name,phone,center_id,pincode').eq('is_meditator',true);
+    q = (d.length>=3) ? q.ilike('phone','%'+d+'%') : q.ilike('full_name','%'+s+'%');
+    const {data, error} = await q.limit(15);
+    if(error){ host.innerHTML='Error: '+esc(error.message); return; }
+    const have = new Set((CAMP_ADD && CAMP_ADD.id===id) ? [...CAMP_ADD.have] : []);
+    host.innerHTML = (data||[]).length ? (data||[]).map(p=>`<div class="row simple" style="padding:6px 0;border:0;background:none">
+        <div class="grow" style="min-width:0"><div class="name" style="font-size:.9rem">${esc(p.full_name||'?')}</div>
+          <div class="sub">${esc(p.phone||'')} · ${esc(centerName(derivedCenter(p)))}</div></div>
+        <div class="acts">${have.has(p.id)?'<span class="badge gray">added</span>':`<button class="actbtn msg" onclick="campAddOne('${id}','${p.id}',this)">Add</button>`}</div>
+      </div>`).join('') : 'No matches.';
+  }, 250);
+}
+async function campAddOne(id, pid, btn){
+  const asg = $('cm-asg') ? ($('cm-asg').value||ME.id) : ME.id;
+  const {error} = await sb.from('journeys').insert({person_id:pid, type:'campaign', campaign_id:id, assigned_to:asg, status:'active'});
+  if(error) return toast(error.message);
+  if(CAMP_ADD && CAMP_ADD.id===id) CAMP_ADD.have.add(pid);
+  if(btn) btn.outerHTML='<span class="badge green">added ✓</span>';
+  CACHE.camps=undefined; CACHE.camp_journeys=undefined; CACHE.today=undefined;
+  toast('Added 🙏');
+}
+
+async function campDelete(id, name){
+  if(!confirm('Delete campaign “'+(name||'')+'”?\nIts call tasks will be removed from callers’ Today. This cannot be undone.')) return;
+  // journeys have no DELETE policy → mark them dropped (removes them from Today), then delete the campaign
+  await sb.from('journeys').update({status:'dropped', campaign_id:null}).eq('campaign_id', id);
+  const {error} = await sb.from('campaigns').delete().eq('id', id);
+  if(error) return toast(error.message);
+  CACHE.camps=undefined; CACHE.camp_journeys=undefined; CACHE.today=undefined;
+  toast('Campaign deleted'); renderCampaigns();
 }
 
 /* ---------------- start ---------------- */
