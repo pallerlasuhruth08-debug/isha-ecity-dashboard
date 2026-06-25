@@ -552,7 +552,7 @@ function go(v){
   setActionBar('');   // each screen re-populates its own actions (or leaves it hidden)
   document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('active', b.dataset.v===v));
   const map={today:renderToday, people:renderPeople, vols:renderVols,
-    insights:renderInsights, admin:renderAdmin, profile:renderProfile};
+    insights:renderInsights, admin:renderAdmin, profile:renderProfile, campaigns:renderCampaigns};
   const run=()=>{ try{ map[v](); }catch(e){} };
   saveUIState();
   // restore the scroll position for this view once its content has had a moment to paint
@@ -638,7 +638,19 @@ function addBtn(kind, label){
 /* ============================================================
    TODAY -- calls due / overdue
    ============================================================ */
-const JT = {new_meditator:'New Meditator', meditator:'Meditator', advanced:'Advanced Program', volunteer_nurture:'Volunteer'};
+const JT = {new_meditator:'New Meditator', meditator:'Meditator', advanced:'Advanced Program', volunteer_nurture:'Volunteer', campaign:'Campaign'};
+// "where they came from" — compact origin chips from the synced person record
+function originBits(p){
+  if(!p) return [];
+  const b=[];
+  if(p.ie_date) b.push('🪷 IE '+fmtD(p.ie_date));
+  if(p.last_satsang_date) b.push('🧘 Satsang '+fmtD(p.last_satsang_date));
+  const adv=[p.bsp_date&&'BSP', p.shoonya_date&&'Shoonya', p.samyama_date&&'Samyama'].filter(Boolean);
+  if(adv.length) b.push('⭐ '+adv.join('/'));
+  if(p.last_active_date) b.push('📲 Active '+fmtD(p.last_active_date));
+  if((p.tags||[]).length) b.push('🏷️ '+p.tags.slice(0,4).join(', '));
+  return b;
+}
 const WA_MSG = {
   new_meditator: n => `Namaskaram ${n} -- This is from Isha Electronic City center. Hope your Shambhavi sadhana is going well! I wanted to check in and support you. When is a good time to talk?`,
   meditator:     n => `Namaskaram ${n} -- This is from Isha Electronic City center. We'd love to hear how your sadhana is going. When is a good time to talk?`,
@@ -648,7 +660,7 @@ const WA_MSG = {
 
 async function fetchDueCalls(){
   let q = sb.from('calls')
-    .select('id, call_no, due_date, journey_id, journeys!inner(id, type, program_name, program_date, center_id, assigned_to, status, people(id, full_name, phone, center_id))')
+    .select('id, call_no, due_date, journey_id, journeys!inner(id, type, program_name, program_date, center_id, assigned_to, status, campaign_id, campaigns(name, goal, script, message), people(id, full_name, phone, center_id, ie_date, bsp_date, shoonya_date, samyama_date, last_satsang_date, last_active_date, tags))')
     .is('completed_at', null).lte('due_date', today()).eq('journeys.status','active').order('due_date');
   if(ME.role==='nurturer') q = q.eq('journeys.assigned_to', ME.id);
   const {data, error} = await q;
@@ -718,16 +730,18 @@ function dayInJourney(j){
 }
 function callRow(c){
   const j = c.journeys, p = j.people;
-  const day = dayInJourney(j);
-  const od = c.due_date < today();
+  const camp = j.campaigns || null;   // campaign drives the message + context when present
   const first0 = p.full_name.split(' ')[0];
-  // Use the user's first nurturing template if they have one; else the built-in context message.
-  const msg = DEFAULT_NURTURE_TPL ? applyTpl(DEFAULT_NURTURE_TPL, p.full_name)
+  // Message priority: campaign message → user's first nurturing template → built-in context message.
+  const msg = camp && camp.message ? applyTpl(camp.message, p.full_name)
+            : DEFAULT_NURTURE_TPL ? applyTpl(DEFAULT_NURTURE_TPL, p.full_name)
                                   : decorateMsg((WA_MSG[j.type]||WA_MSG.meditator)(first0), first0);
   const log = `<button class="actbtn log" onclick='openLog(${JSON.stringify({id:c.id,call_no:c.call_no,jtype:j.type,name:p.full_name,jid:j.id,pid:p.id}).replace(/"/g,'&quot;').replace(/'/g,"&#39;")})'>Log</button>`;
   // tapping the name/avatar opens the full profile so the caller can see who they're calling
   const onclk = `openPersonById('${p.id}',${JSON.stringify(p.full_name||'').replace(/'/g,"&#39;")})`;
-  return simpleRow({name:p.full_name, phone:p.phone, msg, onclick:onclk, extra:log});
+  // context chips: campaign (if any) + where they came from
+  const chips = (camp?chip('📣 '+esc(camp.name),'accent'):'') + originBits(p).slice(0,3).map(t=>chip(t)).join('');
+  return simpleRow({name:p.full_name, phone:p.phone, msg, onclick:onclk, extra:log, chips: chips||undefined});
 }
 
 /* ---- call logging ---- */
@@ -746,6 +760,26 @@ async function openLog(c){
       .eq('journey_id', c.jid).order('logged_at',{ascending:false});
     hist = data||[];
   }
+  // call context — where they came from + (if a campaign call) the goal & script
+  let ctxHtml = '';
+  if(c.pid){
+    const {data:pp} = await sb.from('people')
+      .select('ie_date,bsp_date,shoonya_date,samyama_date,last_satsang_date,last_active_date,tags')
+      .eq('id', c.pid).maybeSingle();
+    let camp = null;
+    if(c.jid){ const {data:jj} = await sb.from('journeys').select('campaigns(name,goal,script,message)').eq('id', c.jid).maybeSingle(); camp = (jj&&jj.campaigns)||null; }
+    const ob = originBits(pp);
+    const lines = [];
+    if(camp && camp.goal) lines.push(`<div style="font-size:.84rem"><b>🎯 Goal:</b> ${esc(camp.goal)}</div>`);
+    if(camp && camp.script) lines.push(`<div style="white-space:pre-wrap;font-size:.84rem;margin-top:6px"><b>📋 Script</b><br>${esc(camp.script)}</div>`);
+    if(ob.length || lines.length){
+      ctxHtml = `<div class="card" style="padding:10px;margin-bottom:10px">
+        <div class="muted" style="font-size:.76rem;margin-bottom:4px">📍 Call context${camp?(' · '+esc(camp.name)):''}</div>
+        ${ob.length?`<div class="chips">${ob.map(t=>chip(t)).join('')}</div>`:''}
+        ${lines.join('')}
+      </div>`;
+    }
+  }
   const reachLabel = {answered:'Answered', not_reachable:'Not reachable', will_call_back:'Will call back'};
   const histHtml = hist.length ? `<div class="card" style="padding:10px;margin-bottom:10px;max-height:30vh;overflow:auto">
       <div class="muted" style="font-size:.76rem;margin-bottom:4px">📜 Past call logs (${hist.length}) — newest first</div>` +
@@ -753,6 +787,7 @@ async function openLog(c){
         <div style="font-size:.84rem"><b>${fmtD(l.logged_at)}</b> · ${esc(reachLabel[l.reachability]||l.reachability||'-')}${l.sadhana_status?' · '+esc(l.sadhana_status):''}</div>
         ${l.remarks?`<div class="sub" style="white-space:pre-wrap">${esc(l.remarks)}</div>`:''}</div>`).join('') + `</div>` : '';
   modal(`<h3>Log call -- ${esc(c.name)}</h3><p class="muted">${c.call_no?('Call '+c.call_no):'Follow-up call'}</p>
+    ${ctxHtml}
     ${histHtml}
     <label>Reachability</label>
     <div class="choices" id="lg-reach">
@@ -2459,6 +2494,11 @@ async function renderAdmin(){
 
   let h = '';
 
+  // 📣 Call Campaigns — quick entry to the campaigns manager
+  h += '<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:10px">' +
+    '<div><div class="name">📣 Call Campaigns</div><div class="sub">Calling drives — target group, script &amp; message; creates Today call tasks.</div></div>' +
+    '<button class="btn small green" onclick="go(\'campaigns\')">Open ›</button></div>';
+
   // 🕒 Pending approvals (Admin only) — open by default
   if(isAdmin()){
     const pending = (profs||[]).filter(p=>p.active===false);
@@ -2705,6 +2745,144 @@ async function showQR(token, name){
     '</div>');
   await loadScript(CDN.qrcode);
   new QRCode($('qr-box'), {text:url, width:200, height:200});
+}
+
+/* ================= Call Campaigns (coordinator-managed calling drives) ================= */
+let CAMP_ADD = null;   // {id, toAdd:[person_ids]} staged for the Add-members modal
+
+async function renderCampaigns(){
+  if(!isCoord()){ view().innerHTML='<div class="empty">Coordinators only.</div>'; return; }
+  view().innerHTML = skel();
+  const camps = await cached('camps', ()=>fetchAll(()=>sb.from('campaigns').select('*').order('created_at',{ascending:false})));
+  const js = await cached('camp_journeys', ()=>fetchAll(()=>sb.from('journeys').select('campaign_id,status').not('campaign_id','is',null)));
+  const cnt={}; (js||[]).forEach(j=>{ const e=(cnt[j.campaign_id] ||= {members:0,active:0}); e.members++; if(j.status==='active')e.active++; });
+  let h = `<div class="card"><h2>📣 Call Campaigns</h2>
+    <p class="muted" style="font-size:.8rem">A campaign bundles a target group, a calling script and a WhatsApp message. Adding people creates call tasks that appear in the assigned caller's Today, with full context.</p>
+    <button class="btn block green" onclick="openCampaign()">➕ New campaign</button></div>`;
+  h += (camps||[]).map(c=>{
+    const k=cnt[c.id]||{members:0,active:0};
+    const stChip = c.status==='active'?chip('active','good'):c.status==='paused'?chip('paused','warn'):chip('done','gray');
+    return `<div class="card">
+      <div class="name">${esc(c.name)} ${stChip}</div>
+      ${c.goal?`<div class="sub">${esc(c.goal)}</div>`:''}
+      <div class="chips">${chip('👥 '+k.members+' members')} ${chip('📞 '+k.active+' active')} ${c.message?chip('💬 message'):chip('no message','warn')} ${c.script?chip('📋 script'):''}</div>
+      <div class="choices" style="flex-wrap:wrap;gap:6px;margin-top:10px">
+        <button class="btn small ghost" onclick="openCampaign('${c.id}')">✏️ Edit</button>
+        <button class="btn small green" onclick="campMembers('${c.id}')">👥 Add members</button>
+        <button class="btn small gray" onclick="campSetStatus('${c.id}','${c.status==='active'?'paused':'active'}')">${c.status==='active'?'⏸ Pause':'▶ Resume'}</button>
+      </div></div>`;
+  }).join('') || '<div class="empty">No campaigns yet — create your first.</div>';
+  h += `<button class="btn ghost block" style="margin-top:10px" onclick="go('admin')">← Back to Admin</button>`;
+  view().innerHTML = h;
+}
+
+async function openCampaign(id){
+  let c = {name:'',goal:'',script:'',message:'',segment:{}};
+  if(id){ const {data}=await sb.from('campaigns').select('*').eq('id',id).maybeSingle(); if(data)c=data; }
+  const seg=c.segment||{};
+  const centerOpts=`<option value="">Any center</option>`+CENTERS.map(x=>`<option value="${x.id}" ${seg.center===x.id?'selected':''}>${esc(x.name)}</option>`).join('');
+  const tagOpts=`<option value="">Any tag</option>`+COMMON_TAGS.map(t=>`<option ${seg.tag===t?'selected':''}>${esc(t)}</option>`).join('');
+  const advOpts=[['','Any advanced'],['completed3','Advanced done ≤3mo'],['interested_bsp','Interested: BSP'],['interested_shoonya','Interested: Shoonya'],['interested_samyama','Interested: Samyama']]
+    .map(([v,l])=>`<option value="${v}" ${seg.advanced===v?'selected':''}>${l}</option>`).join('');
+  modal(`<h3>${id?'Edit':'New'} campaign</h3>
+    <label>Name</label><input id="cm-name" value="${esc(c.name||'')}" placeholder="e.g. June Satsang Invite">
+    <label>Goal (shown to the caller)</label><input id="cm-goal" value="${esc(c.goal||'')}" placeholder="Invite to this Sunday's satsang">
+    <label>Calling script / talking points</label><textarea id="cm-script" rows="5" placeholder="Namaskaram {name} 🙏 ...">${esc(c.script||'')}</textarea>
+    <label>WhatsApp message — use {name}, {my_name}</label><textarea id="cm-msg" rows="3" placeholder="Namaskaram {name} 🙏 ...">${esc(c.message||'')}</textarea>
+    <div class="muted" style="font-size:.8rem;margin-top:10px"><b>Auto-membership filter</b> (optional) — who to add</div>
+    <div class="filterrow" style="margin-top:6px">
+      <select id="cm-center" style="width:auto">${centerOpts}</select>
+      <select id="cm-tag" style="width:auto">${tagOpts}</select>
+      <select id="cm-recency" style="width:auto">
+        <option value="">Any activity</option>
+        <option value="active1" ${seg.recency==='active1'?'selected':''}>🧘 Active ≤1mo</option>
+        <option value="satsang3" ${seg.recency==='satsang3'?'selected':''}>🪷 Satsang ≤3mo</option></select>
+      <select id="cm-init" style="width:auto">
+        <option value="">Any initiation</option>
+        <option value="3" ${String(seg.initiatedWithin)==='3'?'selected':''}>Initiated ≤3mo</option>
+        <option value="6" ${String(seg.initiatedWithin)==='6'?'selected':''}>Initiated ≤6mo</option>
+        <option value="12" ${String(seg.initiatedWithin)==='12'?'selected':''}>Initiated ≤12mo</option></select>
+      <select id="cm-adv" style="width:auto">${advOpts}</select>
+      <label style="display:flex;align-items:center;gap:6px;font-size:.82rem"><input type="checkbox" id="cm-vol" ${seg.volunteer?'checked':''}> 🙌 Volunteer interest</label>
+    </div>
+    <button class="btn block green" style="margin-top:12px" onclick="saveCampaign(${id?`'${id}'`:'null'})">${id?'Save changes':'Create campaign'}</button>`);
+}
+
+async function saveCampaign(id){
+  const seg={ center:$('cm-center').value||'', tag:$('cm-tag').value||'', recency:$('cm-recency').value||'',
+    initiatedWithin: $('cm-init').value? +$('cm-init').value : null, advanced:$('cm-adv').value||'', volunteer: $('cm-vol').checked };
+  const row={ name:($('cm-name').value||'').trim(), goal:$('cm-goal').value||null, script:$('cm-script').value||null,
+    message:$('cm-msg').value||null, segment:seg };
+  if(!row.name) return toast('Enter a campaign name');
+  let error;
+  if(id){ ({error}=await sb.from('campaigns').update(row).eq('id',id)); }
+  else { row.created_by=ME.id; row.center_id=ME.center_id; ({error}=await sb.from('campaigns').insert(row)); }
+  if(error) return toast(error.message);
+  CACHE.camps=undefined; closeModal(); toast('Saved 🙏'); renderCampaigns();
+}
+
+async function campSetStatus(id, status){
+  const {error}=await sb.from('campaigns').update({status}).eq('id',id);
+  if(error) return toast(error.message);
+  CACHE.camps=undefined; toast('Campaign '+status); renderCampaigns();
+}
+
+// resolve the auto-membership filter to a list of person ids
+async function resolveSegment(seg){
+  seg = seg||{};
+  let q = sb.from('people').select('id').eq('is_meditator', true);
+  if(seg.center) q = q.eq('center_id', seg.center);
+  if(seg.tag) q = q.contains('tags', [seg.tag]);
+  if(seg.recency==='active1') q = q.gte('last_active_date', monthsAgoISO(1));
+  if(seg.recency==='satsang3') q = q.gte('last_satsang_date', monthsAgoISO(3));
+  if(seg.initiatedWithin) q = q.gte('ie_date', monthsAgoISO(seg.initiatedWithin));
+  if(seg.advanced==='completed3') q = q.gte('last_advanced_date', monthsAgoISO(3));
+  if(seg.volunteer) q = q.eq('is_volunteer', true);
+  const base = await fetchAll(()=>q);
+  let ids = (base||[]).map(r=>r.id);
+  if(seg.advanced && seg.advanced.indexOf('interested_')===0){
+    const prog = seg.advanced.split('_')[1];
+    const ai = await fetchAll(()=>sb.from('advanced_interest').select('person_id').eq('program', prog));
+    const aiset = new Set((ai||[]).map(r=>r.person_id));
+    ids = ids.filter(x=>aiset.has(x));
+  }
+  return ids;
+}
+
+async function campMembers(id){
+  const {data:c}=await sb.from('campaigns').select('*').eq('id',id).maybeSingle();
+  if(!c) return toast('Campaign not found');
+  modal(`<h3>Add members — ${esc(c.name)}</h3><div class="empty">Resolving segment…</div>`);
+  const ids = await resolveSegment(c.segment||{});
+  const existing = await fetchAll(()=>sb.from('journeys').select('person_id').eq('campaign_id',id));
+  const have = new Set((existing||[]).map(j=>j.person_id));
+  const toAdd = ids.filter(x=>!have.has(x));
+  CAMP_ADD = {id, toAdd};
+  const profs = await cached('camp_profs', ()=>fetchAll(()=>sb.from('profiles').select('id,full_name,email,role,active').eq('active',true)));
+  const callerOpts = (profs||[]).map(p=>`<option value="${p.id}" ${p.id===ME.id?'selected':''}>${esc(p.full_name||p.email)} · ${roleLabel(p.role)}</option>`).join('');
+  modal(`<h3>Add members — ${esc(c.name)}</h3>
+    <p class="muted">Segment matches <b>${ids.length}</b> meditators · <b>${toAdd.length}</b> new (not already in this campaign).</p>
+    <label>Assign calls to</label>
+    <select id="cm-asg">${callerOpts || `<option value="${ME.id}">${esc(ME.full_name||ME.email)}</option>`}</select>
+    <button class="btn block green" style="margin-top:12px" onclick="campAdd('${id}')" ${toAdd.length?'':'disabled'}>Add ${toAdd.length} &amp; create call tasks</button>
+    <p class="muted" style="font-size:.74rem;margin-top:8px">Re-run anytime to pick up new matches as weekly syncs bring in fresh data. People already in the campaign are skipped.</p>`);
+}
+
+async function campAdd(id){
+  const asg = $('cm-asg').value || ME.id;
+  const ids = (CAMP_ADD && CAMP_ADD.id===id) ? CAMP_ADD.toAdd : [];
+  if(!ids.length) return toast('Nothing to add');
+  const rows = ids.map(pid=>({person_id:pid, type:'campaign', campaign_id:id, assigned_to:asg, status:'active'}));
+  let added=0, err=null;
+  for(let i=0;i<rows.length;i+=300){
+    const {error} = await sb.from('journeys').insert(rows.slice(i,i+300));
+    if(error){ err=error.message; break; }
+    added += Math.min(300, rows.length-i);
+  }
+  CACHE.camps=undefined; CACHE.camp_journeys=undefined; CACHE.today=undefined;
+  closeModal();
+  toast(err ? ('Added '+added+' · '+err) : ('Added '+added+' members — call tasks created 🙏'));
+  renderCampaigns();
 }
 
 /* ---------------- start ---------------- */
