@@ -2827,18 +2827,23 @@ async function campSetStatus(id, status){
   CACHE.camps=undefined; toast('Campaign '+status); renderCampaigns();
 }
 
-// resolve the auto-membership filter to a list of person ids
+// resolve the auto-membership filter to a list of person ids.
+// IMPORTANT: build a FRESH query each call — fetchAll re-invokes this per page
+// to apply .range(), and a Supabase builder can only be executed once.
 async function resolveSegment(seg){
   seg = seg||{};
-  let q = sb.from('people').select('id').eq('is_meditator', true);
-  if(seg.center) q = q.eq('center_id', seg.center);
-  if(seg.tag) q = q.contains('tags', [seg.tag]);
-  if(seg.recency==='active1') q = q.gte('last_active_date', monthsAgoISO(1));
-  if(seg.recency==='satsang3') q = q.gte('last_satsang_date', monthsAgoISO(3));
-  if(seg.initiatedWithin) q = q.gte('ie_date', monthsAgoISO(seg.initiatedWithin));
-  if(seg.advanced==='completed3') q = q.gte('last_advanced_date', monthsAgoISO(3));
-  if(seg.volunteer) q = q.eq('is_volunteer', true);
-  const base = await fetchAll(()=>q);
+  const build = ()=>{
+    let q = sb.from('people').select('id').eq('is_meditator', true);
+    if(seg.center) q = q.eq('center_id', seg.center);
+    if(seg.tag) q = q.contains('tags', [seg.tag]);
+    if(seg.recency==='active1') q = q.gte('last_active_date', monthsAgoISO(1));
+    if(seg.recency==='satsang3') q = q.gte('last_satsang_date', monthsAgoISO(3));
+    if(seg.initiatedWithin) q = q.gte('ie_date', monthsAgoISO(seg.initiatedWithin));
+    if(seg.advanced==='completed3') q = q.gte('last_advanced_date', monthsAgoISO(3));
+    if(seg.volunteer) q = q.eq('is_volunteer', true);
+    return q;
+  };
+  const base = await fetchAll(build);
   let ids = (base||[]).map(r=>r.id);
   if(seg.advanced && seg.advanced.indexOf('interested_')===0){
     const prog = seg.advanced.split('_')[1];
