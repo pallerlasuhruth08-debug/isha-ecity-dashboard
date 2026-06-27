@@ -15,7 +15,10 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="E-City">
-<link rel="stylesheet" href="styles.css?v=65">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito+Sans:ital,opsz,wght@0,6..12,400;0,6..12,600;0,6..12,700;1,6..12,400&family=Varela+Round&display=swap">
+<link rel="stylesheet" href="styles.css?v=66">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <!-- Chart.js, xlsx, papaparse, qrcode and Tesseract are loaded on demand (see loadScript in app.js) -->
 <script src="config.js"></script>
@@ -40,7 +43,7 @@
   <header id="topbar">
     <h1>🪷 E-City Nurturing</h1>
     <details class="menu avatar">
-      <summary class="who-chip"><span id="who-name"></span> ▾</summary>
+      <summary class="who-chip" aria-label="User menu"><span id="who-name"></span> ▾</summary>
       <div class="menu-pop right">
         <div class="muted" id="who-role" style="padding:2px 4px 6px;font-size:.8rem"></div>
         <button class="btn small ghost" onclick="go('profile')">👤 My profile</button>
@@ -55,16 +58,31 @@
 
 <div id="actionbar" class="actionbar hidden"></div>
 
-<nav id="nav" class="hidden">
-  <button data-v="today"     onclick="go('today')"><span class="ico">📞</span><span>Today</span></button>
-  <button data-v="people"    onclick="go('people')"><span class="ico">🧘</span><span>Meditators</span></button>
-  <button data-v="vols"      onclick="go('vols')"><span class="ico">🙌</span><span>Volunteers</span></button>
-  <button data-v="insights"  onclick="go('insights')"><span class="ico">📊</span><span>Insights</span></button>
-  <button data-v="admin"     onclick="go('admin')"><span class="ico">⚙️</span><span>Admin</span></button>
+<nav id="nav" class="hidden" aria-label="Main navigation">
+  <button data-v="today"    onclick="go('today')"    aria-label="Today — calls and tasks">
+    <span class="ico" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.5 13.5a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.41 2.67h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 10.09a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg></span>
+    <span>Today</span>
+  </button>
+  <button data-v="people"   onclick="go('people')"   aria-label="Meditators list">
+    <span class="ico" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
+    <span>Meditators</span>
+  </button>
+  <button data-v="vols"     onclick="go('vols')"     aria-label="Volunteers list">
+    <span class="ico" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg></span>
+    <span>Volunteers</span>
+  </button>
+  <button data-v="insights" onclick="go('insights')" aria-label="Insights and analytics">
+    <span class="ico" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></span>
+    <span>Insights</span>
+  </button>
+  <button data-v="admin"    onclick="go('admin')"    aria-label="Admin settings">
+    <span class="ico" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>
+    <span>Admin</span>
+  </button>
 </nav>
 
 <div id="modal-root"></div>
-<div id="toast"></div>
+<div id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 
 <script src="app.js?v=65" charset="utf-8"></script>
 <script>if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){});});}</script>
