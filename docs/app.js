@@ -12,15 +12,6 @@ const sb = supabase.createClient(APP_CONFIG.SUPABASE_URL, APP_CONFIG.SUPABASE_AN
   const _rpc = sb.rpc.bind(sb);
   sb.rpc = (...a)=>{ try{cacheBust();}catch(e){} return _rpc(...a); };
 })();
-// Keyboard: let custom role="button" tiles/cards (stats, nav rows) activate with Enter/Space,
-// like native buttons. Native controls handle their own keys, so we skip them.
-document.addEventListener('keydown', (e)=>{
-  if(e.key!=='Enter' && e.key!==' ') return;
-  const t = e.target.closest && e.target.closest('[role="button"][tabindex]');
-  if(!t || ['BUTTON','A','INPUT','SELECT','TEXTAREA','SUMMARY'].includes(e.target.tagName)) return;
-  e.preventDefault();
-  t.click();
-});
 let ME = null;
 let SETTINGS = {};
 let CENTERS = [];        // real centers only (for data filters)
@@ -271,15 +262,11 @@ async function doSignup(){
   if(error) return toast(error.message);
   toast('Account created -- signing in...'); doLogin();
 }
-async function doGoogleLogin(){
-  // Redirects to Google, then back to this app; boot() picks up the session on return.
-  // Requires the Google provider to be enabled in the Supabase project's Auth settings,
-  // with this page's URL added to the allowed redirect URLs.
-  const {error} = await sb.auth.signInWithOAuth({
-    provider:'google',
-    options:{ redirectTo: location.origin + location.pathname }
-  });
-  if(error) toast(error.message);
+async function doGoogle(){
+  // redirect back to this exact app URL after Google sign-in (must be in Supabase Auth → Redirect URLs)
+  const redirectTo = location.origin + location.pathname;
+  const {error} = await sb.auth.signInWithOAuth({ provider:'google', options:{ redirectTo } });
+  if(error) toast(error.message);   // on success the browser navigates to Google
 }
 async function doLogout(){ await sb.auth.signOut(); location.reload(); }
 
@@ -596,7 +583,7 @@ function drillTo(v, tab, opt){
 function modal(html){
   $('modal-root').innerHTML =
     `<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal">
-       <button class="x" type="button" aria-label="Close" onclick="closeModal()">&times;</button>${html}</div></div>`;
+       <button class="x" onclick="closeModal()">x</button>${html}</div></div>`;
 }
 function closeModal(){ $('modal-root').innerHTML=''; }
 
@@ -1943,7 +1930,7 @@ function renderSSBIYCBody(acts, counts){
   if(N.name) h += ` › <a href="#" onclick="ssbSet({org:'${N.org}',type:'${N.type}',name:'${esc(N.name)}',year:null});return false">${esc(N.name)}</a>`;
   if(N.year) h += ` › <b>${N.year}</b>`;
   h += '</div>';
-  const card = (icon, title, sub, onclick, badge)=>`<div class="navrow" role="button" tabindex="0" onclick="${onclick}">
+  const card = (icon, title, sub, onclick, badge)=>`<div class="navrow" onclick="${onclick}">
       <div class="ic">${icon||'📁'}</div>
       <div class="grow"><div class="name">${title}</div>${sub?`<div class="sub">${sub}</div>`:''}</div>
       ${badge!=null?`<span class="badge">${badge}</span>`:''}<span class="chev">›</span></div>`;
@@ -2450,7 +2437,7 @@ async function renderInsights(){
   const m1 = J.filter(j=>j.type==='new_meditator');
   const m1done = m1.filter(j=>j.status==='completed').length;
 
-  const tap = 'style="cursor:pointer" role="button" tabindex="0" ';
+  const tap = 'style="cursor:pointer" ';
   let h = '<div class="stats">' +
     '<div class="stat" ' + tap + 'onclick="drillTo(\'people\',\'new_meditator\')"><div class="n">' + m1.length + '</div><div class="l">🌱 New meditators ›</div></div>' +
     '<div class="stat" ' + tap + 'onclick="drillTo(\'people\',\'new_meditator\',{status:\'completed\'})"><div class="n">' + m1done + '</div><div class="l">✅ Mandala journeys done ›</div></div>' +
