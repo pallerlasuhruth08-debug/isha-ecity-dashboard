@@ -268,6 +268,27 @@ async function doGoogle(){
   const {error} = await sb.auth.signInWithOAuth({ provider:'google', options:{ redirectTo } });
   if(error) toast(error.message);   // on success the browser navigates to Google
 }
+async function doForgot(){
+  // Emails a password-reset link that returns to this app (URL must be in Supabase Auth → Redirect URLs).
+  const email = $('login-email').value.trim();
+  if(!email) return toast('Type your email above first, then tap "Forgot password?"');
+  const redirectTo = location.origin + location.pathname;
+  const {error} = await sb.auth.resetPasswordForEmail(email, { redirectTo });
+  if(error) return toast(error.message);
+  toast('Reset link sent — check your email inbox.');
+}
+// When the user opens the emailed reset link they return here in a recovery session;
+// prompt them for a new password and save it.
+sb.auth.onAuthStateChange((event)=>{ if(event==='PASSWORD_RECOVERY') promptNewPassword(); });
+async function promptNewPassword(){
+  const pw = prompt('Set a new password (at least 6 characters):');
+  if(pw===null) return;                       // user cancelled
+  if(pw.length<6) return toast('Password must be at least 6 characters');
+  const {error} = await sb.auth.updateUser({ password: pw });
+  if(error) return toast(error.message);
+  toast('Password updated — you are signed in.');
+  boot();
+}
 async function doLogout(){ await sb.auth.signOut(); location.reload(); }
 
 async function boot(){
