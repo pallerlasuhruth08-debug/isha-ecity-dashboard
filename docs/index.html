@@ -15,7 +15,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="E-City">
-<link rel="stylesheet" href="styles.css?v=65">
+<link rel="stylesheet" href="styles.css?v=66">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <!-- Chart.js, xlsx, papaparse, qrcode and Tesseract are loaded on demand (see loadScript in app.js) -->
 <script src="config.js"></script>
@@ -24,13 +24,23 @@
 
 <!-- LOGIN -->
 <div id="login-view" class="login-wrap hidden">
-  <h1>🪷 Isha E-City</h1>
+  <h1>Isha E-City</h1>
   <p>Nurturing &amp; Volunteer Dashboard</p>
   <div class="card">
-    <label>Email</label><input id="login-email" type="email" autocomplete="email" placeholder="you@example.com">
-    <label>Password</label><input id="login-pass" type="password" autocomplete="current-password">
+    <label for="login-email">Email</label><input id="login-email" type="email" autocomplete="email" placeholder="you@example.com">
+    <label for="login-pass">Password</label><input id="login-pass" type="password" autocomplete="current-password">
     <button class="btn block" onclick="doLogin()">Sign in</button>
     <button class="btn ghost block" onclick="doSignup()">Create account</button>
+    <div class="or-sep"><span>or</span></div>
+    <button class="btn google block" onclick="doGoogleLogin()">
+      <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
+        <path fill="#4285F4" d="M45.1 24.5c0-1.6-.1-3.1-.4-4.5H24v8.5h11.8c-.5 2.7-2 5-4.4 6.6v5.5h7.1c4.1-3.8 6.6-9.4 6.6-16.1z"/>
+        <path fill="#34A853" d="M24 46c5.9 0 10.9-2 14.5-5.4l-7.1-5.5c-2 1.3-4.5 2.1-7.4 2.1-5.7 0-10.5-3.8-12.2-9H4.4v5.7C8 41.6 15.4 46 24 46z"/>
+        <path fill="#FBBC05" d="M11.8 28.2c-.4-1.3-.7-2.7-.7-4.2s.2-2.9.7-4.2v-5.7H4.4C2.9 17 2 20.4 2 24s.9 7 2.4 9.9l7.4-5.7z"/>
+        <path fill="#EA4335" d="M24 10.7c3.2 0 6.1 1.1 8.4 3.3l6.3-6.3C34.9 4.1 29.9 2 24 2 15.4 2 8 6.4 4.4 14.1l7.4 5.7c1.7-5.2 6.5-9.1 12.2-9.1z"/>
+      </svg>
+      <span>Continue with Google</span>
+    </button>
     <p class="muted" style="margin-top:10px;text-align:center">New accounts start as Volunteer.<br>The RCO assigns your role and people.</p>
   </div>
 </div>
@@ -40,7 +50,7 @@
   <header id="topbar">
     <h1>🪷 E-City Nurturing</h1>
     <details class="menu avatar">
-      <summary class="who-chip"><span id="who-name"></span> ▾</summary>
+      <summary class="who-chip" aria-label="Account menu"><span id="who-name"></span> ▾</summary>
       <div class="menu-pop right">
         <div class="muted" id="who-role" style="padding:2px 4px 6px;font-size:.8rem"></div>
         <button class="btn small ghost" onclick="go('profile')">👤 My profile</button>
@@ -66,7 +76,7 @@
 <div id="modal-root"></div>
 <div id="toast"></div>
 
-<script src="app.js?v=65" charset="utf-8"></script>
+<script src="app.js?v=66" charset="utf-8"></script>
 <script>if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){});});}</script>
 </body>
 </html>
