@@ -7,8 +7,9 @@
 }
 *{box-sizing:border-box;margin:0}
 html{-webkit-text-size-adjust:100%}
-body{font-family:-apple-system,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--ink);
-  font-size:18px;line-height:1.45;-webkit-tap-highlight-color:transparent}
+body{font-family:'Nunito Sans',-apple-system,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--ink);
+  font-size:18px;line-height:1.45;-webkit-tap-highlight-color:transparent;overscroll-behavior-y:contain}
+header h1,h1,h2,h3,.kpi .n,.stat .n{font-family:'Varela Round','Nunito Sans',-apple-system,sans-serif}
 .hidden{display:none!important}
 /* keyboard focus: visible ring for every interactive element (mouse/touch users unaffected) */
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
@@ -210,7 +211,7 @@ nav button.active .ico{transform:translateY(-2px) scale(1.18)}
 @media(max-width:430px){
   .acts{gap:6px}
   .actbtn{padding:8px 11px;font-size:.82rem;min-height:42px}
-  .av,.av.avph{width:42px;height:42px}
+  .av,.av.avph{width:44px;height:44px}
   /* keep the toolbar on one row but give the section name room: collapse Msg/Add to icons */
   .ptoolbar{gap:6px}
   .ptoolbar .menu>summary .lbl,.subbar.oneline .menu>summary .lbl{display:none}
@@ -295,6 +296,10 @@ input,select,textarea{width:100%;padding:13px;border:1.5px solid var(--line);bor
   font-size:1.05rem;background:#fff;color:var(--ink);transition:border-color .15s,box-shadow .15s}
 input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);
   box-shadow:0 0 0 3px var(--accent-soft)}
+/* keyboard focus ring for all interactive elements */
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button:focus-visible,a:focus-visible,.btn:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:6px}
+nav button:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:10px}
 /* unified dropdowns: transparent/fluid, custom chevron, consistent everywhere */
 select{-webkit-appearance:none;appearance:none;background-color:transparent;cursor:pointer;
   padding-right:34px;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23c4622d' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
