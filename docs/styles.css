@@ -351,6 +351,11 @@ textarea{min-height:76px;resize:vertical}
 /* login */
 .login-wrap{max-width:400px;margin:12vh auto;padding:0 18px}
 .login-wrap h1{text-align:center;color:var(--accent);margin-bottom:6px;font-size:1.9rem}
+/* quiet text link (e.g. "Forgot password?") */
+.linkbtn{display:block;width:100%;margin:10px 0 2px;background:none;border:none;cursor:pointer;
+  color:var(--accent);font-size:.9rem;font-weight:700;text-align:center;padding:8px;min-height:40px;border-radius:10px}
+.linkbtn:hover{text-decoration:underline}
+.linkbtn:active{transform:scale(.98)}
 /* "or" divider between password + Google sign-in */
 .or-sep{display:flex;align-items:center;gap:10px;margin:14px 2px;color:var(--muted);font-size:.82rem;font-weight:600}
 .or-sep::before,.or-sep::after{content:'';flex:1;height:1px;background:var(--line)}
